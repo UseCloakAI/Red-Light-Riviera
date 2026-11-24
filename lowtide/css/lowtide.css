@@ -23,6 +23,10 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .gate-btn{background:none;border:0;cursor:pointer;font:extra-condensed 700 22px/1 var(--fd);letter-spacing:.42em;text-transform:uppercase;padding:12px 0 12px .42em;animation:breathe 2.8s ease-in-out infinite}
 .gate-note{font-size:11px;letter-spacing:.26em;text-transform:uppercase;opacity:.36}
 @keyframes breathe{0%,100%{opacity:1}50%{opacity:.4}}
+.gate-mobile{display:none;max-width:280px;font-size:14px;line-height:1.5;opacity:.7}
+#gate.mobile .gate-mobile{display:block}
+#gate.mobile .gate-note{display:none}
+#gate.mobile .gate-btn{animation:none;cursor:default}
 
 /* ── Cloak Studios slate ──────────────── */
 #studio{background:var(--paper);display:grid;place-items:center;overflow:hidden}
@@ -75,7 +79,7 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .lt-line{position:absolute;left:-7%;right:-7%;top:var(--wl);height:2px;margin-top:-1px;background:linear-gradient(90deg,transparent,rgba(255,236,214,.88) 18%,rgba(255,236,214,.88) 82%,transparent)}
 .lt-tag{margin-top:clamp(44px,7vw,108px);font:500 clamp(11px,1.05vw,14px)/1 var(--fu);letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;color:#FFE9D6;opacity:.82;text-align:center}
 
-.credit{position:absolute;left:var(--gut);bottom:calc(var(--bar) + 28px);font:500 12px/1 var(--fu);letter-spacing:.32em;text-transform:uppercase;color:#FFE9D6;opacity:0;z-index:3}
+.credit{position:absolute;left:0;right:0;text-align:center;padding-left:.32em;bottom:calc(var(--bar) + 28px);font:500 12px/1 var(--fu);letter-spacing:.32em;text-transform:uppercase;color:#FFE9D6;opacity:0;z-index:3}
 .press{position:absolute;left:0;right:0;bottom:calc(var(--bar) + 30px);text-align:center;font:extra-condensed 700 18px/1 var(--fd);letter-spacing:.36em;padding-left:.36em;text-transform:uppercase;z-index:3}
 .press kbd{font:extra-condensed 800 13px/1 var(--fd);letter-spacing:.12em;padding:4px 8px 3px;margin:0 .3em}
 .press.breathe{animation:breathe 2.8s ease-in-out infinite}

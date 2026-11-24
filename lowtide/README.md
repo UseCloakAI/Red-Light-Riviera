@@ -1,6 +1,6 @@
 # Lowtide
 
-Lowtide is an open-world crime game by Cloak Studios. It's built in HTML and has no build step.
+Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no build step, and is desktop only (phones and narrow screens get a notice).
 
 | Path | What |
 |---|---|
@@ -12,7 +12,7 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML and has
 | `js/intro.js` | The choreography (Web Animations API) and the menus |
 | `css/lowtide.css` | The game's UI styles and motion tokens |
 | `assets/` | `cloak-o.svg` (the Cloak orb, from `cloak/blinks`) and `lowtide-mark.svg` (app icon) |
-| `media/` | Pre-rendered: `intro-land.mp4` / `intro-port.mp4` (the film), `ocean-*.mp4` (title loop), `intro.flac`, `loop.flac` |
+| `media/` | Pre-rendered: `intro.mp4` (the film), `ocean.mp4` (title loop), `intro.flac`, `loop.flac` |
 
 QA deep links: `?scene=title`, `?scene=menu` and `?scene=pause`.
 
@@ -28,8 +28,8 @@ Picture and sound both read `js/cues.js`. Picture time zero is set after the aud
 
 To run on low-end devices, the expensive parts are pre-rendered:
 
-- **The film**: the Cloak Studios slate, the match cut and the ocean up to the drop, as H.264. It comes in landscape (1920x1080) and portrait (720x1280), and the page picks one by screen shape.
-- **The title background**: a seamless 10 s ocean loop, in the same two sizes.
+- **The film**: the Cloak Studios slate, the match cut and the ocean up to the drop, as 1920x1080 H.264.
+- **The title background**: a seamless 10 s ocean loop.
 - **The sound**: the film's soundtrack and an 8-bar music-and-ocean loop, as FLAC so the loop has no gap.
 
 The page plays the film muted, keeps it in step with the audio clock, and cuts to the live title exactly on the drop. A flash and a small camera punch hide the cut. Only the logo, the menus and the UI sounds run live. If the media can't load, it falls back to the fully live intro.

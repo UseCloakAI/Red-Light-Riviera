@@ -2,7 +2,7 @@
 /* Renders Lowtide's intro film, the title ocean loop and the baked audio.
 
      npm i playwright        (and have ffmpeg on PATH)
-     node tools/render-intro.js [--only=land|port] [--fps=30] [--workers=4]
+     node tools/render-intro.js [--kinds=audio,intro,ocean] [--fps=30] [--workers=4]
 
    Picture: the page runs on a virtual clock (?render=intro|ocean) and is
    stepped one frame at a time, so output is frame-exact on any machine,
@@ -14,8 +14,8 @@ const { chromium } = require("playwright");
 
 const ROOT = path.join(__dirname, "..", "lowtide"), OUT = path.join(ROOT, "media");
 const arg = (k, d) => (process.argv.find(a => a.startsWith("--" + k + "=")) || "").split("=")[1] || d;
-const FPS = +arg("fps", 30), WORKERS = +arg("workers", 4), ONLY = arg("only", "");
-const VARIANTS = { land: { w: 1920, h: 1080, crf: 21 }, port: { w: 720, h: 1280, crf: 22 } };
+const FPS = +arg("fps", 30), WORKERS = +arg("workers", 4), ONLY = arg("only", ""), KINDS = arg("kinds", "audio,intro,ocean").split(",");
+const VARIANTS = { land: { w: 1920, h: 1080, crf: 21 } };   // desktop only
 const LOOP = 10, XFADE = 2;   // ocean: render 12 s, crossfade the last 2 s over the first 2 s
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" };
@@ -103,14 +103,17 @@ async function bakeAudio(browser, base) {
   const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--hide-scrollbars"] });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lt-frames-"));
   try {
-    await bakeAudio(browser, base);
+    if (KINDS.includes("audio")) await bakeAudio(browser, base);
     for (const [name, v] of Object.entries(VARIANTS)) {
       if (ONLY && ONLY !== name) continue;
       const x264 = ["-c:v", "libx264", "-preset", "slow", "-crf", String(v.crf), "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-an"];
       // the film: slate, match cut and the ocean up to the drop
+      if (KINDS.includes("intro")) {
       const di = path.join(tmp, name + "-intro");
       await frames(browser, base, "intro", v, di);
-      ff(["-framerate", String(FPS), "-i", path.join(di, "%05d.png"), ...x264, path.join(OUT, `intro-${name}.mp4`)]);
+      ff(["-framerate", String(FPS), "-i", path.join(di, "%05d.png"), ...x264, path.join(OUT, "intro.mp4")]);
+      }
+      if (KINDS.includes("ocean")) {
       // the title background: 12 s rendered, folded into a seamless 10 s loop
       const doc = path.join(tmp, name + "-ocean");
       await frames(browser, base, "ocean", v, doc);
@@ -118,8 +121,9 @@ async function bakeAudio(browser, base) {
         `[0]split[a][b];[a]trim=0:${XFADE},setpts=PTS-STARTPTS[head];[b]trim=${LOOP}:${LOOP + XFADE},setpts=PTS-STARTPTS[tail];` +
         `[head][tail]blend=all_expr='A*(T/${XFADE})+B*(1-T/${XFADE})'[mix];` +
         `[0]trim=${XFADE}:${LOOP},setpts=PTS-STARTPTS[body];[mix][body]concat=n=2:v=1[out]`,
-        "-map", "[out]", ...x264, path.join(OUT, `ocean-${name}.mp4`)]);
-      console.log(`  video: intro-${name}.mp4, ocean-${name}.mp4`);
+        "-map", "[out]", ...x264, path.join(OUT, "ocean.mp4")]);
+      }
+      console.log("  video done");
     }
   } finally {
     await browser.close(); srv.close(); fs.rmSync(tmp, { recursive: true, force: true });

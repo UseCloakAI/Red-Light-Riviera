@@ -19,7 +19,7 @@
   };
 
   var el = {
-    gate: $("#gate"), studio: $("#studio"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
+    gate: $("#gate"), film: $("#film"), studio: $("#studio"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
     grid: $("#studio .grid"), orb: $("#studio .orb"), shadow: $("#studio .orb-shadow"),
     railL: $("#studio .side.l .rail"), railR: $("#studio .side.r .rail"), lids: $("#studio .lids"), look: $("#studio .look"), sub: $("#studio .studio-sub"),
     sea: $("#sea"), wrap: $(".logo-wrap"), lt: $(".lt"), below: $(".lt-below"), refl: $(".lt-refl"), line: $(".lt-line"), tag: $(".lt-tag"),
@@ -53,14 +53,20 @@
     live = []; timers.forEach(clearTimeout); timers = [];
   }
   function show(id) {
-    ["gate", "studio", "title", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === "title")); });
+    ["gate", "film", "studio", "title", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === "title")); });
   }
   function horizonY() {   // where the horizon lands on screen: live shader, or the cover-fitted film
     if (!filmed) return S.horizonY();
-    var W = innerWidth, H = innerHeight, va = VARIANT === "port" ? 9 / 16 : 16 / 9;
+    var W = innerWidth, H = innerHeight, va = 16 / 9;
     return H / 2 + (0.57 - 0.5) * Math.max(H, W / va);
   }
+  function fitBars() {   // live bars match the ones baked into the cover-fitted film
+    if (!filmed) return;
+    var W = innerWidth, H = innerHeight, dispH = Math.max(H, W * 9 / 16);
+    el.title.style.setProperty("--bar", Math.max(0, 0.11 * dispH - (dispH - H) / 2) + "px");
+  }
   function placeLogo() {   // the logo's waterline sits exactly on the horizon
+    fitBars();
     el.wrap.style.top = (horizonY() - (el.lt.offsetTop + el.line.offsetTop + 1)) + "px";
   }
 
@@ -195,10 +201,10 @@
 
   /* ---- the film: pre-rendered slate + opening ocean, baked soundtrack ---- */
   var V = { film: $("#film"), intro: $("#introVid"), bg: $("#bgv") }, FILM = { T: 0, armed: false, ok: false };
-  var VARIANT = innerWidth / innerHeight < 0.9 ? "port" : "land", MEDIA = "media/";
+  var MEDIA = "media/";   // desktop only: one 1920x1080 film
   var ready = Promise.resolve(false);
   function prepMedia() {
-    V.intro.src = MEDIA + "intro-" + VARIANT + ".mp4"; V.bg.src = MEDIA + "ocean-" + VARIANT + ".mp4";
+    V.intro.src = MEDIA + "intro.mp4"; V.bg.src = MEDIA + "ocean.mp4";
     V.intro.load(); V.bg.load();
     LT.init();   // created suspended; resumed by the key press
     var aud = LT.loadBaked({ intro: MEDIA + "intro.flac", loop: MEDIA + "loop.flac" });
@@ -212,6 +218,8 @@
     el.gateBtn.textContent = "Loading";
     ready.then(function () { el.gateBtn.textContent = "Press any key"; });
   }
+  // Lowtide is a desktop experience: keyboard, a wide screen, a real pointer
+  function desktop() { return innerWidth >= 900 && !(matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches); }
   function begin() {
     if (state !== "gate") return;
     state = "loading";
@@ -392,9 +400,12 @@
   var q = new URLSearchParams(location.search).get("scene");
   if (q) {
     filmed = true; el.title.classList.add("filmed");
-    V.bg.src = MEDIA + "ocean-" + VARIANT + ".mp4"; V.bg.play().catch(function () {});
+    V.bg.src = MEDIA + "ocean.mp4"; V.bg.play().catch(function () {});
     show("title"); placeLogo(); state = "title";
     if (q !== "title") openMenu(true);
     if (q === "pause") openPause(0);
+  } else if (!desktop()) {
+    state = "blocked"; el.gate.classList.add("mobile");
+    el.gateBtn.textContent = "Desktop only";
   } else prepMedia();
 })();
