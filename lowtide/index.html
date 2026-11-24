@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lowtide</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/lowtide-sun.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=Syne:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/lowtide.css">
+</head>
+<body>
+
+<!-- 0 · gate (browsers need a gesture before audio) -->
+<section id="gate" class="scene on">
+  <button id="start" class="gate-btn">PRESS ANY KEY</button>
+  <p class="gate-note">Sound on · Headphones recommended</p>
+</section>
+
+<!-- 1 · Cloak Game Studios slate -->
+<section id="studio" class="scene">
+  <div class="lockup">
+    <span class="wm"><b class="l">C</b><b class="l">L</b><span class="orb"><svg viewBox="0 0 40 40"><path d="M20 3.5 C30 3 37 10.5 36.6 20.4 C36.2 30.4 29.4 36.8 19.6 36.5 C10 36.2 3.2 29.6 3.5 19.8 C3.8 10.6 10.6 4 20 3.5 Z" fill="#D44D2A" stroke="#0A0A0A" stroke-width="3.6" stroke-linejoin="round"/><g class="eyes"><ellipse cx="14.2" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/><ellipse cx="25.8" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/></g></svg></span><b class="l">A</b><b class="l">K</b></span>
+    <span class="studio-sub">GAME STUDIOS</span>
+  </div>
+</section>
+
+<!-- 2 · presents -->
+<section id="presents" class="scene"><p>A CLOAK GAME STUDIOS PRODUCTION</p></section>
+
+<!-- 3 · title + main menu -->
+<section id="title" class="scene">
+  <div class="sky"></div>
+  <div class="sun"></div>
+  <svg class="skyline" viewBox="0 0 1600 300" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 300V210h60v-30h40v50h30V150h50v80h40v-40h30v-60h20v-30h20v30h20v100h50v-60h60v70h40V120h30V80h10v40h30v110h60v-50h40v-30h50v80h40v-120h20v-40h20v40h20v120h60v-70h50v50h40V170h60v60h30v-40h50v110h60v-60h40v40h60V200h40v30h50v-50h60v120z" />
+  </svg>
+  <svg class="palms" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <g class="palm" transform="translate(150 900)"><path d="M0 0 C10-150 30-300 70-470" stroke-width="16" fill="none"/><path d="M70-470c-60-40-150-30-220 20 70-30 150-30 220-20zm0 0c40-70 120-100 210-90-80 10-160 50-210 90zm0 0c70-20 170 10 230 80-70-50-160-70-230-80zm0 0c-30-70-100-120-190-120 80 20 150 70 190 120zm0 0c-80 10-150 70-170 160 40-80 110-140 170-160z"/></g>
+    <g class="palm" transform="translate(1420 900) scale(-1 1)"><path d="M0 0 C20-130 20-280 60-400" stroke-width="14" fill="none"/><path d="M60-400c-60-40-150-30-220 20 70-30 150-30 220-20zm0 0c40-70 120-100 210-90-80 10-160 50-210 90zm0 0c70-20 170 10 230 80-70-50-160-70-230-80zm0 0c-30-70-100-120-190-120 80 20 150 70 190 120z"/></g>
+  </svg>
+  <div class="sea"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="grain"></div>
+
+  <div class="logo-wrap">
+    <h1 class="lt-logo">L<span class="lt-o"></span>WTIDE</h1>
+    <p class="lt-tag">Everything washes up eventually.</p>
+  </div>
+
+  <p class="press">PRESS ENTER</p>
+
+  <nav class="main-menu" aria-label="Main menu">
+    <ul>
+      <li data-go="pause">STORY MODE</li>
+      <li>LOWTIDE ONLINE</li>
+      <li data-go="pause" data-tab="3">SETTINGS</li>
+      <li>CREDITS</li>
+      <li>QUIT</li>
+    </ul>
+  </nav>
+
+  <footer class="hud-foot">
+    <span class="by"><img src="assets/cloak-o.svg" alt="">CLOAK GAME STUDIOS</span>
+    <span class="keys"><kbd>↑↓</kbd> Navigate <kbd>Enter</kbd> Select <kbd>Esc</kbd> Back</span>
+  </footer>
+</section>
+
+<!-- 4 · pause menu -->
+<section id="pause" class="scene">
+  <header class="p-top">
+    <div class="p-id"><h2>LOWTIDE</h2><span>MARLOWE KEYS &nbsp; 11:42 PM &nbsp; $4,820</span></div>
+    <nav class="p-tabs"><button>MAP</button><button>BRIEF</button><button>STATS</button><button>SETTINGS</button><button>GALLERY</button></nav>
+  </header>
+  <div class="p-body">
+    <div class="p-panel" data-panel="0">
+      <div class="map">
+        <svg viewBox="0 0 800 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <rect width="800" height="460" fill="#0E3048"/>
+          <path d="M120 40 L520 30 L640 120 L610 260 L520 330 L560 420 L300 440 L180 380 L90 260 Z" fill="#E9D6AE"/>
+          <path d="M600 330 L700 300 L740 360 L680 410 Z M690 140 L760 120 L770 190 L720 200Z" fill="#E9D6AE"/>
+          <path d="M140 150 L590 160 M250 50 L280 430 M400 40 L420 430 M110 280 L560 300" stroke="#fff" stroke-width="6" opacity=".7"/>
+          <path d="M150 220 Q360 200 600 240" stroke="#FF6B4A" stroke-width="5" fill="none" stroke-dasharray="10 8"/>
+          <circle cx="410" cy="225" r="10" fill="#19C3B1" stroke="#0A0A0A" stroke-width="3"/>
+          <circle cx="600" cy="240" r="9" fill="#FFD36E" stroke="#0A0A0A" stroke-width="3"/>
+          <text x="300" y="120" fill="#0A0A0A" font-family="Anton" font-size="22" opacity=".55">MARLOWE KEYS</text>
+          <text x="220" y="400" fill="#0A0A0A" font-family="Anton" font-size="18" opacity=".55">PORT SALT</text>
+        </svg>
+        <ul class="legend"><li><i style="background:#19C3B1"></i>You</li><li><i style="background:#FFD36E"></i>Objective</li><li><i style="background:#FF6B4A"></i>Route</li></ul>
+      </div>
+    </div>
+    <div class="p-panel" data-panel="1"><div class="brief"><span class="eyebrow">CURRENT JOB</span><h3>SALT IN THE WOUND</h3><p>Meet Dez at the pier before the tide turns. Don't bring heat.</p><ol><li class="done">Pick up the van</li><li>Lose the patrol at the causeway</li><li>Drop at Pier 9</li></ol></div></div>
+    <div class="p-panel" data-panel="2"><div class="stats"><div><b>12</b><span>Missions</span></div><div><b>38%</b><span>Complete</span></div><div><b>214</b><span>Miles driven</span></div><div><b>★★★</b><span>Highest wanted</span></div></div></div>
+    <div class="p-panel" data-panel="3"><ul class="settings"><li>AUDIO<span>Music 70 · SFX 90</span></li><li>DISPLAY<span>Native · VSync on</span></li><li>CONTROLS<span>Keyboard + Mouse</span></li><li>CAMERA<span>Third person · FOV 70</span></li><li>SUBTITLES<span>On</span></li></ul></div>
+    <div class="p-panel" data-panel="4"><div class="gallery"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+  </div>
+  <footer class="hud-foot"><span class="by"><img src="assets/cloak-o.svg" alt="">CLOAK GAME STUDIOS</span><span class="keys"><kbd>Q</kbd><kbd>E</kbd> Tabs <kbd>Esc</kbd> Back</span></footer>
+</section>
+
+<button id="skip" class="skip" hidden>SKIP ›</button>
+
+<script src="js/audio.js"></script>
+<script src="js/intro.js"></script>
+</body>
+</html>
