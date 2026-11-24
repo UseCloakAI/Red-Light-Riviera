@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lowtide Brand Kit</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/lowtide-sun.svg">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=Syne:wght@800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0A0A0A;--paper:#F2EEE5;--rust:#D44D2A;--night:#0B1E2D;--deep:#102A3E;--tide:#19C3B1;--coral:#FF6B4A;--flare:#E8407A;--gold:#FFD36E;--sand:#E9D6AE;--dusk:#5B1F5E;--off:#F7F4EF;
+  --fd:'Anton',Impact,sans-serif;--fu:'Space Grotesk',system-ui,sans-serif;--fc:'Syne',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{overflow-x:hidden;background:#07090C;color:var(--off);font:400 15px/1.6 var(--fu)}
+a{color:inherit}
+.wrap{max-width:1200px;margin:0 auto;padding:0 40px}
+section{padding:88px 0;border-bottom:1px solid rgba(247,244,239,.1)}
+h2{font:400 clamp(40px,6vw,72px)/.95 var(--fd);margin-bottom:28px}
+p.lead{max-width:60ch;opacity:.7}
+
+/* hero */
+.hero{min-height:100dvh;display:grid;grid-template-columns:1.2fr 1fr;align-items:center;gap:40px;background:linear-gradient(180deg,#1B1036 0%,#5B1F5E 38%,#C2386A 64%,#FF6B4A 86%,#FFB45E);padding:56px 40px;position:relative;overflow:hidden}
+.hero .logo{font:400 clamp(80px,13vw,200px)/.85 var(--fd);display:flex;align-items:center}
+.lt-o{display:inline-block;width:.78em;height:.78em;margin:0 .03em;background:url(../assets/lowtide-sun.svg) center/contain no-repeat}
+.hero p{font:500 clamp(13px,1.4vw,17px)/1.4 var(--fu);letter-spacing:.3em;text-transform:uppercase;margin-top:18px}
+.hero .side{justify-self:end;max-width:340px}
+.hero .side h1{font:400 28px/1 var(--fd);margin-bottom:10px}
+.hero .side span{opacity:.85}
+.hero .by{position:absolute;left:40px;bottom:28px;display:flex;gap:10px;align-items:center;font-size:12px;letter-spacing:.2em;font-weight:700}
+.hero .by img{width:18px}
+
+/* logo grid */
+.logos{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:14px}
+.logos figure{aspect-ratio:4/3;display:grid;place-items:center;position:relative}
+.logos figcaption{position:absolute;left:14px;bottom:10px;font-size:12px;opacity:.6}
+.l1{background:var(--night)}.l2{background:var(--off);color:var(--ink)}.l3{background:var(--coral)}
+.logos .wm{font:400 clamp(48px,6vw,88px)/1 var(--fd);display:flex;align-items:center}
+.logos .mono{width:50%;height:50%;background:url(../assets/lowtide-sun.svg) center/contain no-repeat}
+.l3 .mono{filter:brightness(0) saturate(100%) invert(5%)}
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
+.rules h3{font:700 13px var(--fu);letter-spacing:.15em;text-transform:uppercase;margin-bottom:10px;color:var(--gold)}
+.rules li{margin:0 0 6px 18px;opacity:.8}
+
+/* studio */
+.studio{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.studio .card{aspect-ratio:16/10;display:grid;place-items:center;align-content:center;gap:12px}
+.s-light{background:var(--paper);color:var(--ink);background-image:linear-gradient(rgba(10,10,10,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(10,10,10,.06) 1px,transparent 1px);background-size:32px 32px}
+.s-dark{background:#131110;color:#EDE8DF}
+.cwm{font:800 clamp(44px,6vw,80px)/.9 var(--fc);letter-spacing:-.03em;display:flex;align-items:center}
+.cwm .o{display:inline-block;width:.86em;height:.86em;margin:0 .02em}
+.cwm .o svg{width:100%;height:100%;overflow:visible}
+.cwm .eyes{transform-box:fill-box;transform-origin:50% 50%;animation:bl 5.2s infinite}
+@keyframes bl{0%,93%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.1)}}
+.csub{font:700 12px var(--fu);letter-spacing:.55em;padding-left:.55em}
+.s-dark .o path{stroke:#EDE8DF}
+
+/* palette */
+.pal{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.sw{aspect-ratio:1;padding:16px;display:flex;flex-direction:column;justify-content:flex-end;font-size:13px}
+.sw b{font:400 22px/1 var(--fd);letter-spacing:.02em}
+.sw.big{grid-column:span 2;aspect-ratio:auto}
+.grad{grid-column:span 4;height:110px;background:linear-gradient(90deg,#1B1036,#5B1F5E,#C2386A,#FF6B4A,#FFB45E);display:flex;align-items:flex-end;padding:14px;font-size:13px}
+
+/* type */
+.type{display:grid;grid-template-columns:1.3fr 1fr;gap:40px;align-items:end}
+.type .d{font:400 clamp(90px,14vw,200px)/.85 var(--fd)}
+.type .u{font:500 34px/1.2 var(--fu)}
+.type small{display:block;font-size:13px;opacity:.6;margin-top:12px}
+.scale{margin-top:48px;display:grid;gap:14px}
+.scale div{display:grid;grid-template-columns:140px 1fr;align-items:baseline;gap:20px}
+.scale span{font-size:12px;opacity:.55}
+
+/* ui */
+.ui{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.panel{background:linear-gradient(135deg,#1B1036,#5B1F5E 60%,#C2386A);padding:32px;min-height:340px;position:relative}
+.menu li{list-style:none;font:400 40px/1.05 var(--fd);color:rgba(247,244,239,.45);position:relative}
+.menu li.sel{color:var(--off);translate:18px 0}
+.menu li.sel::before{content:"";position:absolute;left:-18px;top:18%;bottom:18%;width:6px;background:var(--gold)}
+.tabs{display:flex;gap:6px;border-bottom:2px solid rgba(247,244,239,.18)}
+.tabs span{font:400 22px/1 var(--fd);padding:10px 14px 14px;color:rgba(247,244,239,.5);position:relative}
+.tabs span.sel{color:var(--off)}
+.tabs span.sel::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:4px;background:var(--gold)}
+.hud{background:#0B1E2D url() ;position:relative;min-height:340px;padding:24px}
+.mini{position:absolute;left:24px;bottom:24px;width:150px;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 50% 50%,#E9D6AE 0 30%,#0E3048 31%);border:3px solid rgba(247,244,239,.8);overflow:hidden}
+.mini::after{content:"";position:absolute;left:50%;top:50%;width:0;height:0;border:8px solid transparent;border-bottom:14px solid var(--tide);translate:-50% -70%}
+.stars{position:absolute;right:24px;top:24px;font:400 30px/1 var(--fd);letter-spacing:4px;color:rgba(247,244,239,.25)}
+.stars b{color:var(--gold);font-weight:400}
+.cash{position:absolute;right:24px;top:66px;font:400 34px/1 var(--fd);color:#7CE3A1}
+.toast{position:absolute;right:24px;bottom:24px;background:rgba(7,9,12,.75);padding:14px 18px;max-width:240px;font-size:13px;border-left:4px solid var(--coral)}
+.toast b{display:block;font:400 18px var(--fd);letter-spacing:.03em}
+
+/* sound */
+.sfx{display:flex;flex-wrap:wrap;gap:10px}
+.sfx button{background:transparent;color:var(--off);border:2px solid rgba(247,244,239,.35);font:700 13px var(--fu);letter-spacing:.12em;padding:14px 20px;cursor:pointer;text-transform:uppercase;transition:border-color .15s,background .15s}
+.sfx button:hover{border-color:var(--gold)}
+.sfx button:active{translate:0 1px}
+.sfx button.on{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+
+/* voice */
+.voice{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+.voice blockquote{font:400 clamp(30px,4vw,48px)/1.05 var(--fd)}
+.voice ul{list-style:none;display:grid;gap:14px}
+.voice li b{display:block;color:var(--gold);font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+footer{padding:40px 0;font-size:12px;opacity:.55;letter-spacing:.1em}
+
+@media (max-width:768px){
+  .wrap{padding:0 16px}.hero{grid-template-columns:1fr;padding:56px 16px 80px}.hero .side{justify-self:start}.hero .by{left:16px}
+  .logos,.studio,.ui,.voice,.type,.rules{grid-template-columns:1fr}.pal{grid-template-columns:1fr 1fr}.grad{grid-column:span 2}
+  .scale div{grid-template-columns:1fr;gap:2px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div>
+    <div class="logo">L<span class="lt-o"></span>WTIDE</div>
+    <p>Everything washes up eventually.</p>
+  </div>
+  <div class="side">
+    <h1>BRAND KIT</h1>
+    <span>The logo, colours, type, UI and sound for Lowtide. Use this before you build any screen, trailer or store page.</span>
+  </div>
+  <div class="by"><img src="../assets/cloak-o.svg" alt="">CLOAK GAME STUDIOS</div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>THE MARK</h2>
+  <p class="lead">The O in LOWTIDE is a sun going under the water. The stripes are the tide coming in over it. It mirrors the Cloak wordmark, where the O is the orb.</p>
+  <div class="logos" style="margin-top:36px">
+    <figure class="l1"><div class="wm">L<span class="lt-o"></span>WTIDE</div><figcaption>Primary, on Night</figcaption></figure>
+    <figure class="l2"><div class="mono"></div><figcaption>Sun mark, app icon</figcaption></figure>
+    <figure class="l3"><div class="mono"></div><figcaption>One-colour, on Coral</figcaption></figure>
+  </div>
+  <div class="rules">
+    <div><h3>Do</h3><ul><li>Set LOWTIDE in Anton, all caps.</li><li>Keep clear space equal to the height of the sun on every side.</li><li>Put it on Night, the Sunset gradient or game footage with a dark scrim.</li></ul></div>
+    <div><h3>Don't</h3><ul><li>Redraw the sun or change how many stripes it has.</li><li>Outline the wordmark or add a glow to it.</li><li>Put it on Sand or Gold. The sun gets lost.</li></ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>CLOAK GAME STUDIOS</h2>
+  <p class="lead">The studio lockup is CL(O)AK with the orb that blinks, from the Cloak Blinks kit, plus GAME STUDIOS spaced out underneath. It is drawn in Cloak's own tokens, never in Lowtide's.</p>
+  <div class="studio" style="margin-top:36px">
+    <div class="card s-light"><div class="cwm">CL<span class="o"><svg viewBox="0 0 40 40"><path d="M20 3.5 C30 3 37 10.5 36.6 20.4 C36.2 30.4 29.4 36.8 19.6 36.5 C10 36.2 3.2 29.6 3.5 19.8 C3.8 10.6 10.6 4 20 3.5 Z" fill="#D44D2A" stroke="#0A0A0A" stroke-width="3.6" stroke-linejoin="round"/><g class="eyes"><ellipse cx="14.2" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/><ellipse cx="25.8" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/></g></svg></span>AK</div><div class="csub">GAME STUDIOS</div></div>
+    <div class="card s-dark"><div class="cwm">CL<span class="o"><svg viewBox="0 0 40 40"><path d="M20 3.5 C30 3 37 10.5 36.6 20.4 C36.2 30.4 29.4 36.8 19.6 36.5 C10 36.2 3.2 29.6 3.5 19.8 C3.8 10.6 10.6 4 20 3.5 Z" fill="#E5603E" stroke-width="3.6" stroke-linejoin="round"/><g class="eyes"><ellipse cx="14.2" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/><ellipse cx="25.8" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/></g></svg></span>AK</div><div class="csub">GAME STUDIOS</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>COLOUR</h2>
+  <p class="lead">It's a city at night that keeps getting hit with sunset. Night carries the UI. Gold is the only colour used to show what's selected. Coral is for danger and heat.</p>
+  <div class="pal" style="margin-top:36px">
+    <div class="sw big" style="background:var(--night)"><b>NIGHT</b>#0B1E2D UI base</div>
+    <div class="sw" style="background:var(--gold);color:var(--ink)"><b>GOLD</b>#FFD36E Selection</div>
+    <div class="sw" style="background:var(--coral)"><b>CORAL</b>#FF6B4A Heat, alerts</div>
+    <div class="sw" style="background:var(--flare)"><b>FLARE</b>#E8407A Sky mid</div>
+    <div class="sw" style="background:var(--dusk)"><b>DUSK</b>#5B1F5E Menu bed</div>
+    <div class="sw" style="background:var(--tide);color:var(--ink)"><b>TIDE</b>#19C3B1 Player, map</div>
+    <div class="sw" style="background:var(--sand);color:var(--ink)"><b>SAND</b>#E9D6AE Land, paper</div>
+    <div class="grad">SUNSET GRADIENT: menu backgrounds, key art, the loading screen</div>
+  </div>
+</section>
+
+<section>
+  <h2>TYPE</h2>
+  <div class="type">
+    <div><div class="d">ANTON</div><small>Display. All caps, tight. Menus, titles, HUD numbers.</small></div>
+    <div><div class="u">Space Grotesk</div><small>UI and body. Subtitles, descriptions, controls. Shared with Cloak, so the studio and the game feel related.</small></div>
+  </div>
+  <div class="scale">
+    <div><span>Title 200</span><b style="font:400 64px/1 var(--fd)">LOWTIDE</b></div>
+    <div><span>Menu 54</span><b style="font:400 44px/1 var(--fd)">STORY MODE</b></div>
+    <div><span>Tab 24</span><b style="font:400 24px/1 var(--fd)">MAP</b></div>
+    <div><span>Subtitle 18</span><b style="font:500 18px var(--fu)">Dez: You're late. Tide's already turning.</b></div>
+    <div><span>Label 11</span><b style="font:700 11px var(--fu);letter-spacing:.2em">PRESS ENTER</b></div>
+  </div>
+</section>
+
+<section>
+  <h2>INTERFACE</h2>
+  <p class="lead">Lower-left stacked menus, tabs across the top when paused, and a HUD that stays out of the way. Selection is always a gold bar and a small slide to the right.</p>
+  <div class="ui" style="margin-top:36px">
+    <div class="panel"><ul class="menu"><li class="sel">STORY MODE</li><li>LOWTIDE ONLINE</li><li>SETTINGS</li><li>QUIT</li></ul></div>
+    <div class="panel"><div class="tabs"><span class="sel">MAP</span><span>BRIEF</span><span>STATS</span><span>SETTINGS</span></div><p style="margin-top:24px;opacity:.75">Pause menu tabs. Switch with Q and E.</p></div>
+    <div class="hud" style="grid-column:1/-1"><div class="stars"><b>★★</b>★★★</div><div class="cash">$4,820</div><div class="mini"></div><div class="toast"><b>WANTED</b>Patrol spotted you near the causeway.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>SOUND</h2>
+  <p class="lead">Every sound is made live in the browser, so there are no audio files to license. Tap one to hear it.</p>
+  <div class="sfx" style="margin-top:28px">
+    <button data-s="slam">Letter slam</button><button data-s="thump">Orb drop</button><button data-s="blink">Blink</button>
+    <button data-s="whoosh">Whoosh</button><button data-s="hit">Title hit</button><button data-s="move">Menu move</button>
+    <button data-s="select">Select</button><button data-s="back">Back</button><button data-s="music" id="mus">Synthwave bed</button>
+  </div>
+</section>
+
+<section>
+  <h2>VOICE</h2>
+  <div class="voice">
+    <blockquote>EVERYTHING WASHES UP EVENTUALLY.</blockquote>
+    <ul>
+      <li><b>Short</b>Menu labels are one or two words. Subtitles are just what people say.</li>
+      <li><b>Dry</b>The city is funny without trying to be. No winking at the player.</li>
+      <li><b>Coastal</b>Tide, salt, piers, heat. Keep the world in the copy.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+<footer class="wrap">LOWTIDE BRAND KIT &nbsp; CLOAK GAME STUDIOS</footer>
+
+<script src="../js/audio.js"></script>
+<script>
+document.querySelectorAll(".sfx button").forEach(function(b){
+  b.addEventListener("click",function(){
+    LT.init(); var s=b.dataset.s;
+    if(s==="music"){ if(b.classList.toggle("on")) LT.music.start(); else LT.music.stop(); return; }
+    LT.sfx[s]();
+  });
+});
+</script>
+</body>
+</html>
