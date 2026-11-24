@@ -1,6 +1,9 @@
 /* Lowtide intro: Cloak Studios slate, match cut, title, menus.
-   Every visual beat sits on the cue sheet (cues.js). Picture zero is set
-   after the audio's output latency, so what you see lands on what you hear. */
+   Live, the slate and the opening ocean play as a pre-rendered film with a
+   baked soundtrack (cheap on any device); the logo, menus and UI stay live.
+   The same choreography below renders that film: ?render=intro|ocean puts
+   the page on a virtual clock that tools/render-intro.js steps frame by frame.
+   Every visual beat sits on the cue sheet (cues.js). */
 (function () {
   "use strict";
   var C = window.LT_CUE, S = window.LTScene;
@@ -16,23 +19,26 @@
   };
 
   var el = {
-    gate: $("#gate"), studio: $("#studio"), title: $("#title"), pause: $("#pause"), iris: $("#iris"), skip: $("#skip"),
+    gate: $("#gate"), studio: $("#studio"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
     grid: $("#studio .grid"), orb: $("#studio .orb"), shadow: $("#studio .orb-shadow"),
     railL: $("#studio .side.l .rail"), railR: $("#studio .side.r .rail"), lids: $("#studio .lids"), look: $("#studio .look"), sub: $("#studio .studio-sub"),
     sea: $("#sea"), wrap: $(".logo-wrap"), lt: $(".lt"), below: $(".lt-below"), refl: $(".lt-refl"), line: $(".lt-line"), tag: $(".lt-tag"),
     credit: $(".credit"), press: $(".press"), barT: $(".bar.t"), barB: $(".bar.b"), scrim: $(".scrim"),
-    selBar: $(".sel-bar"), foot: $("#title .hud-foot"), ptop: $(".p-top"), pbody: $(".p-body"), ink: $(".p-ink")
+    gateBtn: $("#start"), flash: $("#flash"), selBar: $(".sel-bar"), foot: $("#title .hud-foot"), ptop: $(".p-top"), pbody: $(".p-body"), ink: $(".p-ink")
   };
   var items = $$(".main-menu li"), tabs = $$(".p-tabs button"), panels = $$(".p-panel");
   var layers = [$$(".lt-above span"), $$(".lt-below span"), $$(".lt-refl span")];
 
-  var T0 = performance.now(), live = [], timers = [], state = "gate", sel = 0, tab = 0, IR = {}, logoAnim = null;
+  var RENDER = new URLSearchParams(location.search).get("render"), VCLOCK = null, pending = [];
+  function clock() { return VCLOCK === null ? performance.now() : VCLOCK; }
+  var T0 = clock(), live = [], timers = [], state = "gate", sel = 0, tab = 0, IR = {}, logoAnim = null, filmed = false;
 
   /* ---- timeline helpers: all times are seconds on the cue sheet ---- */
-  function cueNow() { return (performance.now() - T0) / 1000; }
-  function wait(s) { return Math.max(0, T0 + s * 1000 - performance.now()); }
+  function cueNow() { return (clock() - T0) / 1000; }
+  function wait(s) { return Math.max(0, T0 + s * 1000 - clock()); }
   function play(node, frames, ms, s, easing, fill) {
     var a = node.animate(frames, { duration: RM ? 1 : ms, delay: wait(s === undefined ? cueNow() : s), easing: easing || "linear", fill: fill || "both" });
+    a.__born = cueNow(); if (RENDER) a.pause();
     live.push(a); return a;
   }
   function track(node, keys, fill) {   // keyframes placed at absolute cue times
@@ -41,7 +47,7 @@
       var o = { offset: (k.t - t0) / (t1 - t0) }; for (var p in k) if (p !== "t") o[p] = k[p]; return o;
     }), (t1 - t0) * 1000, t0, "linear", fill);
   }
-  function cue(s, fn) { timers.push(setTimeout(fn, wait(s))); }
+  function cue(s, fn) { if (RENDER) pending.push({ s: s, fn: fn }); else timers.push(setTimeout(fn, wait(s))); }
   function clearAll(finish) {
     live.forEach(function (a) { try { finish ? a.finish() : a.cancel(); } catch (e) { a.cancel(); } });
     live = []; timers.forEach(clearTimeout); timers = [];
@@ -49,8 +55,13 @@
   function show(id) {
     ["gate", "studio", "title", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === "title")); });
   }
-  function placeLogo() {   // the logo's waterline sits exactly on the rendered horizon
-    el.wrap.style.top = (S.horizonY() - (el.lt.offsetTop + el.line.offsetTop + 1)) + "px";
+  function horizonY() {   // where the horizon lands on screen: live shader, or the cover-fitted film
+    if (!filmed) return S.horizonY();
+    var W = innerWidth, H = innerHeight, va = VARIANT === "port" ? 9 / 16 : 16 / 9;
+    return H / 2 + (0.57 - 0.5) * Math.max(H, W / va);
+  }
+  function placeLogo() {   // the logo's waterline sits exactly on the horizon
+    el.wrap.style.top = (horizonY() - (el.lt.offsetTop + el.line.offsetTop + 1)) + "px";
   }
 
   /* ---- 1 · Cloak Studios ---- */
@@ -140,7 +151,7 @@
     play(el.credit, [{ opacity: 0.86 }, { opacity: 0 }], 700, C.creditOut, E.in, "forwards");
     logoRise(C.hit, 1300);
     play(el.sea, [{ transform: "scale(1.045)" }, { transform: "scale(1)" }], 1500, C.hit, E.out, "forwards");
-    cue(C.hit, function () { S.flash(); state = "title"; el.skip.hidden = true; });
+    cue(C.hit, function () { S.flash(); state = "title"; });
     tagIn(C.tagline, 1600);
     pressIn(C.press);
   }
@@ -163,17 +174,15 @@
   }
 
   /* ---- gate → intro ---- */
-  function begin() {
-    if (state !== "gate") return;
+  function beginLive() {   // fallback when the film can't load: run the whole intro live
     state = "intro";
     var ctx = LT.init(), lead = 0.15, lat = ctx.outputLatency || ctx.baseLatency || 0.01;
-    T0 = performance.now() + (lead + lat) * 1000;
+    T0 = clock() + (lead + lat) * 1000;
     if (RM) return reduced(ctx.currentTime + lead);
     LT.cue.intro(ctx.currentTime + lead);
     show("studio");
     slate(); titleSeq();
     cue(C.cover, matchCut);
-    cue(0.9, function () { el.skip.hidden = false; play(el.skip, [{ opacity: 0 }, { opacity: 0.6 }], 600, cueNow(), E.out); });
   }
   function reduced(Ta) {
     show("studio"); LT.sfx.sting(Ta);
@@ -182,20 +191,74 @@
   function toTitle() {
     show("title"); placeLogo(); S.start(); S.exposure(1, 0); state = "title";
   }
-  function skipIntro() {
+
+
+  /* ---- the film: pre-rendered slate + opening ocean, baked soundtrack ---- */
+  var V = { film: $("#film"), intro: $("#introVid"), bg: $("#bgv") }, FILM = { T: 0, armed: false, ok: false };
+  var VARIANT = innerWidth / innerHeight < 0.9 ? "port" : "land", MEDIA = "media/";
+  var ready = Promise.resolve(false);
+  function prepMedia() {
+    V.intro.src = MEDIA + "intro-" + VARIANT + ".mp4"; V.bg.src = MEDIA + "ocean-" + VARIANT + ".mp4";
+    V.intro.load(); V.bg.load();
+    LT.init();   // created suspended; resumed by the key press
+    var aud = LT.loadBaked({ intro: MEDIA + "intro.flac", loop: MEDIA + "loop.flac" });
+    var vid = new Promise(function (res, rej) {
+      if (V.intro.readyState >= 3) return res();
+      V.intro.addEventListener("canplaythrough", res, { once: true });
+      V.intro.addEventListener("error", rej, { once: true });
+    });
+    var timeout = new Promise(function (res, rej) { setTimeout(function () { rej(new Error("media timeout")); }, 15000); });
+    ready = Promise.race([Promise.all([aud, vid]), timeout]).then(function () { return true; }, function (e) { console.warn("Lowtide film unavailable, running live:", e); return false; });
+    el.gateBtn.textContent = "Loading";
+    ready.then(function () { el.gateBtn.textContent = "Press any key"; });
+  }
+  function begin() {
+    if (state !== "gate") return;
+    state = "loading";
+    LT.init();   // resume audio inside the gesture
+    ready.then(function (ok) {
+      if (!ok) return beginLive();
+      FILM.ok = true;
+      if (RM) { LT.startTitle(); return toTitleFromFilm(); }
+      playFilm();
+    });
+  }
+  function lat() { var c = LT.ctx; return c.outputLatency || c.baseLatency || 0.01; }
+  function playFilm() {
+    state = "intro"; show("film");
+    var v = V.intro; v.currentTime = 0;
+    v.addEventListener("playing", function go() {
+      v.removeEventListener("playing", go);
+      var n = LT.ctx.currentTime, L = lat();
+      FILM.T = n - v.currentTime - L;              // audio-clock time of film frame 0
+      LT.playIntro(n, v.currentTime + L);          // buffer time p is heard when the film shows p
+      requestAnimationFrame(filmTick);
+      T0 = clock();
+    });
+    var p = v.play(); if (p && p.catch) p.catch(function () { beginLive(); });
+  }
+  // keep the picture slaved to the audio clock; arm the drop just ahead of time
+  function filmTick() {
     if (state !== "intro") return;
-    state = "skipping";
-    clearAll(false);
-    LT.cue.skip();
-    el.iris.style.display = "none"; el.skip.hidden = true; el.orb.style.visibility = "";
-    T0 = performance.now();
-    show("title"); placeLogo(); S.start(); S.exposure(0.6, 0); S.exposure(1, 900); S.flash();
-    play(el.barT, [{ transform: "translateY(-100%)" }, { transform: "translateY(0)" }], 500, 0, E.out);
-    play(el.barB, [{ transform: "translateY(100%)" }, { transform: "translateY(0)" }], 500, 0, E.out);
-    logoRise(0.05, 1000);
-    tagIn(0.45, 1100);
-    pressIn(0.9);
-    cue(0.15, function () { state = "title"; });
+    var v = V.intro, want = LT.ctx.currentTime - lat() - FILM.T;
+    if (!FILM.armed && want >= C.hit - 0.3) { FILM.armed = true; LT.startTitle(FILM.T + C.hit + lat()); }
+    if (want >= C.hit - 0.008 || v.ended) return toTitleFromFilm();
+    var d = want - v.currentTime;
+    if (Math.abs(d) > 0.12) v.currentTime = want; else v.playbackRate = 1 + Math.max(-0.05, Math.min(0.05, d));
+    requestAnimationFrame(filmTick);
+  }
+  // the drop: the cut to the live title is hidden under a flash and a camera punch
+  function toTitleFromFilm() {
+    state = "title-in"; clearAll(false);
+    filmed = true; el.title.classList.add("filmed");
+    V.bg.currentTime = 0; var p = V.bg.play(); if (p && p.catch) p.catch(function () {});
+    T0 = clock();
+    show("title"); placeLogo();
+    V.intro.pause();
+    play(el.flash, [{ opacity: 0.55 }, { opacity: 0 }], 900, 0, E.out, "forwards");
+    play(V.bg, [{ transform: "scale(1.045)" }, { transform: "scale(1)" }], 1500, 0, E.out, "forwards");
+    logoRise(0, 1300); tagIn(1.3, 1600); pressIn(2.6);
+    cue(0.05, function () { state = "title"; });
   }
 
   /* ---- main menu ---- */
@@ -272,7 +335,6 @@
   document.addEventListener("keydown", function (e) {
     var k = e.key;
     if (state === "gate") { if (!e.repeat) begin(); return; }
-    if (state === "intro") { if (k === "Escape" || k === "Enter" || k === " ") skipIntro(); return; }
     if (state === "title") { if (k === "Enter" || k === " ") openMenu(); return; }
     if (state === "menu") {
       if (k === "ArrowDown" || k === "s" || k === "S") { e.preventDefault(); setSel(sel + 1); }
@@ -287,7 +349,6 @@
     }
   });
   el.gate.addEventListener("click", begin);
-  el.skip.addEventListener("click", skipIntro);
   el.title.addEventListener("click", function () { if (state === "title") openMenu(); });
   items.forEach(function (li, k) {
     li.addEventListener("mouseenter", function () { if (state === "menu" && sel !== k) setSel(k); });
@@ -301,11 +362,39 @@
   addEventListener("resize", relayout);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
 
+  // Render mode: tools/render-intro.js drives this frame by frame.
+  if (RENDER) {
+    document.documentElement.classList.add("render", "render-" + RENDER);
+    VCLOCK = 0; T0 = 0; S.manual(clock, 0.03);
+    window.__render = {
+      ready: (document.fonts ? document.fonts.ready : Promise.resolve()).then(function () {
+        if (RENDER === "intro") { show("studio"); slate(); titleSeq(); cue(C.cover, matchCut); return { seconds: C.hit }; }
+        show("title"); placeLogo(); S.start(); S.exposure(1, 0); return { seconds: 12 };
+      }),
+      frame: function (t) {
+        for (;;) {   // fire cues in order, each at its own exact time
+          pending.sort(function (a, b) { return a.s - b.s; });
+          if (!pending.length || pending[0].s > t + 1e-6) break;
+          var c = pending.shift(); VCLOCK = c.s * 1000; c.fn();
+        }
+        VCLOCK = t * 1000;
+        document.getAnimations().forEach(function (a) {
+          if (a.__born === undefined) { a.pause(); a.currentTime = t * 1000; }
+          else a.currentTime = Math.max(0, (t - a.__born) * 1000);
+        });
+        S.renderAt();
+      }
+    };
+    return;
+  }
+
   // QA deep links: ?scene=title | menu | pause (no audio until a key is pressed)
   var q = new URLSearchParams(location.search).get("scene");
   if (q) {
-    toTitle();
+    filmed = true; el.title.classList.add("filmed");
+    V.bg.src = MEDIA + "ocean-" + VARIANT + ".mp4"; V.bg.play().catch(function () {});
+    show("title"); placeLogo(); state = "title";
     if (q !== "title") openMenu(true);
     if (q === "pause") openPause(0);
-  }
+  } else prepMedia();
 })();

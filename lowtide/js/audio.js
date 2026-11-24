@@ -114,6 +114,7 @@
 
     // music: everything feeds a tone filter so the pause menu can muffle it
     B.mus = G(0); B.tone = F("lowpass", 18000, 0.6); chain(B.mus, B.tone, out);
+    B.bed = G(1); B.bed.connect(B.tone);          // pre-rendered music + ocean loop
     mverb = verb(2.8, 2.6, 0.02, 5200, 0.55, B.tone);
     echo = pingpong(60 / C.bpm * 0.75, B.tone);
     B.drums = G(0.85); B.drums.connect(B.mus);
@@ -423,7 +424,7 @@
   };
 
   /* ---------------- cue sheets ---------------- */
-  function cueIntro(T) {
+  function cueIntro(T, bake) {
     sfx.room(T, C.cover - 0.05);
     sfx.fall(T + C.fall, C.impact - C.fall);
     sfx.thump(T + C.impact, 1); sfx.thump(T + C.rebound, 0.42);
@@ -433,8 +434,10 @@
     sfx.swell(T + C.iris - 0.08, C.cover - C.iris + 0.08);
     sfx.through(T + C.cover);
     ambStart(T + C.cover - 0.05);
-    musicStart(T + C.musicStart, "intro"); musicSection("drop", T + C.hit);
+    musicStart(T + C.musicStart, "intro");
     sfx.riser(T + C.riser, C.hit - C.riser);
+    if (bake) { musicStop(T + C.hit); return; }   // the baked file stops at the drop; the title loop takes over
+    musicSection("drop", T + C.hit);
     sfx.hit(T + C.hit);
   }
   function cutSeq(t) {
@@ -452,12 +455,45 @@
   }
   function pauseMix(on) {
     if (!ctx) return; var t = now();
+    B.bed.gain.cancelScheduledValues(t); B.bed.gain.setTargetAtTime(on ? 0.55 : 1, t, 0.12);
     B.tone.frequency.cancelScheduledValues(t); B.tone.frequency.setTargetAtTime(on ? 850 : 17000, t, 0.09);
     B.mus.gain.cancelScheduledValues(t); B.mus.gain.setTargetAtTime(on ? 0.4 : 0.75, t, 0.12);
     if (W.on) { B.amb.gain.cancelScheduledValues(t); B.amb.gain.setTargetAtTime(on ? 0.18 : 0.55, t, 0.15); }
   }
 
+  /* ---------------- pre-rendered audio ----------------
+     The intro (up to the drop) and a seamless 8-bar title loop are rendered
+     offline from this same engine (tools/render-intro.js) and played back as
+     buffers, which costs almost nothing on low-end devices. */
+  var BAKE = {}, playing = [];
+  function loadBaked(map) {
+    return Promise.all(Object.keys(map).map(function (k) {
+      return fetch(map[k]).then(function (r) { if (!r.ok) throw new Error(map[k] + " " + r.status); return r.arrayBuffer(); })
+        .then(function (ab) { return new Promise(function (res, rej) { ctx.decodeAudioData(ab, res, rej); }); })
+        .then(function (b) { BAKE[k] = b; });
+    }));
+  }
+  function playBaked(k, t, offset, loop, dest) {
+    var s = ctx.createBufferSource(); s.buffer = BAKE[k]; s.loop = !!loop;
+    s.connect(dest); s.start(t, offset || 0); playing.push(s); return s;
+  }
+  // the intro film's soundtrack, positioned so buffer time p is heard when the video shows p
+  function playIntro(t, offset) { return BAKE.intro ? playBaked("intro", t, offset, false, B.seq) : null; }
+  // title: the drop. Hit + looping bed (baked if available, live engine otherwise).
+  function startTitle(t, quiet) {
+    if (!ctx) return; t = t || now() + 0.03;
+    if (BAKE.loop) {
+      if (!startTitle.on) { startTitle.on = true; playBaked("loop", t, 0, true, B.bed); }
+    } else {
+      if (!(M.on && sectionAt(t) !== "intro")) musicStart(t, "drop");
+      ambStart(t);
+    }
+    if (!quiet) sfx.hit(t, B.sfx);
+  }
+
   window.LT = {
+    loadBaked: loadBaked, playIntro: playIntro, startTitle: startTitle, cutIntro: function () { if (ctx) cutSeq(now()); },
+    get baked() { return !!(BAKE.intro && BAKE.loop); },
     init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix,
     cue: { intro: cueIntro, skip: cueSkip },
     music: { start: musicStart, section: musicSection, stop: musicStop, get on() { return M.on; } },
