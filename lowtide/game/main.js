@@ -7,6 +7,18 @@ import { buildWorld } from "./world.js";
 import { buildSky } from "./sky.js";
 import { Player, CamRig, Input } from "./player.js";
 import { Hud } from "./hud.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+// the player character: a slimmed Mixamo model plus idle/walk/run retargeted onto her rig (tools/retarget)
+async function loadCharacter() {
+  try {
+    const [gltf, anims] = await Promise.all([
+      new GLTFLoader().loadAsync("assets/characters/michelle.glb"),
+      fetch("assets/characters/anims.json").then((r) => r.json())
+    ]);
+    return { scene: gltf.scene, clips: anims.clips.map((c) => THREE.AnimationClip.parse(c)) };
+  } catch (e) { console.warn("Lowtide: character failed to load, using the stand-in", e); return null; }
+}
 
 const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
@@ -24,11 +36,12 @@ export async function start(o) {
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 2600);
   await step(0.12);
 
+  const charP = loadCharacter();   // download while the city builds
   const sky = buildSky(scene, renderer);
   await step(0.25);
   const world = buildWorld(scene, {});
   await step(0.7);
-  const player = new Player(scene, world);
+  const player = new Player(scene, world, await charP);
   const input = new Input(renderer.domElement);
   const rig = new CamRig(camera, world, player.yaw);
   const hud = new Hud(o.hud, world);

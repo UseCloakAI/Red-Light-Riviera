@@ -80,6 +80,15 @@ export function buildSky(scene, renderer) {
   water.position.y = -0.6; water.receiveShadow = false;
   scene.add(water);
 
+  // image-based light from this same sky, baked once: only PBR materials (characters) use it,
+  // so they pick up the dusk fill instead of reading as silhouettes against the sun
+  const envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), sky.material));
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(envScene, 0.04, 0.1, 50).texture;
+  scene.environmentIntensity = 0.9;
+  pmrem.dispose();
+
   // light: a low warm sun with shadows that follow the player, a violet sky fill
   const hemi = new THREE.HemisphereLight(0x8E6CC0, 0x5A3A30, 1.15);
   scene.add(hemi);

@@ -1,6 +1,7 @@
 /* The player: input, a third-person controller with collision, a camera rig
-   that keeps out of walls, and a stand-in figure with a procedural walk cycle
-   (Stage 2 swaps in a rigged, animated character from a model library). */
+   that keeps out of walls, and the character: a rigged model (Michelle, from
+   Mixamo) blending idle, walk and run by speed. If the model can't load, a
+   stand-in figure with a procedural walk cycle takes her place. */
 import * as THREE from "three";
 
 /* ---------- input ---------- */
@@ -58,8 +59,9 @@ const ang = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 /* ---------- controller ---------- */
 export class Player {
-  constructor(scene, world) {
-    this.w = world; this.fig = makeFigure(); scene.add(this.fig.root);
+  constructor(scene, world, model) {
+    this.w = world;
+    if (model) this.rig(scene, model); else { this.fig = makeFigure(); scene.add(this.fig.root); }
     this.pos = new THREE.Vector3(world.spawn.x, world.heightAt(world.spawn.x, world.spawn.z), world.spawn.z);
     this.vel = new THREE.Vector3(); this.yaw = world.spawn.yaw; this.ground = true; this.phase = 0; this.lean = 0;
     this.speed = 0; this.sprinting = false; this.onStep = null; this.surface = "stone";
@@ -99,7 +101,36 @@ export class Player {
     this.surface = this.w.districtAt(p.x, p.z) === "pier" ? "wood" : g < -0.01 ? "sand" : "stone";
     this.animate(dt);
   }
+  rig(scene, { scene: obj, clips }) {
+    this.model = obj;
+    obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    scene.add(obj);
+    this.mixer = new THREE.AnimationMixer(obj); this.act = {};
+    for (const c of clips) { const a = this.mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); this.act[c.name] = a; }
+    this.wt = [1, 0, 0]; this.lastPh = 0;
+  }
+  // blend idle -> walk -> run by speed, keep the cycles in step, fire footsteps on contacts
+  animateRig(dt) {
+    const v = this.speed, A = this.act, want = v < 0.15 ? [1, 0, 0] : v < WALK ? [1 - v / WALK, v / WALK, 0]
+      : v < RUN ? [0, 1 - (v - WALK) / (RUN - WALK), (v - WALK) / (RUN - WALK)] : [0, 0, 1];
+    const k = 1 - Math.exp(-dt * 10);
+    for (let i = 0; i < 3; i++) this.wt[i] += (want[i] - this.wt[i]) * k;
+    A.idle.setEffectiveWeight(this.wt[0]); A.walk.setEffectiveWeight(this.wt[1]); A.run.setEffectiveWeight(this.wt[2]);
+    const air = this.ground ? 1 : 0.18;
+    A.walk.timeScale = THREE.MathUtils.clamp(v / 1.45, 0.7, 1.5) * air;
+    A.run.timeScale = THREE.MathUtils.clamp(v / 4.8, 0.8, 1.45) * air;
+    const dw = A.walk.getClip().duration, dr = A.run.getClip().duration;
+    if (this.wt[1] > 0.01 && this.wt[2] > 0.01) A.walk.time = (A.run.time / dr) * dw;
+    this.mixer.update(dt);
+    const loco = this.wt[2] > this.wt[1] ? A.run : A.walk, ph = (loco.time / loco.getClip().duration) % 1;
+    const crossed = (a, b, x) => (a < x && b >= x) || (a > b && (b >= x || a < x));
+    if (v > 0.4 && this.ground && (crossed(this.lastPh, ph, 0.02) || crossed(this.lastPh, ph, 0.52)) && this.onStep) this.onStep(Math.min(1, v / SPRINT), this.surface);
+    this.lastPh = ph;
+    this.model.position.copy(this.pos);
+    this.model.rotation.set(0, this.yaw, this.lean * 0.6);
+  }
   animate(dt) {
+    if (this.mixer) return this.animateRig(dt);
     const F = this.fig, n = Math.min(1, this.speed / SPRINT), moving = this.speed > 0.25;
     const prev = Math.sin(this.phase);
     this.phase += dt * (moving ? 4.2 + this.speed * 1.05 : 0);

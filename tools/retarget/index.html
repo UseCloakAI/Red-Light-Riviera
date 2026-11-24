@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8"><title>Retarget</title>
+<script type="importmap">{"imports":{"three":"/lowtide/vendor/three/three.module.min.js","three/addons/":"/lowtide/vendor/three/addons/"}}</script>
+<script type="module">
+/* World-space retarget: for every frame, how far each source bone has turned
+   from its T-pose in world space is applied to the same-named target bone
+   from the target's own T-pose, then converted back to local space. Works
+   across rigs whose bones have different local axes (Xbot vs Michelle). */
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+const P = new URLSearchParams(location.search), SRC = P.get("src"), TGT = P.get("tgt"), NAMES = P.get("clips").split(",");
+const L = new GLTFLoader();
+const [src, tgt] = await Promise.all([L.loadAsync(SRC), L.loadAsync(TGT)]);
+const S = src.scene, T = tgt.scene; S.updateMatrixWorld(true); T.updateMatrixWorld(true);
+const bonesT = [], byName = {};
+T.traverse((o) => { if (o.isBone) bonesT.push(o); });
+S.traverse((o) => { if (o.isBone) byName[o.name] = o; });
+const restW = new Map(), restL = new Map();
+for (const b of bonesT) { restW.set(b, b.getWorldQuaternion(new THREE.Quaternion())); restL.set(b, [b.quaternion.clone(), b.position.clone()]); }
+for (const b of Object.values(byName)) restW.set(b, b.getWorldQuaternion(new THREE.Quaternion()));
+const hipS = byName.mixamorigHips, hipT = bonesT.find((b) => b.name === "mixamorigHips");
+const rS = hipS.getWorldPosition(new THREE.Vector3()), rT = hipT.getWorldPosition(new THREE.Vector3()), ratio = rT.y / rS.y;
+const r4 = (v) => Math.round(v * 2e3) / 2e3, clips = [];
+for (const name of NAMES) {
+  const clip = src.animations.find((a) => a.name === name); if (!clip) throw new Error("no clip " + name);
+  for (const b of bonesT) { b.quaternion.copy(restL.get(b)[0]); b.position.copy(restL.get(b)[1]); }
+  const mixer = new THREE.AnimationMixer(S); mixer.clipAction(clip).play();
+  const fps = 30, n = Math.max(2, Math.round(clip.duration * fps) + 1), times = [], q = new Map(bonesT.map((b) => [b, []])), hip = [];
+  for (let i = 0; i < n; i++) {
+    const t = Math.min(clip.duration, i / fps); times.push(r4(t));
+    mixer.setTime(t); S.updateMatrixWorld(true);
+    for (const b of bonesT) {
+      const sb = byName[b.name];
+      if (sb) {
+        const want = sb.getWorldQuaternion(new THREE.Quaternion()).multiply(restW.get(sb).clone().invert()).multiply(restW.get(b));
+        b.quaternion.copy(b.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(want));
+        b.updateMatrixWorld(true);
+      }
+      q.get(b).push(...b.quaternion.toArray().map(r4));
+    }
+    // hips: keep the vertical bob, drop root travel so the controller owns movement
+    const sp = hipS.getWorldPosition(new THREE.Vector3()), wp = rT.clone(); wp.y += (sp.y - rS.y) * ratio;
+    hip.push(...hipT.parent.worldToLocal(wp).toArray().map(r4));
+  }
+  const tracks = bonesT.map((b) => new THREE.QuaternionKeyframeTrack(b.name + ".quaternion", times, q.get(b)));
+  tracks.push(new THREE.VectorKeyframeTrack(hipT.name + ".position", times, hip));
+  for (const tr of tracks) {   // drop redundant keys; a bone that never moves keeps one
+    tr.optimize();
+    const st = tr.getValueSize(), v = tr.values;
+    if (v.length > st && [...v].every((x, i) => Math.abs(x - v[i % st]) < 2e-3)) { tr.times = tr.times.slice(0, 1); tr.values = v.slice(0, st); }
+  }
+  clips.push(THREE.AnimationClip.toJSON(new THREE.AnimationClip(name, clip.duration, tracks)));
+}
+window.result = JSON.stringify({ source: SRC.split("/").pop(), target: TGT.split("/").pop(), clips });
+</script>
