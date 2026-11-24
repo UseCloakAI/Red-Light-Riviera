@@ -1,96 +1,468 @@
-/* Lowtide audio: all synthesized with WebAudio, no files. LT.sfx.*, LT.music.* */
+/* Lowtide audio. Everything is synthesized live with WebAudio, so there are
+   no samples and no files to license. One clock (the AudioContext) runs the
+   music, the ocean and the intro cue sheet, which keeps sound locked to
+   picture. Works the same on an OfflineAudioContext for rendering previews. */
 (function () {
   "use strict";
-  var ctx = null, master, musicBus, sfxBus, musicNodes = [], arpT = 0;
+  var C = window.LT_CUE;
+  var ctx = null, out, hall, plate, mverb, echo, B = {}, NZ = {}, SAT2, timer = 0;
 
-  function init() {
-    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return ctx; }
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    master = ctx.createGain(); master.gain.value = 0.8;
-    var comp = ctx.createDynamicsCompressor();
-    master.connect(comp); comp.connect(ctx.destination);
-    musicBus = ctx.createGain(); musicBus.gain.value = 0.55; musicBus.connect(master);
-    sfxBus = ctx.createGain(); sfxBus.gain.value = 0.9; sfxBus.connect(master);
-    return ctx;
+  /* ---------------- utilities ---------------- */
+  function seeded(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
   }
-
-  function env(g, t, a, peak, d) {
+  var rnd = seeded(1987);
+  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function now() { return ctx ? ctx.currentTime : 0; }
+  function G(v) { var g = ctx.createGain(); g.gain.value = v === undefined ? 1 : v; return g; }
+  function F(type, f, q) { var b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q !== undefined) b.Q.value = q; return b; }
+  function O(type, f, t) { var o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); return o; }
+  function P(v) { var p = ctx.createStereoPanner(); p.pan.value = v || 0; return p; }
+  function chain() { for (var i = 0; i < arguments.length - 1; i++) arguments[i].connect(arguments[i + 1]); return arguments[arguments.length - 1]; }
+  function send(node, fx, amt) { var s = G(amt); node.connect(s); s.connect(fx); return s; }
+  function perc(g, t, a, peak, d) {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak, t + a);
     g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
   }
-  function osc(type, f, t, dur, peak, bus, a) {
-    var o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type; o.frequency.setValueAtTime(f, t);
-    env(g, t, a || 0.005, peak, dur);
-    o.connect(g); g.connect(bus || sfxBus); o.start(t); o.stop(t + dur + 0.1);
-    return o;
+  function noise(kind, t, dur, loop) {
+    var s = ctx.createBufferSource(); s.buffer = NZ[kind]; s.loop = !!loop;
+    if (loop) s.start(t, rnd() * 4); else s.start(t, rnd() * 2, dur);
+    return s;
   }
-  function noise(dur) {
-    var b = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate), d = b.getChannelData(0);
-    for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    var s = ctx.createBufferSource(); s.buffer = b; return s;
+  // unity gain for quiet signals, rounds peaks off softly (no hidden level boost)
+  function sat(k) {
+    var n = 4096, c = new Float32Array(n);
+    for (var i = 0; i < n; i++) { var x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x) / k; }
+    return c;
   }
 
-  var sfx = {
-    // orb lands: soft rubbery thump
-    thump: function () { var t = ctx.currentTime, o = osc("sine", 180, t, 0.35, 0.9); o.frequency.exponentialRampToValueAtTime(48, t + 0.3); },
-    // eyes blink: two tiny ticks
-    blink: function () { var t = ctx.currentTime; osc("square", 2400, t, 0.03, 0.08); osc("square", 1800, t + 0.09, 0.03, 0.06); },
-    // letter slam
-    slam: function () { var t = ctx.currentTime, n = noise(0.12), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = "bandpass"; f.frequency.value = 1400; env(g, t, 0.002, 0.35, 0.1);
-      n.connect(f); f.connect(g); g.connect(sfxBus); n.start(t); osc("triangle", 110, t, 0.12, 0.3); },
-    // whoosh sweep
-    whoosh: function (dur) { dur = dur || 0.9; var t = ctx.currentTime, n = noise(dur), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = "bandpass"; f.Q.value = 1.2; f.frequency.setValueAtTime(200, t); f.frequency.exponentialRampToValueAtTime(5000, t + dur * 0.8);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + dur * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      n.connect(f); f.connect(g); g.connect(sfxBus); n.start(t); },
-    // cinematic sub hit
-    hit: function () { var t = ctx.currentTime, o = osc("sine", 90, t, 2.2, 1, sfxBus, 0.01); o.frequency.exponentialRampToValueAtTime(32, t + 1.5);
-      var n = noise(1.5), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = "lowpass"; f.frequency.value = 600;
-      env(g, t, 0.005, 0.5, 1.4); n.connect(f); f.connect(g); g.connect(sfxBus); n.start(t); },
-    // menu
-    move: function () { osc("triangle", 880, ctx.currentTime, 0.06, 0.12); },
-    select: function () { var t = ctx.currentTime; osc("triangle", 660, t, 0.08, 0.2); osc("triangle", 990, t + 0.06, 0.14, 0.2); },
-    back: function () { var t = ctx.currentTime; osc("triangle", 660, t, 0.08, 0.18); osc("triangle", 440, t + 0.06, 0.12, 0.18); }
-  };
+  /* Noise beds, made seamless so looping never clicks. */
+  function makeNoise(sec) {
+    var sr = ctx.sampleRate, n = Math.floor(sr * sec), r = seeded(5);
+    var w = ctx.createBuffer(1, n, sr), p = ctx.createBuffer(1, n, sr), b = ctx.createBuffer(1, n, sr);
+    var W = w.getChannelData(0), Pk = p.getChannelData(0), Br = b.getChannelData(0);
+    var b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
+    for (var i = 0; i < n; i++) {
+      var x = r() * 2 - 1; W[i] = x;
+      b0 = 0.99886 * b0 + x * 0.0555179; b1 = 0.99332 * b1 + x * 0.0750759; b2 = 0.969 * b2 + x * 0.153852;
+      b3 = 0.8665 * b3 + x * 0.3104856; b4 = 0.55 * b4 + x * 0.5329522; b5 = -0.7616 * b5 - x * 0.016898;
+      Pk[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + x * 0.5362) * 0.11; b6 = x * 0.115926;
+      last = (last + 0.02 * x) / 1.02; Br[i] = last * 3.5;
+    }
+    [W, Pk, Br].forEach(function (d) { var s = d[n - 1] - d[0]; for (var j = 0; j < n; j++) d[j] -= s * j / (n - 1); });
+    NZ.white = w; NZ.pink = p; NZ.brown = b;
+  }
 
-  // Synthwave bed: pad chords + bass + arp. Am - F - C - G, 96bpm.
-  var CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
-  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  var music = {
-    start: function () {
-      if (arpT) return;
-      var beat = 60 / 96, bar = beat * 4, t0 = ctx.currentTime + 0.05, step = 0;
-      var delay = ctx.createDelay(); delay.delayTime.value = beat * 0.75;
-      var fb = ctx.createGain(); fb.gain.value = 0.35; delay.connect(fb); fb.connect(delay);
-      var lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;
-      delay.connect(lp); lp.connect(musicBus); musicNodes.push(delay, fb, lp);
-      function sched() {
-        var now = ctx.currentTime;
-        while (t0 + step * beat / 2 < now + 0.3) {
-          var t = t0 + step * beat / 2, ci = Math.floor(step / 8) % 4, ch = CH[ci];
-          if (step % 8 === 0) {
-            ch.forEach(function (m) { [-6, 6].forEach(function (dt) {
-              var o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
-              o.type = "sawtooth"; o.frequency.value = mtof(m); o.detune.value = dt; f.type = "lowpass"; f.frequency.value = 900;
-              g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.05, t + 0.6); g.gain.linearRampToValueAtTime(0.0001, t + bar);
-              o.connect(f); f.connect(g); g.connect(musicBus); o.start(t); o.stop(t + bar + 0.1); }); });
-          }
-          if (step % 2 === 0) osc("sawtooth", mtof(ch[0] - 24), t, beat * 0.8, 0.12, musicBus);
-          if (step % 4 === 0) { var k = osc("sine", 120, t, 0.25, 0.5, musicBus); k.frequency.exponentialRampToValueAtTime(40, t + 0.2); }
-          var a = ctx.createOscillator(), ag = ctx.createGain();
-          a.type = "square"; a.frequency.value = mtof(ch[step % 3] + 12); env(ag, t, 0.005, 0.035, beat * 0.4);
-          a.connect(ag); ag.connect(delay); ag.connect(musicBus); a.start(t); a.stop(t + beat);
-          step++;
-        }
+  /* Generated stereo impulse response: early reflections, then a dense
+     tail that darkens as it decays, the way real rooms lose highs first. */
+  function impulse(sec, shape, pre, damp) {
+    var sr = ctx.sampleRate, len = Math.floor(sr * sec), buf = ctx.createBuffer(2, len, sr), p0 = Math.floor(sr * pre);
+    for (var c = 0; c < 2; c++) {
+      var d = buf.getChannelData(c), lp = 0, r = seeded(31 + c * 7);
+      for (var i = p0; i < len; i++) {
+        var x = (i - p0) / (len - p0);
+        var fc = damp * (1 - 0.88 * x), a = Math.exp(-2 * Math.PI * fc / sr);
+        lp = (1 - a) * ((r() * 2 - 1) * Math.pow(1 - x, shape)) + a * lp;
+        d[i] = lp;
       }
-      sched(); arpT = setInterval(sched, 100);
+      for (var e = 0; e < 9; e++) {
+        var at = Math.floor(sr * (pre + 0.003 + r() * 0.045));
+        if (at < len) d[at] += (r() < 0.5 ? -1 : 1) * (0.6 - e * 0.05);
+      }
+    }
+    return buf;
+  }
+  function verb(sec, shape, pre, damp, ret, dest) {
+    var cv = ctx.createConvolver(); cv.buffer = impulse(sec, shape, pre, damp);
+    chain(cv, G(ret), dest); return cv;
+  }
+  function pingpong(time, dest) {
+    var inp = G(1), hp = F("highpass", 350), l = ctx.createDelay(2), r = ctx.createDelay(2);
+    var lp = F("lowpass", 2600, 0.5), f1 = G(0.36), f2 = G(0.36), pl = P(-0.8), pr = P(0.8), ret = G(0.8);
+    l.delayTime.value = time; r.delayTime.value = time;
+    chain(inp, hp, l); chain(l, pl, ret); chain(l, lp, f1, r); chain(r, pr, ret); chain(r, f2, l);
+    ret.connect(dest); return inp;
+  }
+
+  /* ---------------- graph ---------------- */
+  function init(given) {
+    if (ctx) { if (ctx.resume && ctx.state === "suspended") ctx.resume(); return ctx; }
+    ctx = given || new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
+    makeNoise(8); SAT2 = sat(2.2);
+
+    // master: subsonic cut, glue compression, tape saturation, brickwall limiter
+    out = G(0.8);
+    var hp = F("highpass", 24, 0.6), glue = ctx.createDynamicsCompressor(), tape = ctx.createWaveShaper(), trim = G(0.92), lim = ctx.createDynamicsCompressor();
+    glue.threshold.value = -20; glue.knee.value = 12; glue.ratio.value = 2.2; glue.attack.value = 0.025; glue.release.value = 0.3;
+    tape.curve = sat(1.3); tape.oversample = "4x";
+    lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.12;
+    chain(out, hp, glue, tape, trim, lim, ctx.destination);
+
+    hall = verb(3.6, 2.4, 0.03, 4600, 0.5, out);
+    plate = verb(1.3, 3.0, 0.006, 8000, 0.45, out);
+
+    B.sfx = G(1); B.sfx.connect(out);
+    B.seq = G(1); B.seq.connect(B.sfx);          // intro cues live here so a skip can cut them
+    B.ui = G(0.75); B.ui.connect(out); send(B.ui, plate, 0.16);
+    B.amb = G(0); B.amb.connect(out);
+
+    // music: everything feeds a tone filter so the pause menu can muffle it
+    B.mus = G(0); B.tone = F("lowpass", 18000, 0.6); chain(B.mus, B.tone, out);
+    mverb = verb(2.8, 2.6, 0.02, 5200, 0.55, B.tone);
+    echo = pingpong(60 / C.bpm * 0.75, B.tone);
+    B.drums = G(0.85); B.drums.connect(B.mus);
+    var kp = P(0), lfo = O("sine", 3.4, 0), lg = G(0.28);
+    B.keys = G(0.9); chain(B.keys, kp, B.mus); chain(lfo, lg, kp.pan); lfo.start(0);   // suitcase autopan
+    B.pad = G(0.55); B.duck = G(1); chain(B.pad, B.duck, B.mus);
+    B.bass = G(0.85); B.bass.connect(B.mus);
+    B.lead = G(0.55); B.lead.connect(B.mus);
+    send(B.keys, mverb, 0.3); send(B.keys, echo, 0.1); send(B.pad, mverb, 0.4);
+    send(B.lead, mverb, 0.42); send(B.lead, echo, 0.32);
+
+    if (!given) timer = setInterval(function () { pump(ctx.currentTime + 0.25); }, 25);
+    return ctx;
+  }
+
+  /* ---------------- instruments ---------------- */
+  // FM electric piano: carrier + modulator at 1:1 for the body, a short
+  // high tine for the strike. Index falls over time so notes mellow out.
+  function rhodes(m, t, vel, dur, dest, pan) {
+    var f = mtof(m), car = O("sine", f, t), mod = O("sine", f, t), tine = O("sine", f * 7.01, t);
+    var mi = G(0), ti = G(0), amp = G(0), p = P(pan || 0);
+    mi.gain.setValueAtTime(f * (0.8 + 1.7 * vel), t); mi.gain.setTargetAtTime(f * 0.16, t, 0.5);
+    ti.gain.setValueAtTime(f * 1.3 * vel, t); ti.gain.setTargetAtTime(0, t, 0.022);
+    chain(mod, mi); mi.connect(car.frequency); chain(tine, ti); ti.connect(car.frequency);
+    var pk = 0.11 * (0.3 + 0.7 * vel);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(pk, t + 0.005);
+    amp.gain.setTargetAtTime(pk * 0.3, t + 0.006, 0.7);
+    amp.gain.setTargetAtTime(0, t + dur, 0.1);
+    chain(car, amp, p, dest);
+    var end = t + dur + 0.8;
+    [car, mod, tine].forEach(function (o) { o.start(t); o.stop(end); });
+  }
+  function strum(notes, t, vel, dur, dest) {
+    notes.forEach(function (m, i) {
+      rhodes(m, t + i * 0.011 + (rnd() - 0.5) * 0.006, vel * (0.85 + rnd() * 0.3), dur, dest || B.keys, (i - 1.5) * 0.12);
+    });
+  }
+  // Wide detuned-saw pad with a slow filter swell.
+  function pad(ms, t, dur) {
+    var lp = F("lowpass", 450, 0.8), amp = G(0);
+    lp.frequency.setValueAtTime(420, t); lp.frequency.linearRampToValueAtTime(1500, t + dur * 0.55); lp.frequency.linearRampToValueAtTime(600, t + dur + 1.4);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(0.03, t + 0.9);
+    amp.gain.setValueAtTime(0.03, t + dur); amp.gain.linearRampToValueAtTime(0, t + dur + 1.4);
+    chain(lp, amp, B.pad);
+    ms.forEach(function (m) {
+      [-1, 0, 1].forEach(function (k) {
+        var o = O("sawtooth", mtof(m), t), p = P(k * 0.7);
+        o.detune.value = k * 9 + (rnd() - 0.5) * 5;
+        chain(o, p, lp); o.start(t); o.stop(t + dur + 1.5);
+      });
+    });
+  }
+  function bass(m, t, dur, vel) {
+    var f = mtof(m), o = O("sine", f, t), o2 = O("triangle", f * 2, t), g2 = G(0.16), sh = ctx.createWaveShaper(), lp = F("lowpass", 650, 0.7), amp = G(0);
+    sh.curve = SAT2; chain(o2, g2, sh); o.connect(sh); chain(sh, lp, amp, B.bass);
+    var pk = 0.75 * (vel || 1);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(pk, t + 0.008);
+    amp.gain.setTargetAtTime(pk * 0.7, t + 0.01, 0.16); amp.gain.setTargetAtTime(0, t + dur, 0.035);
+    var end = t + dur + 0.3; o.start(t); o2.start(t); o.stop(end); o2.stop(end);
+  }
+  function kick(t, vel) {
+    var o = O("sine", 150, t), a = G(0), cg = G(0), c = noise("white", t, 0.02), ch = F("highpass", 1800);
+    o.frequency.exponentialRampToValueAtTime(56, t + 0.07); o.frequency.exponentialRampToValueAtTime(46, t + 0.35);
+    var pk = 0.8 * (vel || 1);
+    a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(pk, t + 0.002); a.gain.setTargetAtTime(0, t + 0.01, 0.12);
+    chain(o, a, B.drums); perc(cg, t, 0.001, 0.1, 0.012); chain(c, ch, cg, B.drums);
+    o.start(t); o.stop(t + 0.8);
+    B.duck.gain.setTargetAtTime(0.32, t, 0.004); B.duck.gain.setTargetAtTime(1, t + 0.05, 0.14);   // sidechain
+  }
+  function clap(t, vel) {
+    var n = noise("white", t, 0.4), hp = F("highpass", 550), bp = F("bandpass", 1250, 0.9), g = G(0), p = P(0.06), v = 0.3 * (vel || 1);
+    g.gain.setValueAtTime(0, t);
+    [0, 0.011, 0.022].forEach(function (d) { g.gain.setValueAtTime(v, t + d); g.gain.exponentialRampToValueAtTime(v * 0.15, t + d + 0.009); });
+    g.gain.setValueAtTime(v * 0.8, t + 0.031); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+    chain(n, hp, bp, g, p, B.drums); send(p, mverb, 0.3);
+    var b = O("triangle", 190, t), bg = G(0); perc(bg, t, 0.001, 0.07 * (vel || 1), 0.07); chain(b, bg, B.drums); b.start(t); b.stop(t + 0.15);
+  }
+  var METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];   // the classic six-square hat
+  function hat(t, vel, open) {
+    var bp = F("bandpass", 10500, 0.8), hp = F("highpass", 7200), g = G(0), p = P(0.22), d = open ? 0.3 : 0.045;
+    perc(g, t, 0.001, 0.05 * vel, d); chain(bp, hp, g, p, B.drums);
+    METAL.forEach(function (f) { var o = O("square", f * 1.5, t); o.connect(bp); o.start(t); o.stop(t + d + 0.05); });
+  }
+  function shaker(t, vel) {
+    var n = noise("white", t, 0.12), hp = F("highpass", 6000), bp = F("bandpass", 9000, 0.7), g = G(0), p = P(-0.3);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.026 * vel, t + 0.018); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    chain(n, hp, bp, g, p, B.drums);
+  }
+  function lead(m, t, dur, from) {
+    var f = mtof(m), o = O("triangle", from ? mtof(from) : f, t), o2 = O("sine", f * 2, t), g2 = G(0.1), lp = F("lowpass", 2300, 0.5), amp = G(0);
+    if (from) o.frequency.exponentialRampToValueAtTime(f, t + 0.08);
+    var vib = O("sine", 5.1, t), vg = G(0); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * 0.006, t + 0.4);
+    chain(vib, vg); vg.connect(o.frequency);
+    chain(o2, g2, lp); chain(o, lp, amp, B.lead);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(0.1, t + 0.05);
+    amp.gain.setTargetAtTime(0.075, t + 0.05, 0.3); amp.gain.setTargetAtTime(0, t + dur, 0.08);
+    var end = t + dur + 0.6; [o, o2, vib].forEach(function (x) { x.start(t); x.stop(end); });
+  }
+
+  /* ---------------- the track ----------------
+     D minor, 92 bpm, swung sixteenths. Dm9, Bbmaj9, Gm9, Am11. */
+  var PROG = [
+    { root: 38, keys: [53, 57, 60, 64] },
+    { root: 34, keys: [53, 57, 60, 62] },
+    { root: 31, keys: [53, 57, 58, 62] },
+    { root: 33, keys: [55, 60, 62, 64] }
+  ];
+  // [bar of the 4-bar loop, step, note, length in steps, glide from]
+  var MEL = [[2, 2, 69, 2], [2, 4, 70, 2, 69], [2, 6, 74, 6, 70], [2, 13, 72, 3], [3, 0, 69, 4, 72], [3, 6, 67, 2], [3, 8, 64, 4, 67], [3, 12, 62, 4]];
+  var BASS = { 0: [0, 5.5, 1], 7: [0, 1.6, 0.8], 10: [12, 1.6, 0.85], 14: [7, 1.6, 0.8] };
+  var S16 = 15 / C.bpm, SWING = 0.56;
+  var M = { on: false, t0: 0, step: 0, next: 0, secs: [] };
+
+  function sectionAt(t) { var s = "intro"; M.secs.forEach(function (x) { if (x.t <= t + 1e-4) s = x.name; }); return s; }
+  function stepAt(i, t) {
+    var bar = Math.floor(i / 16), s = i % 16, ch = PROG[bar % 4], full = sectionAt(t) !== "intro";
+    var ts = t + ((s % 2) ? (SWING - 0.5) * 2 * S16 : 0), BAR = 16 * S16;
+    if (s === 0) { pad(ch.keys.concat([ch.root + 24]), t, BAR); strum(ch.keys, t, full ? 0.62 : 0.42, full ? S16 * 7 : BAR * 0.95); }
+    if (!full) return;
+    if (s === 6) strum(ch.keys, ts, 0.34, S16 * 3.5);
+    if (s === 11 && bar % 2) strum(ch.keys.slice(1), ts, 0.26, S16 * 2);
+    if (BASS[s]) bass(ch.root + BASS[s][0], ts, BASS[s][1] * S16, BASS[s][2]);
+    if (s === 0 || s === 7 || s === 10) kick(ts, s === 0 ? 1 : 0.78);
+    if (s === 4 || s === 12) clap(ts, s === 12 ? 1 : 0.9);
+    if (s % 2 === 0) hat(ts, s % 4 === 2 ? 0.9 : 0.55, s === 14 && bar % 2 === 1);
+    if (s === 3 || s === 11) hat(ts, 0.3, false);
+    shaker(ts, s % 2 ? 0.9 : 0.5);
+    if (Math.floor(bar / 4) % 2 === 1) MEL.forEach(function (n) { if (n[0] === bar % 4 && n[1] === s) lead(n[2], ts, n[3] * S16, n[4]); });
+  }
+
+  function musicStart(t, section) {
+    if (!ctx) return;
+    M.on = true; M.t0 = t; M.step = 0; M.next = t; M.secs = [{ t: t, name: section || "intro" }];
+    var intro = (section || "intro") === "intro";
+    B.mus.gain.cancelScheduledValues(t); B.mus.gain.setValueAtTime(0, t);
+    B.mus.gain.linearRampToValueAtTime(intro ? 0.6 : 0.75, t + (intro ? 2.2 : 0.04));
+    B.tone.frequency.cancelScheduledValues(t); B.tone.frequency.setValueAtTime(intro ? 1100 : 17000, t);
+  }
+  function musicSection(name, t) {
+    if (!ctx) return;
+    M.secs.push({ t: t, name: name });
+    if (name !== "intro") {
+      B.tone.frequency.setValueAtTime(1100, t - 1.6); B.tone.frequency.exponentialRampToValueAtTime(2600, t - 0.02);
+      B.tone.frequency.setTargetAtTime(17000, t, 0.012); B.mus.gain.setTargetAtTime(0.75, t, 0.02);
+    }
+  }
+  function musicStop(t) { if (!ctx) return; t = t || now(); M.on = false; B.mus.gain.cancelScheduledValues(t); B.mus.gain.setTargetAtTime(0, t, 0.25); }
+
+  /* ---------------- the ocean ----------------
+     Brown noise surf whose filter and level swell and crash on a seeded,
+     irregular rhythm, white-noise foam fizzing after each break, a slow
+     wind band and a far-off city rumble. */
+  var W = { on: false, next: 0, nodes: [] };
+  function ambStart(t) {
+    if (!ctx || W.on) return; t = t || now();
+    W.on = true; W.next = t; W.nodes = [];
+    var sl = F("lowpass", 400, 0.4), sg = G(0.15), fh = F("highpass", 2200), fl = F("lowpass", 9000), fg = G(0.02);
+    [-0.6, 0.6].forEach(function (pan) { var b = noise("brown", t, 0, true); chain(b, P(pan), sl); W.nodes.push(b); });
+    [-0.5, 0.5].forEach(function (pan) { var w = noise("white", t, 0, true); chain(w, P(pan), fh); W.nodes.push(w); });
+    chain(sl, sg, B.amb); chain(fh, fl, fg, B.amb);
+    var pk = noise("pink", t, 0, true), wb = F("bandpass", 520, 0.5), wg = G(0.05), lfo = O("sine", 0.06, t), lg = G(260);
+    chain(lfo, lg); lg.connect(wb.frequency); chain(pk, wb, wg, B.amb); lfo.start(t);
+    var cb = noise("brown", t, 0, true), cg = G(0.1); chain(cb, F("lowpass", 140, 0.5), cg, B.amb);
+    W.nodes.push(pk, lfo, cb);
+    W.surf = sl; W.surfG = sg; W.fizz = fg;
+    B.amb.gain.cancelScheduledValues(t); B.amb.gain.setValueAtTime(0, t); B.amb.gain.linearRampToValueAtTime(0.55, t + 2.6);
+  }
+  function wave() {
+    var t = W.next, L = 5.8 + rnd() * 3.2, a = 0.6 + rnd() * 0.4, f = W.surf.frequency, g = W.surfG.gain, z = W.fizz.gain;
+    f.setValueAtTime(380, t); f.linearRampToValueAtTime(900 + 900 * a, t + L * 0.36); f.exponentialRampToValueAtTime(520, t + L * 0.62); f.linearRampToValueAtTime(380, t + L);
+    g.setValueAtTime(0.14, t); g.linearRampToValueAtTime(0.3 + 0.3 * a, t + L * 0.36); g.linearRampToValueAtTime(0.2, t + L * 0.7); g.linearRampToValueAtTime(0.14, t + L);
+    z.setValueAtTime(0.015, t); z.setValueAtTime(0.015, t + L * 0.33); z.linearRampToValueAtTime(0.02 + 0.07 * a, t + L * 0.42); z.exponentialRampToValueAtTime(0.015, t + L * 0.95);
+    W.next = t + L;
+  }
+  function ambStop(t) {
+    if (!ctx || !W.on) return; t = t || now(); W.on = false;
+    B.amb.gain.cancelScheduledValues(t); B.amb.gain.setTargetAtTime(0, t, 0.3);
+    W.nodes.forEach(function (n) { n.stop(t + 2); });
+  }
+
+  function pump(until) {
+    while (M.on && M.next < until) { stepAt(M.step, M.next); M.step++; M.next = M.t0 + M.step * S16; }
+    while (W.on && W.next < until) wave();
+  }
+
+  /* ---------------- sound design ---------------- */
+  function dst() { return B.seq; }
+  var sfx = {
+    // quiet room tone under the paper slate
+    room: function (t, dur) {
+      var n = noise("pink", t, Math.min(dur, 5.5)), lp = F("lowpass", 1800, 0.5), g = G(0);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.018, t + 0.35); g.gain.setValueAtTime(0.018, t + dur - 0.3); g.gain.linearRampToValueAtTime(0, t + dur);
+      chain(n, lp, g, dst());
     },
-    duck: function (v, s) { musicBus.gain.linearRampToValueAtTime(v, ctx.currentTime + (s || 0.4)); },
-    stop: function () { clearInterval(arpT); arpT = 0; }
+    // air rushing past the falling orb, rising into the impact
+    fall: function (t, dur) {
+      var n = noise("white", t, dur + 0.05), bp = F("bandpass", 260, 1.1), g = G(0);
+      bp.frequency.setValueAtTime(260, t); bp.frequency.exponentialRampToValueAtTime(1900, t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
+      chain(n, bp, g, dst());
+    },
+    // rubber orb on a hard floor: pitched thump, wooden body knock, soft click
+    thump: function (t, size) {
+      t = t === undefined ? now() : t; size = size || 1;
+      var o = O("sine", 100 + 25 * size, t), a = G(0), d = dst();
+      o.frequency.exponentialRampToValueAtTime(48, t + 0.16);
+      a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(0.55 * size, t + 0.003); a.gain.setTargetAtTime(0, t + 0.01, 0.07);
+      var body = O("triangle", 232, t), bg = G(0); perc(bg, t, 0.002, 0.1 * size, 0.07);
+      var n = noise("white", t, 0.05), lp = F("lowpass", 2200, 0.7), ng = G(0); perc(ng, t, 0.001, 0.28 * size, 0.03);
+      chain(o, a, d); chain(body, bg, d); chain(n, lp, ng, d); send(ng, plate, 0.3); send(a, plate, 0.1);
+      o.start(t); o.stop(t + 0.7); body.start(t); body.stop(t + 0.3);
+    },
+    // letters sliding out from behind the orb, panned to their side
+    unfurl: function (t, pan) {
+      t = t === undefined ? now() : t; pan = pan === undefined ? 0 : pan;
+      var n = noise("white", t, 0.8), hp = F("highpass", 400), bp = F("bandpass", 3200, 0.7), g = G(0), p = P(0);
+      bp.frequency.setValueAtTime(3200, t); bp.frequency.exponentialRampToValueAtTime(900, t + 0.6);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.065, t + 0.035); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+      p.pan.setValueAtTime(pan * 0.15, t); p.pan.linearRampToValueAtTime(pan * 0.7, t + 0.5);
+      chain(n, hp, bp, g, p, dst()); send(p, plate, 0.25);
+    },
+    // a water droplet: the eyes opening and blinking
+    drop: function (t, v) {
+      t = t === undefined ? now() : t;
+      var o = O("sine", 950, t), g = G(0);
+      o.frequency.exponentialRampToValueAtTime(2300, t + 0.035);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v || 0.08, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      chain(o, g, dst()); send(g, hall, 0.35); o.start(t); o.stop(t + 0.15);
+    },
+    // the studio chord: Bbmaj9, strummed, with a sub underneath
+    sting: function (t) {
+      t = t === undefined ? now() : t;
+      var sb = G(1.25); sb.connect(dst()); send(sb, hall, 0.45); send(sb, echo, 0.15);
+      [46, 53, 57, 60, 62, 69].forEach(function (m, i) { rhodes(m, t + i * 0.024, 0.64 - i * 0.03, 3.0, sb, (i - 2.5) * 0.14); });
+      var s = O("sine", mtof(34), t), sg = G(0); sg.gain.setValueAtTime(0, t); sg.gain.linearRampToValueAtTime(0.16, t + 0.25); sg.gain.setTargetAtTime(0, t + 1.2, 0.5);
+      chain(s, sg, sb); s.start(t); s.stop(t + 4);
+    },
+    // the orb swelling over the frame: reverse cymbal, rising sweep, a low suck
+    swell: function (t, dur) {
+      var d = dst(), sr = ctx.sampleRate, len = Math.floor(sr * dur), buf = ctx.createBuffer(2, len, sr);
+      for (var c = 0; c < 2; c++) { var x = buf.getChannelData(c), r = seeded(77 + c); for (var i = 0; i < len; i++) x[i] = (r() * 2 - 1) * Math.pow(i / len, 2.6); }
+      var rv = ctx.createBufferSource(); rv.buffer = buf; var rh = F("highpass", 3500), rg = G(0.2);
+      chain(rv, rh, rg, d); rv.start(t);
+      var n = noise("white", t, dur), lp = F("lowpass", 200, 1.2), ng = G(0);
+      lp.frequency.setValueAtTime(200, t); lp.frequency.exponentialRampToValueAtTime(7000, t + dur);
+      ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.1, t + dur); ng.gain.linearRampToValueAtTime(0, t + dur + 0.015);
+      chain(n, lp, ng, d);
+      var o = O("sine", 70, t), og = G(0); o.frequency.exponentialRampToValueAtTime(230, t + dur);
+      og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.09, t + dur); og.gain.linearRampToValueAtTime(0, t + dur + 0.015);
+      chain(o, og, d); o.start(t); o.stop(t + dur + 0.05);
+    },
+    // through the match cut: a falling, darkening breath into the sea
+    through: function (t) {
+      var n = noise("pink", t, 1.6), lp = F("lowpass", 6000, 0.6), g = G(0), d = dst();
+      lp.frequency.setValueAtTime(6000, t); lp.frequency.exponentialRampToValueAtTime(300, t + 1.4);
+      g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+      chain(n, lp, g, d); send(g, hall, 0.4);
+      var o = O("sine", 62, t), og = G(0); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.3, t + 0.02); og.gain.setTargetAtTime(0, t + 0.05, 0.25);
+      chain(o, og, d); o.start(t); o.stop(t + 1.5);
+    },
+    // reverse cymbal into the title
+    riser: function (t, dur) {
+      var sr = ctx.sampleRate, len = Math.floor(sr * dur), buf = ctx.createBuffer(2, len, sr), d = dst();
+      for (var c = 0; c < 2; c++) { var x = buf.getChannelData(c), r = seeded(91 + c); for (var i = 0; i < len; i++) x[i] = (r() * 2 - 1) * Math.pow(i / len, 3.2); }
+      var s = ctx.createBufferSource(); s.buffer = buf; var hp = F("highpass", 4200), pk = F("peaking", 9000, 0.8), g = G(0.22);
+      pk.gain.value = 5; chain(s, hp, pk, g, d); send(g, hall, 0.3); s.start(t);
+    },
+    // the title hit: sub drop, body, transient, crash, all into a big room
+    hit: function (t, dest) {
+      t = t === undefined ? now() : t; var d = dest || dst();
+      var o = O("sine", 72, t), a = G(0), sh = ctx.createWaveShaper(); sh.curve = SAT2;
+      o.frequency.exponentialRampToValueAtTime(33, t + 1.5);
+      a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(1, t + 0.004); a.gain.setTargetAtTime(0, t + 0.02, 0.75);
+      chain(o, sh, a, d); o.start(t); o.stop(t + 4);
+      var m = O("triangle", 140, t), mg = G(0); m.frequency.exponentialRampToValueAtTime(55, t + 0.3); perc(mg, t, 0.002, 0.32, 0.45);
+      chain(m, mg, d); m.start(t); m.stop(t + 0.6);
+      var n = noise("white", t, 0.5), lp = F("lowpass", 3400, 0.6), ng = G(0); perc(ng, t, 0.001, 0.38, 0.32);
+      chain(n, lp, ng, d); send(ng, hall, 0.55);
+      var cr = noise("white", t, 2.6), ch = F("highpass", 5200), cb = F("bandpass", 8200, 0.5), cg = G(0), cp = P(0.2);
+      cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.075, t + 0.004); cg.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+      chain(cr, ch, cb, cg, cp, d); send(cp, hall, 0.3);
+    },
+    // short air movement for menu transitions
+    whoosh: function (t, dur, from, to) {
+      t = t === undefined ? now() : t; dur = dur || 0.6;
+      var n = noise("white", t, dur), bp = F("bandpass", 500, 1.4), g = G(0), p = P(from || -0.4);
+      bp.frequency.setValueAtTime(500, t); bp.frequency.exponentialRampToValueAtTime(2400, t + dur * 0.5); bp.frequency.exponentialRampToValueAtTime(700, t + dur);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.06, t + dur * 0.45); g.gain.linearRampToValueAtTime(0, t + dur);
+      p.pan.linearRampToValueAtTime(to === undefined ? 0.4 : to, t + dur);
+      chain(n, bp, g, p, B.ui);
+    }
   };
 
-  window.LT = { init: init, sfx: sfx, music: music, get ctx() { return ctx; } };
+  /* Menu sounds: a dry tick for moves, soft two-note chimes for confirm/back. */
+  var ui = {
+    move: function () {
+      if (!ctx) return; var t = now();
+      var n = noise("white", t, 0.03), bp = F("bandpass", 4200, 2.5), g = G(0); perc(g, t, 0.0008, 0.15, 0.016); chain(n, bp, g, B.ui);
+      var o = O("sine", 1900, t), og = G(0); perc(og, t, 0.001, 0.022, 0.03); chain(o, og, B.ui); o.start(t); o.stop(t + 0.06);
+    },
+    tab: function () {
+      if (!ctx) return; var t = now();
+      var n = noise("white", t, 0.03), bp = F("bandpass", 3000, 2), g = G(0); perc(g, t, 0.0008, 0.13, 0.02); chain(n, bp, g, B.ui);
+    },
+    select: function () { if (!ctx) return; var t = now(); rhodes(81, t, 0.42, 0.22, B.ui, -0.1); rhodes(86, t + 0.055, 0.38, 0.32, B.ui, 0.1); },
+    back: function () { if (!ctx) return; var t = now(); rhodes(86, t, 0.36, 0.2, B.ui, 0.1); rhodes(81, t + 0.055, 0.34, 0.3, B.ui, -0.1); }
+  };
+
+  /* ---------------- cue sheets ---------------- */
+  function cueIntro(T) {
+    sfx.room(T, C.cover - 0.05);
+    sfx.fall(T + C.fall, C.impact - C.fall);
+    sfx.thump(T + C.impact, 1); sfx.thump(T + C.rebound, 0.42);
+    sfx.unfurl(T + C.unfurl, -1); sfx.unfurl(T + C.unfurl + 0.03, 1);
+    sfx.sting(T + C.sting);
+    sfx.drop(T + C.eyesOpen + 0.02, 0.07); sfx.drop(T + C.blink1 + 0.06, 0.045); sfx.drop(T + C.blink2 + 0.05, 0.035);
+    sfx.swell(T + C.iris - 0.08, C.cover - C.iris + 0.08);
+    sfx.through(T + C.cover);
+    ambStart(T + C.cover - 0.05);
+    musicStart(T + C.musicStart, "intro"); musicSection("drop", T + C.hit);
+    sfx.riser(T + C.riser, C.hit - C.riser);
+    sfx.hit(T + C.hit);
+  }
+  function cutSeq(t) {
+    var old = B.seq; old.gain.setTargetAtTime(0, t, 0.03);
+    setTimeout(function () { old.disconnect(); }, 500);
+    B.seq = G(1); B.seq.connect(B.sfx);
+  }
+  function cueSkip() {
+    if (!ctx) return; var t = now() + 0.03;
+    cutSeq(t);
+    if (!(M.on && sectionAt(t) !== "intro")) musicStart(t, "drop");
+    else { M.secs = [{ t: t, name: "drop" }]; B.tone.frequency.cancelScheduledValues(t); B.tone.frequency.setTargetAtTime(17000, t, 0.02); }
+    ambStart(t);
+    sfx.hit(t, B.sfx);
+  }
+  function pauseMix(on) {
+    if (!ctx) return; var t = now();
+    B.tone.frequency.cancelScheduledValues(t); B.tone.frequency.setTargetAtTime(on ? 850 : 17000, t, 0.09);
+    B.mus.gain.cancelScheduledValues(t); B.mus.gain.setTargetAtTime(on ? 0.4 : 0.75, t, 0.12);
+    if (W.on) { B.amb.gain.cancelScheduledValues(t); B.amb.gain.setTargetAtTime(on ? 0.18 : 0.55, t, 0.15); }
+  }
+
+  window.LT = {
+    init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix,
+    cue: { intro: cueIntro, skip: cueSkip },
+    music: { start: musicStart, section: musicSection, stop: musicStop, get on() { return M.on; } },
+    amb: { start: ambStart, stop: ambStop, get on() { return W.on; } },
+    _pump: pump,
+    get ctx() { return ctx; }
+  };
 })();
