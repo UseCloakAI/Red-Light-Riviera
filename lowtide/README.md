@@ -1,6 +1,6 @@
 # Lowtide
 
-Lowtide is an open-world crime game by Cloak Studios. It's built in HTML and has no build step.
+Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no build step, and is desktop only (phones and narrow screens get a notice).
 
 | Path | What |
 |---|---|
@@ -12,6 +12,7 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML and has
 | `js/intro.js` | The choreography (Web Animations API) and the menus |
 | `css/lowtide.css` | The game's UI styles and motion tokens |
 | `assets/` | `cloak-o.svg` (the Cloak orb, from `cloak/blinks`) and `lowtide-mark.svg` (app icon) |
+| `media/` | Pre-rendered: `intro.mp4` (the film), `ocean.mp4` (title loop), `intro.flac`, `loop.flac` |
 
 QA deep links: `?scene=title`, `?scene=menu` and `?scene=pause`.
 
@@ -22,6 +23,24 @@ QA deep links: `?scene=title`, `?scene=menu` and `?scene=pause`.
 3. **Lowtide.** Letterbox bars come in over the dusk ocean, with ambience and the opening of the track. On the downbeat of the drop, the logo rises out of the water.
 
 Picture and sound both read `js/cues.js`. Picture time zero is set after the audio's output latency, so hits land on the frame they belong to.
+
+## Performance: the intro is a film
+
+To run on low-end devices, the expensive parts are pre-rendered:
+
+- **The film**: the Cloak Studios slate, the match cut and the ocean up to the drop, as 1920x1080 H.264.
+- **The title background**: a seamless 10 s ocean loop.
+- **The sound**: the film's soundtrack and an 8-bar music-and-ocean loop, as FLAC so the loop has no gap.
+
+The page plays the film muted, keeps it in step with the audio clock, and cuts to the live title exactly on the drop. A flash and a small camera punch hide the cut. Only the logo, the menus and the UI sounds run live. If the media can't load, it falls back to the fully live intro.
+
+To re-render after changing the choreography, shader or sound (needs Playwright and ffmpeg):
+
+```bash
+node tools/render-intro.js
+```
+
+The page has a render mode (`?render=intro` or `?render=ocean`) that runs on a virtual clock. The script steps it one frame at a time, so the output is frame-exact however slow the machine. The audio comes from the same engine on an `OfflineAudioContext`.
 
 ## Audio
 

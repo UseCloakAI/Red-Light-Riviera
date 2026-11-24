@@ -23,6 +23,10 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .gate-btn{background:none;border:0;cursor:pointer;font:extra-condensed 700 22px/1 var(--fd);letter-spacing:.42em;text-transform:uppercase;padding:12px 0 12px .42em;animation:breathe 2.8s ease-in-out infinite}
 .gate-note{font-size:11px;letter-spacing:.26em;text-transform:uppercase;opacity:.36}
 @keyframes breathe{0%,100%{opacity:1}50%{opacity:.4}}
+.gate-mobile{display:none;max-width:280px;font-size:14px;line-height:1.5;opacity:.7}
+#gate.mobile .gate-mobile{display:block}
+#gate.mobile .gate-note{display:none}
+#gate.mobile .gate-btn{animation:none;cursor:default}
 
 /* ── Cloak Studios slate ──────────────── */
 #studio{background:var(--paper);display:grid;place-items:center;overflow:hidden}
@@ -46,6 +50,18 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 /* the orb swelling over the frame, then landing as the sun */
 #iris{position:fixed;z-index:40;display:none;transform:translate(-50%,-50%);border-radius:50%;background:var(--rust);border:0 solid var(--ink);pointer-events:none;will-change:width,height,left,top}
 
+/* ── the film ─────────────────────────── */
+#film{background:#000}
+#film video,#bgv{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+#bgv{display:none;transform-origin:50% 57%}
+#title.filmed #bgv{display:block}
+#title.filmed #sea,#title.filmed .sky-fallback{display:none}
+#flash{position:fixed;inset:0;z-index:30;background:#FFE7D2;opacity:0;pointer-events:none}
+
+/* render mode: nothing but the picture */
+.render #gate{display:none!important}
+.render-ocean .logo-wrap,.render-ocean .press,.render-ocean .credit,.render-ocean .bar,.render-ocean .hud-foot{visibility:hidden!important}
+
 /* ── Lowtide title ────────────────────── */
 #title{background:#120f22;overflow:hidden}
 #sea{position:absolute;inset:0;width:100%;height:100%;display:block;transform-origin:50% 57%}
@@ -63,7 +79,7 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .lt-line{position:absolute;left:-7%;right:-7%;top:var(--wl);height:2px;margin-top:-1px;background:linear-gradient(90deg,transparent,rgba(255,236,214,.88) 18%,rgba(255,236,214,.88) 82%,transparent)}
 .lt-tag{margin-top:clamp(44px,7vw,108px);font:500 clamp(11px,1.05vw,14px)/1 var(--fu);letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;color:#FFE9D6;opacity:.82;text-align:center}
 
-.credit{position:absolute;left:var(--gut);bottom:calc(var(--bar) + 28px);font:500 12px/1 var(--fu);letter-spacing:.32em;text-transform:uppercase;color:#FFE9D6;opacity:0;z-index:3}
+.credit{position:absolute;left:0;right:0;text-align:center;padding-left:.32em;bottom:calc(var(--bar) + 28px);font:500 12px/1 var(--fu);letter-spacing:.32em;text-transform:uppercase;color:#FFE9D6;opacity:0;z-index:3}
 .press{position:absolute;left:0;right:0;bottom:calc(var(--bar) + 30px);text-align:center;font:extra-condensed 700 18px/1 var(--fd);letter-spacing:.36em;padding-left:.36em;text-transform:uppercase;z-index:3}
 .press kbd{font:extra-condensed 800 13px/1 var(--fd);letter-spacing:.12em;padding:4px 8px 3px;margin:0 .3em}
 .press.breathe{animation:breathe 2.8s ease-in-out infinite}
@@ -90,7 +106,7 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .hud-foot .keys{opacity:.7}
 
 /* ── pause ────────────────────────────── */
-#pause{z-index:5;background:linear-gradient(135deg,rgba(20,14,40,.9),rgba(58,31,85,.84) 55%,rgba(150,52,98,.78));-webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);display:grid;grid-template-rows:auto 1fr}
+#pause{z-index:5;background:linear-gradient(135deg,rgba(20,14,40,.9),rgba(58,31,85,.84) 55%,rgba(150,52,98,.78));-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:grid;grid-template-rows:auto 1fr}
 .p-top{padding:40px var(--gut) 0}
 .p-id{display:flex;align-items:baseline;gap:22px;flex-wrap:wrap}
 .p-id h2{font:extra-condensed 900 48px/1 var(--fd);text-transform:uppercase}
@@ -123,8 +139,6 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .gallery i{aspect-ratio:16/10;background:linear-gradient(160deg,#FF6B4A,#3A1F55);opacity:.8}
 .gallery i:nth-child(2n){background:linear-gradient(160deg,#19C3B1,#102A3E)}
 
-.skip{position:fixed;right:20px;top:18px;z-index:50;background:none;border:1.5px solid #fff;color:#fff;mix-blend-mode:difference;opacity:.6;font:700 11px/1 var(--fu);letter-spacing:.2em;text-transform:uppercase;padding:8px 10px 8px 12px;cursor:pointer}
-.skip kbd{font-size:9px;padding:2px 4px;margin:0 0 0 6px}
 
 @media (max-width:700px){
   .p-top{padding-top:24px}
