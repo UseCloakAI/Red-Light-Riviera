@@ -268,9 +268,9 @@
      irregular rhythm, white-noise foam fizzing after each break, a slow
      wind band and a far-off city rumble. */
   var W = { on: false, next: 0, nodes: [] };
-  function ambStart(t) {
+  function ambStart(t, level) {
     if (!ctx || W.on) return; t = t || now();
-    W.on = true; W.next = t; W.nodes = [];
+    W.on = true; W.next = t; W.nodes = []; W.level = level || 0.55;
     var sl = F("lowpass", 400, 0.4), sg = G(0.15), fh = F("highpass", 2200), fl = F("lowpass", 9000), fg = G(0.02);
     [-0.6, 0.6].forEach(function (pan) { var b = noise("brown", t, 0, true); chain(b, P(pan), sl); W.nodes.push(b); });
     [-0.5, 0.5].forEach(function (pan) { var w = noise("white", t, 0, true); chain(w, P(pan), fh); W.nodes.push(w); });
@@ -280,7 +280,7 @@
     var cb = noise("brown", t, 0, true), cg = G(0.1); chain(cb, F("lowpass", 140, 0.5), cg, B.amb);
     W.nodes.push(pk, lfo, cb);
     W.surf = sl; W.surfG = sg; W.fizz = fg;
-    B.amb.gain.cancelScheduledValues(t); B.amb.gain.setValueAtTime(0, t); B.amb.gain.linearRampToValueAtTime(0.55, t + 2.6);
+    B.amb.gain.cancelScheduledValues(t); B.amb.gain.setValueAtTime(0, t); B.amb.gain.linearRampToValueAtTime(W.level, t + 2.6);
   }
   function wave() {
     var t = W.next, L = 5.8 + rnd() * 3.2, a = 0.6 + rnd() * 0.4, f = W.surf.frequency, g = W.surfG.gain, z = W.fizz.gain;
@@ -397,6 +397,13 @@
       cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.075, t + 0.004); cg.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
       chain(cr, ch, cb, cg, cp, d); send(cp, hall, 0.3);
     },
+    // footsteps: a soft heel knock, brighter on wood, hushed on sand
+    step: function (vol, surface) {
+      if (!ctx) return; var t = now(), v = vol || 0.6;
+      var n = noise("white", t, 0.09), hp = F("highpass", surface === "sand" ? 300 : 140), lp = F("lowpass", surface === "wood" ? 2200 : surface === "sand" ? 1600 : 1100, 0.7), g = G(0);
+      perc(g, t, 0.002, (surface === "sand" ? 0.05 : 0.09) * v, surface === "sand" ? 0.09 : 0.06); chain(n, hp, lp, g, P((rnd() - 0.5) * 0.2), B.sfx);
+      var o = O("sine", surface === "wood" ? 140 : 90, t), og = G(0); perc(og, t, 0.002, (surface === "wood" ? 0.1 : 0.06) * v, 0.05); chain(o, og, B.sfx); o.start(t); o.stop(t + 0.12);
+    },
     // short air movement for menu transitions
     whoosh: function (t, dur, from, to) {
       t = t === undefined ? now() : t; dur = dur || 0.6;
@@ -453,12 +460,14 @@
     ambStart(t);
     sfx.hit(t, B.sfx);
   }
+  var bedLevel = 1;
+  function bed(v, tc) { if (!ctx) return; var t = now(); bedLevel = v; B.bed.gain.cancelScheduledValues(t); B.bed.gain.setTargetAtTime(v, t, tc || 0.3); }
   function pauseMix(on) {
     if (!ctx) return; var t = now();
-    B.bed.gain.cancelScheduledValues(t); B.bed.gain.setTargetAtTime(on ? 0.55 : 1, t, 0.12);
+    B.bed.gain.cancelScheduledValues(t); B.bed.gain.setTargetAtTime(bedLevel * (on ? 0.55 : 1), t, 0.12);
     B.tone.frequency.cancelScheduledValues(t); B.tone.frequency.setTargetAtTime(on ? 850 : 17000, t, 0.09);
     B.mus.gain.cancelScheduledValues(t); B.mus.gain.setTargetAtTime(on ? 0.4 : 0.75, t, 0.12);
-    if (W.on) { B.amb.gain.cancelScheduledValues(t); B.amb.gain.setTargetAtTime(on ? 0.18 : 0.55, t, 0.15); }
+    if (W.on) { B.amb.gain.cancelScheduledValues(t); B.amb.gain.setTargetAtTime(on ? W.level * 0.33 : W.level, t, 0.15); }
   }
 
   /* ---------------- pre-rendered audio ----------------
@@ -492,7 +501,7 @@
   }
 
   window.LT = {
-    loadBaked: loadBaked, playIntro: playIntro, startTitle: startTitle, cutIntro: function () { if (ctx) cutSeq(now()); },
+    loadBaked: loadBaked, bed: bed, playIntro: playIntro, startTitle: startTitle, cutIntro: function () { if (ctx) cutSeq(now()); },
     get baked() { return !!(BAKE.intro && BAKE.loop); },
     init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix,
     cue: { intro: cueIntro, skip: cueSkip },

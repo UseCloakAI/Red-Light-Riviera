@@ -19,7 +19,7 @@
   };
 
   var el = {
-    gate: $("#gate"), film: $("#film"), studio: $("#studio"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
+    gate: $("#gate"), film: $("#film"), studio: $("#studio"), loading: $("#loading"), game: $("#game"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
     grid: $("#studio .grid"), orb: $("#studio .orb"), shadow: $("#studio .orb-shadow"),
     railL: $("#studio .side.l .rail"), railR: $("#studio .side.r .rail"), lids: $("#studio .lids"), look: $("#studio .look"), sub: $("#studio .studio-sub"),
     sea: $("#sea"), wrap: $(".logo-wrap"), lt: $(".lt"), below: $(".lt-below"), refl: $(".lt-refl"), line: $(".lt-line"), tag: $(".lt-tag"),
@@ -53,7 +53,7 @@
     live = []; timers.forEach(clearTimeout); timers = [];
   }
   function show(id) {
-    ["gate", "film", "studio", "title", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === "title")); });
+    ["gate", "film", "studio", "title", "loading", "game", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === base)); });
   }
   function horizonY() {   // where the horizon lands on screen: live shader, or the cover-fitted film
     if (!filmed) return S.horizonY();
@@ -269,6 +269,54 @@
     cue(0.05, function () { state = "title"; });
   }
 
+  /* ---- Story Mode: load the city on demand ---- */
+  var GAME = null, base = "title";
+  var TIPS = [
+    "Hold Shift to sprint. Let go before the corner, not after.",
+    "The tide comes in twice a day. So does the patrol on the causeway.",
+    "Port Salt runs on containers and nobody asks what's in them.",
+    "Tideline Avenue looks best from the pier. Most things do.",
+    "Press Esc for the map. Marlowe Keys is smaller than it acts."
+  ];
+  function startGame() {
+    if (GAME) { base = "game"; show("game"); state = "game"; GAME.resume(); clickToPlay(true); return; }
+    state = "loading-game"; LT.ui.select(); LT.bed(0, 0.5);
+    var tip = $(".ld-tip"), bar = $(".ld-bar i"), k = 0;
+    tip.textContent = TIPS[(Math.random() * TIPS.length) | 0];
+    var tipT = setInterval(function () { tip.textContent = TIPS[(++k + (Math.random() * 3 | 0)) % TIPS.length]; }, 4200);
+    play(el.loading, [{ opacity: 0 }, { opacity: 1 }], 600, cueNow(), E.out);
+    show("loading");
+    var t0 = performance.now();
+    import(new URL("game/main.js", document.baseURI).href).then(function (m) {
+      return m.start({
+        mount: $("#gl"), hud: $("#game .hud"),
+        progress: function (p) { bar.style.transform = "scaleX(" + p + ")"; },
+        sfx: { step: LT.sfx.step }, onLock: onLock
+      });
+    }).then(function (g) {
+      GAME = g;
+      return new Promise(function (r) { setTimeout(r, Math.max(0, 1800 - (performance.now() - t0))); });   // let the art breathe
+    }).then(function () {
+      clearInterval(tipT);
+      base = "game"; state = "game"; V.bg.pause();
+      show("game"); play(el.game, [{ opacity: 0 }, { opacity: 1 }], 900, cueNow(), E.out);
+      LT.amb.start(LT.now(), 0.3);
+      clickToPlay(true);
+      var help = $(".help"); play(help, [{ opacity: 0, transform: "translateX(-12px)" }, { opacity: 1, transform: "none" }], 500, cueNow() + 0.8, E.out);
+      play(help, [{ opacity: 1 }, { opacity: 0 }], 600, cueNow() + 14, E.in, "forwards");
+    }).catch(function (e) {
+      clearInterval(tipT); console.error(e);
+      tip.textContent = "Marlowe Keys didn't load. Refresh to try again.";
+    });
+  }
+  function clickToPlay(on) { $(".clickplay").classList.toggle("on", on); }
+  function onLock(locked) {
+    if (locked) { clickToPlay(false); return; }
+    if (state === "game") openPause(0);   // Esc releases the mouse: that's the pause button
+  }
+  $(".clickplay").addEventListener("click", function (e) { e.stopPropagation(); if (GAME) GAME.lock(); });
+  $("#gl").addEventListener("click", function () { if (GAME && state === "game") GAME.lock(); });
+
   /* ---- main menu ---- */
   function menuLogo(ms) {
     if (logoAnim) logoAnim.cancel();
@@ -309,12 +357,15 @@
   function choose() {
     var li = items[sel];
     play(li.firstElementChild, [{ transform: "translateX(18px) scale(1)" }, { transform: "translateX(18px) scale(.965)", offset: 0.35 }, { transform: "translateX(18px) scale(1)" }], 240, cueNow(), E.out, "none");
-    if (li.dataset.go === "pause") openPause(+(li.dataset.tab || 0)); else LT.ui.tab();
+    if (li.dataset.go === "game") startGame();
+    else if (li.dataset.go === "pause") openPause(+(li.dataset.tab || 0)); else LT.ui.tab();
   }
 
   /* ---- pause ---- */
   function openPause(t) {
     state = "pause"; show("pause"); LT.ui.select(); LT.pause(true);
+    el.pause.classList.toggle("ingame", base === "game");
+    if (base === "game") { GAME.pause(); var pm = $(".pmap"); GAME.drawMap(pm.getContext("2d"), pm.width, pm.height); }
     var s0 = cueNow();
     play(el.pause, [{ opacity: 0 }, { opacity: 1 }], 280, s0, E.out);
     play(el.ptop, [{ opacity: 0, transform: "translateY(-16px)" }, { opacity: 1, transform: "none" }], 520, s0 + 0.04, E.out);
@@ -322,9 +373,10 @@
     tab = t; setTab(t, true, true);
   }
   function closePause() {
-    state = "menu"; LT.ui.back(); LT.pause(false);
+    var toGame = base === "game";
+    state = toGame ? "game" : "menu"; LT.ui.back(); LT.pause(false);
     var a = play(el.pause, [{ opacity: 1 }, { opacity: 0 }], 200, cueNow(), E.in, "forwards");
-    a.finished.then(function () { show("title"); }).catch(function () {});
+    a.finished.then(function () { show(base); if (toGame) { GAME.resume(); clickToPlay(true); } }).catch(function () {});
   }
   function setTab(i, quiet, instant) {
     var dir = i === tab ? 0 : (i > tab ? 1 : -1);
@@ -350,6 +402,7 @@
       else if (k === "Enter" || k === " ") choose();
       return;
     }
+    if (state === "game") { if (k === "Escape") openPause(0); return; }
     if (state === "pause") {
       if (k === "e" || k === "E" || k === "ArrowRight") setTab(tab + 1);
       else if (k === "q" || k === "Q" || k === "ArrowLeft") setTab(tab - 1);

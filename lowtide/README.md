@@ -14,7 +14,29 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no
 | `assets/` | `cloak-o.svg` (the Cloak orb, from `cloak/blinks`) and `lowtide-mark.svg` (app icon) |
 | `media/` | Pre-rendered: `intro.mp4` (the film), `ocean.mp4` (title loop), `intro.flac`, `loop.flac` |
 
+| `game/` | The game, loaded on demand from Story Mode: `main.js` (renderer, loop, adaptive quality), `world.js` (Marlowe Keys), `sky.js` (dusk sky, sea, light), `player.js` (controller, camera, input), `hud.js` (radar, area names, map) |
+| `vendor/three/` | three.js r180, pinned and served from this folder (MIT, see `LICENSE`) |
+
 QA deep links: `?scene=title`, `?scene=menu` and `?scene=pause`.
+
+## The game (Stage 1: world and player)
+
+Story Mode shows a loading screen, then drops you on Tideline Beach. Click to capture the mouse.
+
+| Control | Action |
+|---|---|
+| Mouse | Look |
+| W A S D | Move |
+| Shift | Sprint |
+| Ctrl or Alt | Walk |
+| Space | Jump |
+| Esc | Pause (the map tab shows where you are) |
+
+Marlowe Keys is generated from a seed, so it's the same city every time. It has a 9 x 8 street grid of 64 m blocks across five districts (Downtown, Midtown, Port Salt, Tideline, Palm Square), plus Tideline Beach and the pier. Buildings are merged per material, and palms, lamps, containers and road markings are instanced, so the whole city draws in about 40 calls and 60k triangles. Street lights are faked with additive light pools, not real lights.
+
+If frames run long, quality steps down by itself: first resolution, then shadows. `window.__lowtide` exposes the player, camera rig and draw stats in the console.
+
+Coming next: rigged characters and pedestrians (Stage 2), weapons (3), police and wanted levels (4), vehicles (5), the first mission (6).
 
 ## The intro
 
