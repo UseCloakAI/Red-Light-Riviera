@@ -12,7 +12,7 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no
 | `js/intro.js` | The choreography (Web Animations API) and the menus |
 | `css/lowtide.css` | The game's UI styles and motion tokens |
 | `assets/` | `cloak-o.svg` (the Cloak orb, from `cloak/blinks`) and `lowtide-mark.svg` (app icon) |
-| `media/` | Pre-rendered: `intro.mp4` (the film), `ocean.mp4` (title loop), `intro.flac`, `theme.mp3` (the Lowtide theme, title loop) |
+| `media/` | Pre-rendered: `intro.mp4` (the film), `ocean.mp4` (title loop), `intro.flac`, `theme.mp3` (the Lowtide theme, title loop), `loading.mp3` (loading song), `loading/` (loading-screen art, two layers per slide, made by `tools/loading`) |
 
 | `game/` | The game, loaded on demand from Story Mode: `main.js` (renderer, loop, adaptive quality), `world.js` (Marlowe Keys), `sky.js` (dusk sky, sea, light), `player.js` (controller, camera, input), `hud.js` (radar, area names, map) |
 | `vendor/three/` | three.js r180, pinned and served from this folder (MIT, see `LICENSE`) |

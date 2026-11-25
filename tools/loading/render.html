@@ -1,0 +1,247 @@
+<!doctype html><meta charset="utf-8"><title>Lowtide loading art</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/lowtide/vendor/three/three.module.min.js","three/addons/":"/lowtide/vendor/three/addons/"}}</script>
+<script type="module">
+/* Lowtide loading-screen art, rendered offline (node tools/loading/render.js).
+   Each slide is the cast posed in Marlowe Keys, shot twice with the same camera:
+   the background with the people invisible (their shadows stay), and the people
+   alone on transparency. Both go through an ink-and-paint pass: ink outlines
+   from depth and normals, banded shading, halftone in the shadows, paper grain.
+   The game pans the two layers at different speeds. Nothing here ships. */
+import * as THREE from "three";
+import { buildWorld } from "/lowtide/game/world.js";
+import { buildSky } from "/lowtide/game/sky.js";
+import { loadHumanData, Human, HOLLIS } from "/lowtide/game/human.js";
+import { Arsenal } from "/lowtide/game/weapons.js";
+import { findBones, ik, wpos } from "/lowtide/game/rig.js";
+
+const W = 2560, H = 1440;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(32, W / H, 0.1, 2600);
+const world = buildWorld(scene, {}), sky = buildSky(scene, renderer);
+const worldObjs = scene.children.slice();
+const D = await loadHumanData();
+
+/* ---------- the cast ---------- */
+const base = (o) => Object.assign(JSON.parse(JSON.stringify(HOLLIS)), { detail: {} }, o);
+const CAST = {
+  hollis: HOLLIS,
+  dez: base({ sex: 1, age: 42, muscle: 0.45, weight: 0.55, height: 0.45, african: 0.15, asian: 0.1, caucasian: 0.75, tone: 0.18,
+    detail: { jaw: 0.3, nose_width: 0.3, cheeks: 0.2, belly: 0.3 }, hair: "short01", hairColor: "#1a120d", brows: "eyebrow004", browColor: "#1a120d", eyes: "brown", outfit: "male_casualsuit03", shoes: "shoes04" }),
+  calvin: base({ sex: 1, age: 64, muscle: 0.4, weight: 0.62, height: 0.6, african: 0, asian: 0, caucasian: 1, tone: 0.1,
+    detail: { face_fullness: 0.3, jaw: 0.4, chin: 0.2, belly: 0.4, mouth_corners: 0.4 }, hair: "short04", hairColor: "#c9c6bf", brows: "eyebrow002", browColor: "#9a9690", eyes: "lightblue", outfit: "male_elegantsuit01", shoes: "shoes01" }),
+  june: base({ sex: 0, age: 34, muscle: 0.4, weight: 0.38, height: 0.6, african: 0, asian: 0.05, caucasian: 0.95, tone: 0.05,
+    detail: { cheekbones: 0.4, jaw: -0.1, mouth_width: 0.1 }, hair: "long01", hairColor: "#a37a4c", brows: "eyebrow010", browColor: "#5a3d27", eyes: "lightblue", outfit: "female_elegantsuit01", shoes: "shoes03" }),
+  odette: base({ sex: 0, age: 61, muscle: 0.4, weight: 0.6, height: 0.45, african: 0.95, asian: 0, caucasian: 0.05, tone: 0,
+    detail: { face_fullness: 0.25, cheeks: 0.3, eyelid_fold: 0.3 }, hair: "bob02", hairColor: "#8b8a86", brows: "eyebrow007", browColor: "#5a5650", eyes: "brown", outfit: "male_casualsuit02", shoes: "shoes02" }),
+  bernie: base({ sex: 0, age: 55, muscle: 0.6, weight: 0.7, height: 0.5, african: 0, asian: 0, caucasian: 1, tone: 0.12,
+    detail: { face_fullness: 0.4, jaw: 0.35, shoulders: 0.4 }, hair: "bob01", hairColor: "#6a2a1e", brows: "eyebrow003", browColor: "#5a3d27", eyes: "green", outfit: "female_elegantsuit01", shoes: "shoes02" }),
+  wade: base({ sex: 1, age: 52, muscle: 0.65, weight: 0.6, height: 0.55, african: 0, asian: 0, caucasian: 1, tone: 0.35,
+    detail: { jaw: 0.45, nose_bridge: 0.3, neck: 0.4 }, hair: "short03", hairColor: "#7a5634", brows: "eyebrow008", browColor: "#5a3d27", eyes: "grey", outfit: "male_worksuit01", shoes: "shoes05" }),
+  rafi: base({ sex: 1, age: 38, muscle: 0.6, weight: 0.4, height: 0.62, african: 0.1, asian: 0.15, caucasian: 0.75, tone: 0.15,
+    detail: { cheekbones: 0.4, jaw: 0.3, chin: 0.3, face_length: 0.2 }, hair: "short04", hairColor: "#120d0a", brows: "eyebrow011", browColor: "#120d0a", eyes: "brown", outfit: "male_casualsuit02", shoes: "shoes01" }),
+  lionel: base({ sex: 1, age: 57, muscle: 0.3, weight: 0.72, height: 0.4, african: 0.05, asian: 0.05, caucasian: 0.9, tone: 0.2,
+    detail: { face_fullness: 0.5, belly: 0.6, chin: -0.2, eye_size: 0.2 }, hair: "short02", hairColor: "#5a3d27", brows: "eyebrow005", browColor: "#3a2a20", eyes: "blue", outfit: "male_casualsuit03", shoes: "shoes06" })
+};
+
+/* ---------- places ---------- */
+const { PIER } = world;
+function blockIn(district, pick = 0) {
+  const bs = world.map.blocks.filter(([x0, z0, x1, z1]) => world.districtAt((x0 + x1) / 2, (z0 + z1) / 2) === district);
+  return bs[pick % bs.length];
+}
+// a spot on a block's sidewalk; side: "s" (the sea side, +z) etc.; along 0..1 along that edge
+function curb(district, pick, side, along) {
+  const [x0, z0, x1, z1] = blockIn(district, pick), k = along;
+  if (side === "s") return { x: x0 + (x1 - x0) * k, z: z1 + 1.5, out: [0, 1] };
+  if (side === "n") return { x: x0 + (x1 - x0) * k, z: z0 - 1.5, out: [0, -1] };
+  if (side === "e") return { x: x1 + 1.5, z: z0 + (z1 - z0) * k, out: [1, 0] };
+  return { x: x0 - 1.5, z: z0 + (z1 - z0) * k, out: [-1, 0] };
+}
+
+/* ---------- slides ----------
+   chars: [who, dx, dz (metres from the spot, in the camera's frame: x right, z toward camera), turn (radians from facing the camera), pose, clip time]
+   cam: dist from the spot, height, fov, aim height, azimuth (radians), shift (lateral framing, -1..1 of half width) */
+const SLIDES = [
+  { id: "hollis", spot: () => ({ x: (PIER.x0 + PIER.x1) / 2 - 0.8, z: PIER.z1 - 20, out: [0, -1] }),
+    chars: [["hollis", 0, 0, 0.45, "gun-low", 0.8]], cam: { dist: 2.5, h: 0.75, fov: 28, at: 1.3, az: 2.75, shift: -0.36 } },
+  { id: "dez", spot: () => ({ x: PIER.x1 - 1.0, z: PIER.z1 - 14, out: [1, 0] }),
+    chars: [["dez", 0, 0, -0.35, "hips", 0.5]], cam: { dist: 2.3, h: 0.95, fov: 28, at: 1.35, az: 0.7, shift: 0.34 } },
+  { id: "ashby", spot: () => curb("downtown", 1, "n", 0.45),
+    chars: [["calvin", -0.2, 0, 0.15, "agree", 0.7], ["june", 0.85, -0.75, -0.4, "idle", 1.7]], cam: { dist: 3.4, h: 0.4, fov: 32, at: 1.45, az: 0.85, shift: -0.18 } },
+  { id: "odette", spot: () => curb("tideline", 2, "n", 0.3),
+    chars: [["odette", 0, 0, 0.4, "hips", 0.95]], cam: { dist: 2.4, h: 0.55, fov: 32, at: 1.55, az: 0.9, shift: 0.34 } },
+  { id: "docks", spot: () => curb("port", 0, "n", 0.35),
+    chars: [["bernie", -0.5, 0, 0.35, "hips", 0.4], ["wade", 0.6, -0.7, -0.45, "idle", 1.2]], cam: { dist: 3.5, h: 0.6, fov: 32, at: 1.3, az: 0.8, shift: 0.0 } },
+  { id: "seagrape", spot: () => curb("tideline", 0, "n", 0.7),
+    chars: [["rafi", -0.5, 0, 0.3, "gun-low", 1.3], ["lionel", 0.55, -0.4, -0.5, "headShake", 1.6]], cam: { dist: 3.3, h: 0.5, fov: 33, at: 1.5, az: 0.8, shift: 0.05 } },
+  { id: "showdown", spot: () => curb("midtown", 1, "n", 0.55),
+    chars: [["hollis", 0, 0, 1.25, "gun-aim", 0.4]], cam: { dist: 2.6, h: 1.2, fov: 28, at: 1.4, az: 0.95, shift: -0.3 } }
+];
+
+/* ---------- ink and paint ---------- */
+const fb = new THREE.FramebufferTexture(W, H), fbW = new THREE.FramebufferTexture(W, H);
+const nrt = new THREE.WebGLRenderTarget(W, H, { depthTexture: new THREE.DepthTexture(W, H) });
+const normalMat = new THREE.MeshNormalMaterial();
+const ink = new THREE.ShaderMaterial({
+  uniforms: { tColor: { value: fb }, tWhite: { value: fbW }, tNormal: { value: nrt.texture }, tDepth: { value: nrt.depthTexture }, res: { value: new THREE.Vector2(W, H) },
+    near: { value: 0.1 }, far: { value: 2600 }, cutout: { value: 0 }, seed: { value: 0 } },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+  fragmentShader: `
+    uniform sampler2D tColor, tWhite, tNormal, tDepth; uniform vec2 res; uniform float near, far, cutout, seed; varying vec2 vUv;
+    float lin(vec2 uv){ float z = texture2D(tDepth, uv).x * 2.0 - 1.0; return 2.0 * near * far / (far + near - z * (far - near)); }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed) * 43758.5453); }
+    void main(){
+      vec4 src = texture2D(tColor, vUv); vec3 c = src.rgb;
+      // cutout: the same frame over black and over white gives the true matte
+      float A = 1.0;
+      if (cutout > 0.5) { vec3 w = texture2D(tWhite, vUv).rgb; A = clamp(1.0 - max(max(w.r - c.r, w.g - c.g), w.b - c.b), 0.0, 1.0); c = A > 0.003 ? clamp(c / A, 0.0, 1.0) : c; }
+      // ink: depth and normal breaks, about 2.5 px wide at this size
+      vec2 px = 2.4 / res; float d0 = lin(vUv); vec3 n0 = texture2D(tNormal, vUv).rgb;
+      float e = 0.0;
+      for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.785398; vec2 o = vec2(cos(a), sin(a)) * px;
+        float d1 = lin(vUv + o); vec3 n1 = texture2D(tNormal, vUv + o).rgb;
+        e = max(e, smoothstep(0.035, 0.09, abs(d1 - d0) / min(d0, d1)) * step(min(d0, d1), 400.0));
+        e = max(e, smoothstep(0.32, 0.6, length(n1 - n0)) * step(d0, 300.0) * 0.85);
+        if (cutout > 0.5) {   // the silhouette, hair included, from the matte
+          vec3 cb = texture2D(tColor, vUv + o).rgb, cw = texture2D(tWhite, vUv + o).rgb;
+          float a1 = clamp(1.0 - max(max(cw.r - cb.r, cw.g - cb.g), cw.b - cb.b), 0.0, 1.0);
+          e = max(e, smoothstep(0.3, 0.7, a1 - A));
+        }
+      }
+      // paint: banded light, punchier colour, warm shadows
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      float band = floor(l * 6.0 + 0.5) / 6.0; float lq = mix(l, band, 0.5);
+      c *= lq / max(l, 1e-3);
+      c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, 1.28);
+      c = mix(c, c * vec3(0.86, 0.74, 0.92), smoothstep(0.45, 0.05, l) * 0.6);
+      // halftone dots in the shadows
+      vec2 q = mat2(0.7071, -0.7071, 0.7071, 0.7071) * gl_FragCoord.xy / 7.0;
+      float r = sqrt(clamp(1.0 - l * 2.4, 0.0, 1.0)) * 0.42, dd = length(fract(q) - 0.5);
+      c *= 1.0 - 0.22 * smoothstep(r + 0.04, r - 0.04, dd);
+      // paper grain
+      c += (hash(gl_FragCoord.xy) - 0.5) * 0.035;
+      vec3 inkCol = vec3(0.07, 0.045, 0.06);
+      c = mix(c, inkCol, e);
+      float a = cutout > 0.5 ? max(A, e) : 1.0;
+      if (cutout < 0.5) { vec2 v = vUv - 0.5; c *= 1.0 - dot(v, v) * 0.55; }
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), a);
+    }` ,
+  depthTest: false, depthWrite: false, transparent: true
+});
+const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), ink), qScene = new THREE.Scene(), qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+qScene.add(quad);
+
+/* ---------- posing ---------- */
+const people = {};
+function person(who) {
+  if (people[who]) return people[who];
+  const h = new Human(D, CAST[who]);
+  h.group.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
+  const mixer = new THREE.AnimationMixer(h.group), act = {};
+  for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
+  return (people[who] = { h, mixer, act });
+}
+const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
+function pose(P, name, t, look, camPos, scene) {
+  const clip = ["gun-low", "gun-aim", "crossed", "hips"].includes(name) ? "idle" : name;
+  for (const [k, a] of Object.entries(P.act)) a.setEffectiveWeight(k === clip ? 1 : 0);
+  P.mixer.setTime(t); P.h.group.updateMatrixWorld(true);
+  if (name.startsWith("gun")) {
+    // borrow the game's own arms-and-gun code
+    const fakePlayer = { model: P.h.group, pos: P.h.group.position, speed: 0, yaw: P.h.group.rotation.y };
+    const ar = P.ar || (P.ar = new Arsenal({ scene, camera, world, player: fakePlayer, rig: {}, hud: {}, peds: null, sfx: {} }));
+    ar.player = fakePlayer; ar.cur = 1; ar.kick = 0; ar.aim = name === "gun-aim" ? 1 : 0;
+    const f = _v.set(Math.sin(fakePlayer.yaw), 0, Math.cos(fakePlayer.yaw));
+    ar.target.copy(P.h.group.position).addScaledVector(f, 12).setY(P.h.group.position.y + 1.3);
+    ar.pose(0);
+  }
+  // attitude: arms folded, or hands on hips (two-bone IK on the idle frame)
+  if (name === "crossed" || name === "hips") {
+    const B = P.B || (P.B = findBones(P.h.group)), g = P.h.group;
+    const up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(Math.sin(g.rotation.y), 0, Math.cos(g.rotation.y));
+    // the character's own right (facing +z, that's -x), and whichever arm is really on the left
+    const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
+    const sA = wpos(B.armL[0]), sB = wpos(B.armR[0]), mid = sA.clone().add(sB).multiplyScalar(0.5);
+    const onLeft = sA.clone().sub(mid).dot(right) < 0, armL = onLeft ? B.armL : B.armR, armR = onLeft ? B.armR : B.armL;
+    const legL = onLeft ? B.legL : B.legR, legR = onLeft ? B.legR : B.legL;
+    const at = (base, f, u, r) => base.clone().addScaledVector(fwd, f).addScaledVector(up, u).addScaledVector(right, r);
+    const pole = (f, u, r) => new THREE.Vector3().addScaledVector(fwd, f).addScaledVector(up, u).addScaledVector(right, r);
+    if (name === "crossed") {
+      ik(armL, at(mid, 0.12, -0.27, -0.17), pole(0.15, -1, 0.3));
+      ik(armR, at(mid, 0.17, -0.22, 0.17), pole(0.2, -1, -0.3));
+    } else {
+      const hL = wpos(legL[0]), hR = wpos(legR[0]);
+      ik(armL, at(hL, 0.02, 0.1, -0.1), pole(-0.5, -0.2, -1));
+      ik(armR, at(hR, 0.02, 0.1, 0.1), pole(-0.5, -0.2, 1));
+    }
+    g.updateMatrixWorld(true);
+  }
+  // turn the head toward the lens (or away from it)
+  if (look) {
+    const head = P.h.bones.find((b) => b.name === "head"), neck = P.h.bones.find((b) => b.name === "neck01");
+    const g = P.h.group, to = _v.copy(camPos).sub(g.position), fy = g.rotation.y;
+    const a = THREE.MathUtils.clamp(Math.atan2(to.x, to.z) - fy, -1.0, 1.0) * look;
+    _q.setFromAxisAngle(UP, a * 0.6); head.quaternion.premultiply(_q); _q.setFromAxisAngle(UP, a * 0.35); neck.quaternion.premultiply(_q);
+    g.updateMatrixWorld(true);
+  }
+}
+
+function setWorldVisible(on) { for (const o of worldObjs) if (!o.isLight) o.visible = on; scene.background = on ? scene.userData.bg : null; }
+scene.userData.bg = scene.background;
+const fill = new THREE.DirectionalLight(0xffe2c8, 0.9); scene.add(fill, fill.target);   // a key from the lens side, so faces read
+
+window.shot = async (i, layer) => {
+  const S = SLIDES[i], sp = S.spot(), C = S.cam;
+  for (const p of Object.values(people)) { p.h.group.visible = false; if (p.ar) p.ar.gun.visible = false; }
+  // the camera looks back along the spot's outward direction, from the road
+  const out = new THREE.Vector3(sp.out[0], 0, sp.out[1]), az = C.az || 0;
+  const back = out.clone().applyAxisAngle(UP, az);
+  const gy = world.heightAt(sp.x, sp.z), focus = new THREE.Vector3(sp.x, gy, sp.z);
+  camera.fov = C.fov; camera.updateProjectionMatrix();
+  camera.position.copy(focus).addScaledVector(back, C.dist).setY(gy + C.h);
+  const right = new THREE.Vector3().crossVectors(back, UP).normalize().negate();   // camera's right
+  const halfW = Math.tan(THREE.MathUtils.degToRad(C.fov) / 2) * C.dist * (W / H);
+  camera.lookAt(focus.clone().setY(gy + C.at).addScaledVector(right, -C.shift * halfW));
+  const toward = back.clone();   // from the spot toward the camera
+  for (const [who, dx, dz, turn, poseName, t] of S.chars) {
+    const P = person(who), g = P.h.group;
+    if (!g.parent) scene.add(g);
+    g.visible = true;
+    const x = sp.x + right.x * dx + toward.x * dz, z = sp.z + right.z * dx + toward.z * dz;
+    g.position.set(x, world.heightAt(x, z), z);
+    g.rotation.set(0, Math.atan2(toward.x, toward.z) + turn, 0);
+    pose(P, poseName, t, poseName === "gun-aim" ? 0 : 0.7, camera.position, scene);
+  }
+  sky.update(40, focus, camera.position);
+  fill.position.copy(camera.position).add(new THREE.Vector3(0, 3, 0)).addScaledVector(right, 2); fill.target.position.copy(focus);
+  // people: invisible but casting shadows in the background layer; alone on clear in the cutout
+  const chars = Object.values(people).filter((p) => p.h.group.visible);
+  const setGhost = (on) => chars.forEach((p) => p.h.group.traverse((m) => { if (m.isMesh) { m.material.colorWrite = !on; m.material.depthWrite = !on; } }));
+  const gun = chars.map((p) => p.ar && p.ar.gun).filter(Boolean);
+  if (layer === "bg") { setGhost(true); gun.forEach((g) => g.traverse((m) => { if (m.isMesh) { m.material.colorWrite = false; m.material.depthWrite = false; } })); setWorldVisible(true); fill.intensity = 0.35; }
+  else { setGhost(false); gun.forEach((g) => g.traverse((m) => { if (m.isMesh) { m.material.colorWrite = true; m.material.depthWrite = true; } })); setWorldVisible(false); fill.intensity = 0.9; }
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera); renderer.copyFramebufferToTexture(fb);
+  if (layer !== "bg") { renderer.setClearColor(0xffffff, 1); renderer.clear(); renderer.render(scene, camera); renderer.copyFramebufferToTexture(fbW); }
+  // normals + depth (people excluded from the background's ink)
+  if (layer === "bg") chars.forEach((p) => p.h.group.visible = false);
+  const cut = []; chars.forEach((p) => p.h.group.traverse((m) => { if (m.isMesh && m.visible && (m.material.alphaTest > 0 || m.material.transparent)) { m.visible = false; cut.push(m); } }));
+  scene.overrideMaterial = normalMat; const bg0 = scene.background; scene.background = null;
+  renderer.setRenderTarget(nrt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
+  scene.overrideMaterial = null; scene.background = bg0; renderer.setRenderTarget(null); cut.forEach((m) => m.visible = true);
+  if (layer === "bg") chars.forEach((p) => p.h.group.visible = true);
+  ink.uniforms.cutout.value = layer === "bg" ? 0 : 1; ink.uniforms.seed.value = i * 7 + (layer === "bg" ? 0 : 3);
+  const tm = renderer.toneMapping; renderer.toneMapping = THREE.NoToneMapping;
+  renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(qScene, qCam); renderer.toneMapping = tm;
+  setGhost(false); setWorldVisible(true);
+  return renderer.domElement.toDataURL("image/png");
+};
+window.slides = SLIDES.map((s) => s.id);
+window.ready = true;
+</script>

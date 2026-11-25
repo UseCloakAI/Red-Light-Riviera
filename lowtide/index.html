@@ -109,11 +109,15 @@
 
 <!-- 4 · loading, then the game -->
 <section id="loading" class="scene">
-  <img class="ld-art" src="media/loading.jpg" alt="">
+  <!-- pre-rendered art: each slide is a background and a cutout of the cast, panned at different speeds (tools/loading) -->
+  <div class="ld-slides"></div>
   <div class="ld-shade"></div>
-  <p class="ld-logo">Lowtide</p>
-  <p class="ld-tip"></p>
-  <div class="ld-bar"><i></i></div>
+  <div class="ld-cap" aria-live="polite"><b class="ld-name"></b><span class="ld-role"></span><q class="ld-line"></q></div>
+  <div class="ld-status">
+    <p class="ld-tip"></p>
+    <div class="ld-spin"><i aria-hidden="true"></i><span>Loading Story Mode</span></div>
+    <div class="ld-bar"><i></i></div>
+  </div>
 </section>
 <section id="game" class="scene">
   <div id="gl"></div>
