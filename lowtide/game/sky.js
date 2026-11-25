@@ -81,7 +81,7 @@ export function buildSky(scene, renderer) {
       float amp=clamp(depth/1.4,.12,1.)*(1.-smoothstep(500.,1600.,distance(w.xz,cameraPosition.xz)));
       w.y=(${SEA.toFixed(2)})+swell(w.xz,uTime)*amp;
       if(w.x>uLand.x&&w.x<uLand.z&&w.z>uLand.y&&w.z<uLand.w)w.y-=4.;      // under the island: out of sight
-      vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
+      vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,   // no PS1 snap here: on a beach this flat it shoves the waterline about and the sand pokes through
     fragmentShader: SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;uniform vec4 uLand;varying vec3 vW;
     void main(){
       if(vW.x>uLand.x&&vW.x<uLand.z&&vW.z>uLand.y&&vW.z<uLand.w)discard;
@@ -94,10 +94,10 @@ export function buildSky(scene, renderer) {
       vec3 body=mix(mix(vec3(.42,.3,.2),vec3(.06,.24,.26),smoothstep(0.,.7,depth)),uDeep,smoothstep(.9,4.5,depth));
       vec3 col=mix(body,skyCol(normalize(R),false),F);
       float s=max(dot(R,uSunDir),0.);col+=uSun*(step(.99,s)*step(hash(floor(vW.xz*1.5)+floor(uTime*5.)),.45)*2.2+pow(s,40.)*.35);   // the sun path breaks into glitter
-      // crests catch foam, in chunky half-metre blocks
-      vec2 q=floor(vW.xz*2.)/2.;float crest=smoothstep(.2,.28,vW.y-(${SEA.toFixed(2)}));
-      col=mix(col,vec3(.93,.9,.86),step(hash(q+floor(uTime*2.)),crest*.35));
-      float a=smoothstep(0.,.08,depth);   // fades to nothing at the waterline; the swash takes over
+      // crests catch foam, in chunky blocks
+      vec2 q=floor(vW.xz*3.)/3.;float crest=smoothstep(.22,.3,vW.y-(${SEA.toFixed(2)}))*smoothstep(1.5,3.,depth);   // open water only
+      col=mix(col,vec3(.93,.9,.86),step(hash(q+floor(uTime*2.)),crest*.3));
+      float a=smoothstep(.03,.25,depth);   // gone before it ever meets the sand; the swash covers the shallows
       float f=1.-exp(-uFogD*uFogD*dist*dist);col=mix(col,uFogC,f*.85);
       gl_FragColor=vec4(col,a);
       #include <tonemapping_fragment>
@@ -114,8 +114,8 @@ export function buildSky(scene, renderer) {
   const swG = new THREE.PlaneGeometry(EDGE.e - EDGE.w + 60, 60, Math.ceil((EDGE.e - EDGE.w + 60) / 3), 80).rotateX(-Math.PI / 2);
   swG.translate((EDGE.w + EDGE.e) / 2, 0, EDGE.s + 12 + 30);
   const swash = new THREE.Mesh(swG, new THREE.ShaderMaterial({
-    uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false,
-    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
+    uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
     fragmentShader: BEACH_GLSL + PS1 + `uniform float uTime;uniform vec3 uFogC,uLow;uniform float uFogD;varying vec3 vW;
     void main(){
       vec2 q=floor(vW.xz*4.)/4.+.125;float h=beachY(q);
