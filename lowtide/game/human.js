@@ -189,8 +189,24 @@ function buildClips(D, H) {
 }
 
 /* ---------------- the character ---------------- */
+/* A plausible stranger: heritage, age, build, face, hair and clothes all at random. */
+export function randomPerson(R = Math.random) {
+  const g = () => (R() + R() + R()) / 3, pick = (a) => a[(R() * a.length) | 0], D = DATA;
+  const her = [R() ** 2, R() ** 2, R() ** 2], sex = R() < 0.5 ? R() * 0.2 : 0.8 + R() * 0.2, age = Math.round(25 + R() * R() * 55);
+  const ids = (kind) => D.meta.proxies.filter((x) => x.kind === kind).map((x) => x.id);
+  const hair = SWATCHES.hair, detail = {};
+  for (const l of D.meta.local) detail[l.key] = (g() - 0.5) * 1.0;
+  return { sex, age, muscle: 0.25 + g() * 0.5, weight: 0.25 + g() * 0.55, height: 0.3 + g() * 0.4, proportions: 0.35 + g() * 0.4,
+    african: her[0], asian: her[1], caucasian: her[2], tone: (R() - 0.5) * 0.4, detail,
+    eyes: pick(Object.keys(D.meta.eyeColors)), brows: pick(ids("brows")), browColor: pick(SWATCHES.brow), lashes: "eyelashes01",
+    hair: pick(ids("hair")), hairColor: age > 60 && R() < 0.6 ? pick(["#8b8a86", "#d8d5cf"]) : pick(hair.slice(0, 7)),
+    outfit: pick(ids("outfit")), shoes: pick(ids("shoes")), hat: R() < 0.08 ? "fedora01" : null };
+}
+
 export class Human {
-  constructor(D, params) {
+  // opts.lod: build the body from MakeHuman's ~1,600-vertex proxy (for crowds)
+  constructor(D, params, opts = {}) {
+    this.lod = opts.lod ? D.proxies["lod:" + opts.lod] : null; this.lite = !!opts.lod;
     this.D = D; this.p = JSON.parse(JSON.stringify(params));
     this.group = new THREE.Group(); this.group.name = "human";
     this.P = new Float32Array(D.meta.nVerts * 3);
@@ -202,7 +218,8 @@ export class Human {
     this.heads = this.bones.map(() => new THREE.Vector3()); this.tails = this.bones.map(() => new THREE.Vector3());
     this.parts = {};   // slot -> { mesh, px }
     this.bodyMat = skinMaterial(D);
-    this.body = this.skinned(D.meta.body, this.bodyMat, D.bodyRV.length);
+    if (this.lod) { this.lodRV = D.view(this.lod.rv); this.lodQ = new Float32Array(D.view(this.lod.refs).length); this.body = this.skinned(this.lod, this.bodyMat, this.lodRV.length); }
+    else this.body = this.skinned(D.meta.body, this.bodyMat, D.bodyRV.length);
     this.body.name = "body";
     this.update(this.p, true);
   }
@@ -243,6 +260,7 @@ export class Human {
   }
   // hide body triangles under clothes and shoes so skin never pokes through
   hideUnder() {
+    if (this.lod) return;
     const D = this.D, del = new Uint8Array(D.meta.nVerts);
     for (const s of ["outfit", "shoes", "hat"]) { const pt = this.parts[s]; if (pt) for (const v of D.view(pt.px.delete)) del[v] = 1; }
     const I = D.bodyIndex, rv = D.bodyRV, keep = [];
@@ -254,7 +272,7 @@ export class Human {
     if (rebuildParts || true) {
       this.setPart("eyes", "eyes", "high-poly", p.eyes);
       this.setPart("brows", "brows", p.brows, p.browColor);
-      this.setPart("lashes", "lashes", p.lashes || "eyelashes01");
+      if (!this.lite) this.setPart("lashes", "lashes", p.lashes || "eyelashes01");   // crowds skip lashes
       this.setPart("hair", "hair", p.hair, p.hairColor);
       this.setPart("outfit", "outfit", p.outfit);
       this.setPart("shoes", "shoes", p.shoes);
@@ -272,9 +290,15 @@ export class Human {
       if (pt.px.kind === "shoes") for (let i = 1; i < pt.Q.length; i += 3) low = Math.min(low, pt.Q[i]);
     }
     this.ground = low;
-    const bg = this.body.geometry, nr = D.bodyRV.length;
-    gather(P, D.bodyRV, bg.attributes.position.array, low);
-    normals(P, D.meta.nVerts, D.bodyRV, D.bodyIndex, bg.attributes.normal.array);
+    const bg = this.body.geometry;
+    if (this.lod) {
+      fit(D, this.lod, P, this.lodQ);
+      gather(this.lodQ, this.lodRV, bg.attributes.position.array, low);
+      normals(this.lodQ, this.lodQ.length / 3, this.lodRV, D.view(this.lod.index), bg.attributes.normal.array);
+    } else {
+      gather(P, D.bodyRV, bg.attributes.position.array, low);
+      normals(P, D.meta.nVerts, D.bodyRV, D.bodyIndex, bg.attributes.normal.array);
+    }
     bg.attributes.position.needsUpdate = bg.attributes.normal.needsUpdate = true; bg.computeBoundingSphere();
     for (const pt of Object.values(this.parts)) {
       const g = pt.mesh.geometry, idx = D.view(pt.px.index), n = pt.Q.length / 3;
@@ -312,5 +336,8 @@ export class Human {
 
 export async function createHuman(params) {
   const D = await loadHumanData();
-  return new Human(D, params || HOLLIS);
+  // saved characters may predate newer options: anything missing falls back to Hollis
+  const p = Object.assign(JSON.parse(JSON.stringify(HOLLIS)), params || {});
+  p.detail = Object.assign({}, HOLLIS.detail, (params && params.detail) || {});
+  return new Human(D, p);
 }

@@ -15,6 +15,7 @@ const signed = (v) => (v > 0 ? "+" : "") + Math.round(v * 100);
 export async function openCreator(o) {
   const root = o.root, D = await loadHumanData();
   const start = Object.assign(JSON.parse(JSON.stringify(HOLLIS)), savedCharacter() || {});
+  start.detail = Object.assign({}, HOLLIS.detail, (savedCharacter() || {}).detail || {});
   let p = JSON.parse(JSON.stringify(start));
   if (o.progress) o.progress(0.6);
 
