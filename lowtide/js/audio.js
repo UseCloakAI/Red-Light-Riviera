@@ -420,6 +420,34 @@
         var k = noise("white", t + 0.035, 0.03), kb = F("bandpass", 3600, 2), kg = G(0); perc(kg, t + 0.035, 0.0006, 0.16, 0.02); chain(k, kb, kg, B.sfx);
       }
     },
+    // the shotgun: lower, wider and longer than the pistol, with more of the street in it
+    boom: function (dist, pan) {
+      if (!ctx) return; var t = now(), d = dist || 0, v = 1 / (1 + d / 22), bus = G(v), lp = F("lowpass", 13000 / (1 + d / 25), 0.5), pn = P(pan || 0);
+      chain(bus, lp, pn, B.sfx); send(pn, street(), 0.55 + Math.min(0.4, d / 60));
+      var sh = ctx.createWaveShaper(); sh.curve = SAT4 || (SAT4 = sat(4)); sh.connect(bus);
+      var n = noise("white", t, 0.16), hp = F("highpass", 900), cg = G(0); perc(cg, t, 0.0005, 0.95, 0.09); chain(n, hp, cg, sh);
+      var m = noise("pink", t, 0.3), bp = F("bandpass", 520, 0.7), mg = G(0); perc(mg, t, 0.001, 1.0, 0.16); chain(m, bp, mg, sh);
+      var o = O("sine", 120, t), og = G(0); o.frequency.exponentialRampToValueAtTime(32, t + 0.25); perc(og, t, 0.001, 1.25, 0.22); chain(o, og, sh); o.start(t); o.stop(t + 0.5);
+    },
+    // rack: fore-end back (a slide and a clack), forward (a heavier clack)
+    pump: function () {
+      if (!ctx) return; var t = now();
+      var click = function (at, f, a, dec, q) { var n = noise("white", at, 0.06), bp = F("bandpass", f, q || 2), g = G(0); perc(g, at, 0.0005, a, dec); chain(n, bp, g, B.sfx); };
+      var s1 = noise("white", t, 0.12), sb = F("bandpass", 1700, 1.2), sg = G(0); sg.gain.setValueAtTime(0, t); sg.gain.linearRampToValueAtTime(0.07, t + 0.04); sg.gain.linearRampToValueAtTime(0, t + 0.12); chain(s1, sb, sg, B.sfx);
+      click(t + 0.11, 1400, 0.4, 0.035); click(t + 0.12, 3600, 0.25, 0.02);
+      click(t + 0.25, 900, 0.5, 0.05, 1.4); click(t + 0.26, 2800, 0.3, 0.025);
+    },
+    shellIn: function () {
+      if (!ctx) return; var t = now();
+      var n = noise("white", t, 0.08), bp = F("bandpass", 1100, 1.5), g = G(0); perc(g, t, 0.002, 0.18, 0.05); chain(n, bp, g, B.sfx);
+      var k = noise("white", t + 0.06, 0.03), kb = F("bandpass", 3000, 2.5), kg = G(0); perc(kg, t + 0.06, 0.0005, 0.2, 0.018); chain(k, kb, kg, B.sfx);
+    },
+    // the weapon wheel: air in on open, a soft close; a dry tick per segment
+    wheel: function (open) {
+      if (!ctx) return; var t = now(), n = noise("pink", t, 0.3), bp = F("bandpass", open ? 900 : 1400, 0.9), g = G(0);
+      bp.frequency.exponentialRampToValueAtTime(open ? 1800 : 600, t + 0.25); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.06); g.gain.linearRampToValueAtTime(0, t + 0.28); chain(n, bp, g, B.ui);
+    },
+    tick: function () { ui.move(); },
     dry: function () {
       if (!ctx) return; var t = now();
       var n = noise("white", t, 0.03), bp = F("bandpass", 2900, 3), g = G(0); perc(g, t, 0.0005, 0.3, 0.014); chain(n, bp, g, B.sfx);
@@ -441,8 +469,12 @@
       var k = noise("white", t + 0.2, 0.03), kb = F("bandpass", 3000, 2), kg = G(0); perc(kg, t + 0.2, 0.0005, 0.15, 0.02); chain(k, kb, kg, B.sfx);
     },
     // brass on the pavement: two inharmonic rings
-    shell: function (v, pan) {
+    shell: function (v, pan, kind) {
       if (!ctx) return; var t = now(), p = P(pan || 0); p.connect(B.sfx); v = v || 1;
+      if (kind === "hull") {   // a plastic hull: a hollow tock, no ring
+        var n = noise("white", t, 0.05), bp = F("bandpass", 1300, 2.2), g = G(0); perc(g, t, 0.0008, 0.16 * v, 0.03); chain(n, bp, g, p);
+        var o = O("sine", 620, t), og = G(0); perc(og, t, 0.001, 0.04 * v, 0.05); chain(o, og, p); o.start(t); o.stop(t + 0.1); return;
+      }
       [4180, 6290, 9120].forEach(function (f, i) { var o = O("sine", f * (0.97 + rnd() * 0.06), t), g = G(0); perc(g, t, 0.0008, [0.045, 0.03, 0.012][i] * v, [0.14, 0.09, 0.05][i]); chain(o, g, p); o.start(t); o.stop(t + 0.25); });
     },
     // a round landing: in someone, on stone, or in sand

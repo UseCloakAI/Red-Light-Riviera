@@ -9,7 +9,7 @@ export class Input {
   constructor(el) {
     this.el = el; this.keys = new Set(); this.dx = 0; this.dy = 0; this.locked = false; this.active = true;
     this.onLock = null; this.wheel = 0; this.pressed = new Set();
-    addEventListener("keydown", (e) => { if (!this.active) return; this.keys.add(e.code); if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault(); });
+    addEventListener("keydown", (e) => { if (!this.active) return; this.keys.add(e.code); if (["Space", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault(); });
     addEventListener("keyup", (e) => this.keys.delete(e.code));
     addEventListener("blur", () => this.keys.clear());
     addEventListener("mousemove", (e) => { if (this.locked) { this.dx += e.movementX; this.dy += e.movementY; } });
@@ -170,10 +170,10 @@ export class Player {
 export class CamRig {
   constructor(camera, world, yaw) {
     this.cam = camera; this.w = world; this.yaw = yaw + Math.PI; this.pitch = 0.16; this.dist = 4.3;
-    this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0; this.aim = 0; this.recoil = 0;
+    this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0; this.aim = 0; this.recoil = 0; this.slow = 1;
   }
   update(dt, input, player) {
-    const [dx, dy] = input.take(), sens = 0.0022 * (1 - this.aim * 0.35);
+    const [dx, dy] = input.take(), sens = 0.0022 * (1 - this.aim * 0.35) * this.slow;
     // recoil kicks the view up; the player pulls it back down
     const kick = this.recoil * Math.min(1, dt * 30); this.recoil -= kick;
     this.yaw -= dx * sens; this.pitch = THREE.MathUtils.clamp(this.pitch + dy * sens - kick, -0.45 - this.aim * 0.4, 1.15);
