@@ -11,6 +11,7 @@ import { Player, CamRig, Input } from "./player.js?v=dev";
 import { Hud } from "./hud.js?v=dev";
 import { spawnPeds } from "./peds.js?v=dev";
 import { Arsenal } from "./weapons.js?v=dev";
+import { Vehicles } from "./vehicles.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
@@ -68,6 +69,8 @@ export async function start(o) {
 
   // Stage 3: weapons
   const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
+  // Stage 5, early: the parked cars drive
+  const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt") });
   // key tips: the basics as you start, the rest the first time they matter
   const TIPS = {
     move: "{W} {A} {S} {D} to move. Hold {Shift} to sprint, {Space} to jump.",
@@ -77,8 +80,11 @@ export async function start(o) {
     "equip:pistol": "Right click or {Q} to aim. Tap to lock the aim on, tap again to lower it. Click or {E} fires.",
     "equip:shotgun": "The shotgun loads one shell at a time. Fire to stop loading early.",
     aim: "Raise your gun near someone and the sights find them. The view slows while you're on a target.",
-    empty: "Out of rounds. {R} reloads."
+    empty: "Out of rounds. {R} reloads.",
+    "near-car": "{E} gets in. Every car on the island is unlocked, apparently.",
+    "in-car": "{W} drives, {S} brakes and reverses, {A} {D} steer, {Space} is the handbrake. {E} gets out."
   };
+  vehicles.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
   arsenal.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); if (e === "equip:shotgun") hud.tipOnce("equip:pistol", TIPS["equip:pistol"]); };
   let tipClock = 0;
   const startTips = (dt) => {
@@ -133,10 +139,14 @@ export async function start(o) {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
-    if (input.locked) { arsenal.update(dt, input); startTips(dt); }
+    // a car first (it may take E for the door), then the gun, unless you're driving
     const dw = dt * arsenal.timeScale;
-    if (input.locked) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
-    else player.animate(dw);
+    let inCar = false;
+    if (input.locked) { const used = vehicles.update(dw, input); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    if (inCar) { player.aimYaw = null; rig.aim = 0; }
+    rig.car = vehicles.car;
+    if (input.locked && !inCar) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
+    else if (!inCar) player.animate(dw);
     if (peds) peds.update(dw, player);
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
@@ -155,7 +165,7 @@ export async function start(o) {
     lock() { input.lock(); },
     drawMap(ctx, w, h) { hud.drawFull(ctx, w, h, player); },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
-    rig, world, arsenal, get peds() { return peds; }
+    rig, world, arsenal, vehicles, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };

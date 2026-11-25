@@ -170,20 +170,27 @@ export class Player {
 export class CamRig {
   constructor(camera, world, yaw) {
     this.cam = camera; this.w = world; this.yaw = yaw + Math.PI; this.pitch = 0.16; this.dist = 4.3;
-    this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0; this.aim = 0; this.recoil = 0; this.slow = 1;
+    this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0; this.aim = 0; this.recoil = 0; this.slow = 1; this.car = null; this.idle = 0;
   }
   update(dt, input, player) {
     const [dx, dy] = input.take(), sens = 0.0022 * (1 - this.aim * 0.35) * this.slow;
     // recoil kicks the view up; the player pulls it back down
     const kick = this.recoil * Math.min(1, dt * 30); this.recoil -= kick;
     this.yaw -= dx * sens; this.pitch = THREE.MathUtils.clamp(this.pitch + dy * sens - kick, -0.45 - this.aim * 0.4, 1.15);
-    const target = new THREE.Vector3(player.pos.x, player.pos.y + 1.55 - this.aim * 0.05, player.pos.z);
+    // in a car: sit higher and further back, and swing round behind it once the mouse is left alone
+    this.idle = dx || dy ? 0 : this.idle + dt;
+    if (this.car) {
+      const c = this.car;
+      if (this.idle > 0.8 && Math.abs(c.speed) > 2) { const want = c.a + (c.speed < 0 ? 0 : Math.PI); let d = want - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * Math.min(1, dt * 2.5); this.pitch += (0.22 - this.pitch) * Math.min(1, dt * 2); }
+    }
+    this.shake = Math.max(0, this.shake - dt * 3);
+    const target = new THREE.Vector3(player.pos.x, player.pos.y + (this.car ? 1.9 : 1.55 - this.aim * 0.05), player.pos.z);
     if (!this.cur) this.pivot.copy(target); else this.pivot.lerp(target, 1 - Math.exp(-dt * 18));
     const cp = Math.cos(this.pitch), sh = 0.55 + this.aim * 0.2;
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
     const back = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
     const look = this.pivot.clone().add(new THREE.Vector3(rx * sh, 0, rz * sh));
-    const want = look.clone().addScaledVector(back, THREE.MathUtils.lerp(this.dist + (player.sprinting ? 0.5 : 0), 1.75, this.aim));
+    const want = look.clone().addScaledVector(back, this.car ? 7.2 + Math.min(2, Math.abs(this.car.speed) * 0.06) : THREE.MathUtils.lerp(this.dist + (player.sprinting ? 0.5 : 0), 1.75, this.aim));
     // pull in when a wall is between the player and the camera
     const t = this.w.grid.ray(look, want), len = look.distanceTo(want);
     const d = Math.max(0.6, t * len - 0.25);
@@ -191,8 +198,9 @@ export class CamRig {
     pos.y = Math.max(pos.y, this.w.heightAt(pos.x, pos.z) + 0.3);
     if (!this.cur) this.cur = pos.clone(); else this.cur.lerp(pos, t < 1 ? 1 : 1 - Math.exp(-dt * 25));
     this.cam.position.copy(this.cur);
+    if (this.shake > 0) this.cam.position.add(new THREE.Vector3((Math.random() - 0.5) * this.shake * 0.3, (Math.random() - 0.5) * this.shake * 0.3, 0));
     this.cam.lookAt(look);
-    const fov = THREE.MathUtils.lerp(player.sprinting ? 76 : 70, 52, this.aim);
+    const fov = this.car ? 70 + Math.min(10, Math.abs(this.car.speed) * 0.35) : THREE.MathUtils.lerp(player.sprinting ? 76 : 70, 52, this.aim);
     this.fov += (fov - this.fov) * Math.min(1, dt * (this.aim > 0.05 ? 10 : 4));
     if (Math.abs(this.cam.fov - this.fov) > 0.01) { this.cam.fov = this.fov; this.cam.updateProjectionMatrix(); }
   }
