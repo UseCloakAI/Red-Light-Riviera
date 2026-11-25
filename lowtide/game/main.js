@@ -55,7 +55,7 @@ export async function start(o) {
   await step(0.82);
   // Stage 2: the people of Marlowe Keys
   let peds = null;
-  try { peds = await spawnPeds(scene, world, { count: o.peds || 18, near: player.pos, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
+  try { peds = await spawnPeds(scene, world, { count: o.peds || 18, near: player.pos, onSpeak: (t) => hud.subtitle(t), progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
   // warm up: compile every shader and fill the shadow map before the first real frame

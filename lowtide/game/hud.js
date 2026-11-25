@@ -30,6 +30,13 @@ export class Hud {
     this.cashEl.textContent = "$" + this.cash.toLocaleString("en-US");
     this.setWanted(0);
   }
+  // a line of overheard speech, bottom centre, like film subtitles
+  subtitle(text) {
+    const el = this.subEl || (this.subEl = this.root.querySelector(".subtitle"));
+    if (!el) return;
+    el.textContent = text; el.classList.add("on");
+    clearTimeout(this.subT); this.subT = setTimeout(() => el.classList.remove("on"), 2400 + text.length * 45);
+  }
   setWanted(n) {
     this.wanted = n;
     this.starsEl.innerHTML = [0, 1, 2, 3, 4].map((i) => `<i class="${i < n ? "on" : ""}">★</i>`).join("");
