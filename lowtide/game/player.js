@@ -8,11 +8,16 @@ import * as THREE from "three";
 export class Input {
   constructor(el) {
     this.el = el; this.keys = new Set(); this.dx = 0; this.dy = 0; this.locked = false; this.active = true;
-    this.onLock = null;
+    this.onLock = null; this.wheel = 0; this.pressed = new Set();
     addEventListener("keydown", (e) => { if (!this.active) return; this.keys.add(e.code); if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault(); });
     addEventListener("keyup", (e) => this.keys.delete(e.code));
     addEventListener("blur", () => this.keys.clear());
     addEventListener("mousemove", (e) => { if (this.locked) { this.dx += e.movementX; this.dy += e.movementY; } });
+    // mouse buttons read like keys: Mouse0 fires, Mouse2 aims; the wheel switches weapons
+    el.addEventListener("mousedown", (e) => { if (this.locked && this.active) { this.keys.add("Mouse" + e.button); e.preventDefault(); } });
+    addEventListener("mouseup", (e) => this.keys.delete("Mouse" + e.button));
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+    addEventListener("wheel", (e) => { if (this.locked) this.wheel += Math.sign(e.deltaY); }, { passive: true });
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === el;
       if (!this.locked) this.keys.clear();
@@ -21,6 +26,8 @@ export class Input {
   }
   lock() { const p = this.el.requestPointerLock && this.el.requestPointerLock(); if (p && p.catch) p.catch(() => {}); }
   down(...codes) { return codes.some((c) => this.keys.has(c)); }
+  // true once per press
+  hit(code) { const d = this.keys.has(code); if (d && !this.pressed.has(code)) { this.pressed.add(code); return true; } if (!d) this.pressed.delete(code); return false; }
   take() { const d = [this.dx, this.dy]; this.dx = this.dy = 0; return d; }
 }
 
@@ -65,6 +72,7 @@ export class Player {
     this.pos = new THREE.Vector3(world.spawn.x, world.heightAt(world.spawn.x, world.spawn.z), world.spawn.z);
     this.vel = new THREE.Vector3(); this.yaw = world.spawn.yaw; this.ground = true; this.phase = 0; this.lean = 0;
     this.speed = 0; this.sprinting = false; this.onStep = null; this.surface = "stone";
+    this.aimYaw = null; this.afterPose = null;   // set by the weapons while aiming; afterPose runs IK after the clips
   }
   update(dt, input, camYaw) {
     const f = (input.down("KeyW", "ArrowUp") ? 1 : 0) - (input.down("KeyS", "ArrowDown") ? 1 : 0);
@@ -72,14 +80,16 @@ export class Player {
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     let wx = fx * f + rx * s, wz = fz * f + rz * s; const wl = Math.hypot(wx, wz);
     if (wl > 0) { wx /= wl; wz /= wl; }
-    this.sprinting = wl > 0 && input.down("ShiftLeft", "ShiftRight");
-    const target = wl ? (this.sprinting ? SPRINT : input.down("AltLeft", "ControlLeft") ? WALK : RUN) : 0;
+    const aiming = this.aimYaw !== null;
+    this.sprinting = wl > 0 && !aiming && input.down("ShiftLeft", "ShiftRight");
+    const target = wl ? (aiming ? 2.3 : this.sprinting ? SPRINT : input.down("AltLeft", "ControlLeft") ? WALK : RUN) : 0;
     const acc = this.ground ? (target > this.speed ? 22 : 30) : 4;
     const k = 1 - Math.exp(-acc * dt * 0.35);
     this.vel.x += (wx * target - this.vel.x) * k; this.vel.z += (wz * target - this.vel.z) * k;
     this.speed = Math.hypot(this.vel.x, this.vel.z);
 
-    if (this.speed > 0.3) {   // turn to face where we're going; lean into the turn
+    if (aiming) { this.yaw += ang(this.aimYaw - this.yaw) * Math.min(1, dt * 16); this.lean *= 1 - Math.min(1, dt * 8); }
+    else if (this.speed > 0.3) {   // turn to face where we're going; lean into the turn
       const want = Math.atan2(this.vel.x, this.vel.z), d = ang(want - this.yaw);
       this.yaw += d * Math.min(1, dt * (this.ground ? 11 : 4));
       this.lean += (THREE.MathUtils.clamp(-d * 0.6, -0.25, 0.25) * (this.speed / SPRINT) - this.lean) * Math.min(1, dt * 8);
@@ -128,6 +138,7 @@ export class Player {
     this.lastPh = ph;
     this.model.position.copy(this.pos);
     this.model.rotation.set(0, this.yaw, this.lean * 0.6);
+    if (this.afterPose) { this.model.updateMatrixWorld(true); this.afterPose(dt); }
   }
   animate(dt) {
     if (this.mixer) return this.animateRig(dt);
@@ -159,18 +170,20 @@ export class Player {
 export class CamRig {
   constructor(camera, world, yaw) {
     this.cam = camera; this.w = world; this.yaw = yaw + Math.PI; this.pitch = 0.16; this.dist = 4.3;
-    this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0;
+    this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0; this.aim = 0; this.recoil = 0;
   }
   update(dt, input, player) {
-    const [dx, dy] = input.take(), sens = 0.0022;
-    this.yaw -= dx * sens; this.pitch = THREE.MathUtils.clamp(this.pitch + dy * sens, -0.45, 1.15);
-    const target = new THREE.Vector3(player.pos.x, player.pos.y + 1.55, player.pos.z);
+    const [dx, dy] = input.take(), sens = 0.0022 * (1 - this.aim * 0.35);
+    // recoil kicks the view up; the player pulls it back down
+    const kick = this.recoil * Math.min(1, dt * 30); this.recoil -= kick;
+    this.yaw -= dx * sens; this.pitch = THREE.MathUtils.clamp(this.pitch + dy * sens - kick, -0.45 - this.aim * 0.4, 1.15);
+    const target = new THREE.Vector3(player.pos.x, player.pos.y + 1.55 - this.aim * 0.05, player.pos.z);
     if (!this.cur) this.pivot.copy(target); else this.pivot.lerp(target, 1 - Math.exp(-dt * 18));
-    const cp = Math.cos(this.pitch), sh = 0.55;
+    const cp = Math.cos(this.pitch), sh = 0.55 + this.aim * 0.2;
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
     const back = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
     const look = this.pivot.clone().add(new THREE.Vector3(rx * sh, 0, rz * sh));
-    const want = look.clone().addScaledVector(back, this.dist + (player.sprinting ? 0.5 : 0));
+    const want = look.clone().addScaledVector(back, THREE.MathUtils.lerp(this.dist + (player.sprinting ? 0.5 : 0), 1.75, this.aim));
     // pull in when a wall is between the player and the camera
     const t = this.w.grid.ray(look, want), len = look.distanceTo(want);
     const d = Math.max(0.6, t * len - 0.25);
@@ -179,8 +192,8 @@ export class CamRig {
     if (!this.cur) this.cur = pos.clone(); else this.cur.lerp(pos, t < 1 ? 1 : 1 - Math.exp(-dt * 25));
     this.cam.position.copy(this.cur);
     this.cam.lookAt(look);
-    const fov = player.sprinting ? 76 : 70;
-    this.fov += (fov - this.fov) * Math.min(1, dt * 4);
+    const fov = THREE.MathUtils.lerp(player.sprinting ? 76 : 70, 52, this.aim);
+    this.fov += (fov - this.fov) * Math.min(1, dt * (this.aim > 0.05 ? 10 : 4));
     if (Math.abs(this.cam.fov - this.fov) > 0.01) { this.cam.fov = this.fov; this.cam.updateProjectionMatrix(); }
   }
 }

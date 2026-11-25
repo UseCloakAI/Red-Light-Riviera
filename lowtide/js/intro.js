@@ -312,7 +312,7 @@
       return m.start({
         mount: $("#gl"), hud: $("#game .hud"),
         progress: function (p) { bar.style.transform = "scaleX(" + p + ")"; },
-        sfx: { step: LT.sfx.step }, onLock: onLock, character: character
+        sfx: LT.sfx, onLock: onLock, character: character
       });
     }).then(function (g) {
       GAME = g;

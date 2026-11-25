@@ -5,7 +5,9 @@
 (function () {
   "use strict";
   var C = window.LT_CUE;
-  var ctx = null, out, hall, plate, mverb, echo, B = {}, NZ = {}, SAT2, timer = 0;
+  var ctx = null, out, hall, plate, mverb, echo, B = {}, NZ = {}, SAT2, SAT4, streetVerb, timer = 0;
+  // the street: buildings throw a shot back a beat later (made on first use)
+  function street() { return streetVerb || (streetVerb = verb(1.7, 2.2, 0.055, 3600, 0.7, B.sfx)); }
 
   /* ---------------- utilities ---------------- */
   function seeded(a) {
@@ -403,6 +405,57 @@
       var n = noise("white", t, 0.09), hp = F("highpass", surface === "sand" ? 300 : 140), lp = F("lowpass", surface === "wood" ? 2200 : surface === "sand" ? 1600 : 1100, 0.7), g = G(0);
       perc(g, t, 0.002, (surface === "sand" ? 0.05 : 0.09) * v, surface === "sand" ? 0.09 : 0.06); chain(n, hp, lp, g, P((rnd() - 0.5) * 0.2), B.sfx);
       var o = O("sine", surface === "wood" ? 140 : 90, t), og = G(0); perc(og, t, 0.002, (surface === "wood" ? 0.1 : 0.06) * v, 0.05); chain(o, og, B.sfx); o.start(t); o.stop(t + 0.12);
+    },
+    /* guns: a pistol shot outdoors is a supersonic crack, a short chesty
+       thump, then the street throwing it back off the buildings */
+    shot: function (dist, pan) {
+      if (!ctx) return; var t = now(), d = dist || 0, v = 1 / (1 + d / 18), bus = G(v), lp = F("lowpass", 16000 / (1 + d / 25), 0.5), pn = P(pan || 0);
+      chain(bus, lp, pn, B.sfx); send(pn, street(), 0.35 + Math.min(0.5, d / 60));
+      var sh = ctx.createWaveShaper(); sh.curve = SAT4 || (SAT4 = sat(4)); sh.connect(bus);
+      var n = noise("white", t, 0.08), hp = F("highpass", 1400), cg = G(0); perc(cg, t, 0.0004, 0.95, 0.045); chain(n, hp, cg, sh);
+      var m = noise("white", t, 0.14), bp = F("bandpass", 950, 0.9), mg = G(0); perc(mg, t, 0.0008, 0.8, 0.08); chain(m, bp, mg, sh);
+      var o = O("sine", 160, t), og = G(0); o.frequency.exponentialRampToValueAtTime(44, t + 0.14); perc(og, t, 0.001, 1.1, 0.13); chain(o, og, sh); o.start(t); o.stop(t + 0.35);
+      if (d < 4) {   // your own gun: the slide cycling, right by your ear
+        var k = noise("white", t + 0.035, 0.03), kb = F("bandpass", 3600, 2), kg = G(0); perc(kg, t + 0.035, 0.0006, 0.16, 0.02); chain(k, kb, kg, B.sfx);
+      }
+    },
+    dry: function () {
+      if (!ctx) return; var t = now();
+      var n = noise("white", t, 0.03), bp = F("bandpass", 2900, 3), g = G(0); perc(g, t, 0.0005, 0.3, 0.014); chain(n, bp, g, B.sfx);
+      var o = O("triangle", 1700, t), og = G(0); perc(og, t, 0.0005, 0.04, 0.02); chain(o, og, B.sfx); o.start(t); o.stop(t + 0.05);
+    },
+    // magazine out, magazine in, slide forward: lined up with the 1.4 s reload
+    reload: function () {
+      if (!ctx) return; var t = now();
+      var click = function (at, f, a, dec) { var n = noise("white", at, 0.05), bp = F("bandpass", f, 2.2), g = G(0); perc(g, at, 0.0005, a, dec); chain(n, bp, g, B.sfx); };
+      click(t + 0.05, 2600, 0.18, 0.02);
+      var s = noise("white", t + 0.1, 0.18), sb = F("bandpass", 1400, 1.5), sg = G(0); sb.frequency.linearRampToValueAtTime(2400, t + 0.26);
+      sg.gain.setValueAtTime(0, t + 0.1); sg.gain.linearRampToValueAtTime(0.05, t + 0.15); sg.gain.linearRampToValueAtTime(0, t + 0.28); chain(s, sb, sg, B.sfx);
+      click(t + 0.62, 900, 0.3, 0.04); click(t + 0.63, 3200, 0.2, 0.02);
+      click(t + 1.02, 2100, 0.22, 0.03); click(t + 1.12, 3400, 0.3, 0.03);
+    },
+    draw: function () {
+      if (!ctx) return; var t = now();
+      var n = noise("pink", t, 0.25), bp = F("bandpass", 1200, 0.8), g = G(0); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.08); g.gain.linearRampToValueAtTime(0, t + 0.22); chain(n, bp, g, B.sfx);
+      var k = noise("white", t + 0.2, 0.03), kb = F("bandpass", 3000, 2), kg = G(0); perc(kg, t + 0.2, 0.0005, 0.15, 0.02); chain(k, kb, kg, B.sfx);
+    },
+    // brass on the pavement: two inharmonic rings
+    shell: function (v, pan) {
+      if (!ctx) return; var t = now(), p = P(pan || 0); p.connect(B.sfx); v = v || 1;
+      [4180, 6290, 9120].forEach(function (f, i) { var o = O("sine", f * (0.97 + rnd() * 0.06), t), g = G(0); perc(g, t, 0.0008, [0.045, 0.03, 0.012][i] * v, [0.14, 0.09, 0.05][i]); chain(o, g, p); o.start(t); o.stop(t + 0.25); });
+    },
+    // a round landing: in someone, on stone, or in sand
+    impact: function (kind, dist, pan) {
+      if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 10), p = P(pan || 0); p.connect(B.sfx);
+      if (kind === "flesh") {
+        var n = noise("brown", t, 0.1), lp = F("lowpass", 700), g = G(0); perc(g, t, 0.002, 0.5 * v, 0.07); chain(n, lp, g, p);
+        var o = O("sine", 95, t), og = G(0); perc(og, t, 0.002, 0.25 * v, 0.06); chain(o, og, p); o.start(t); o.stop(t + 0.15);
+      } else if (kind === "sand") {
+        var s = noise("pink", t, 0.12), sl = F("lowpass", 1500), sg = G(0); perc(sg, t, 0.002, 0.16 * v, 0.08); chain(s, sl, sg, p);
+      } else {
+        var h = noise("white", t, 0.06), hh = F("highpass", 2200), hg = G(0); perc(hg, t, 0.0006, 0.22 * v, 0.03); chain(h, hh, hg, p); send(hg, street(), 0.2);
+        if (rnd() < 0.3) { var w = O("sine", 2600 + rnd() * 900, t), wg = G(0); w.frequency.exponentialRampToValueAtTime(1300, t + 0.3); perc(wg, t, 0.01, 0.025 * v, 0.25); chain(w, wg, p); w.start(t); w.stop(t + 0.4); }
+      }
     },
     // short air movement for menu transitions
     whoosh: function (t, dur, from, to) {

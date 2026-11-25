@@ -37,6 +37,26 @@ export class Hud {
     el.textContent = text; el.classList.add("on");
     clearTimeout(this.subT); this.subT = setTimeout(() => el.classList.remove("on"), 2400 + text.length * 45);
   }
+  // armed: { name, ammo, left, reloading } or null
+  weapon(w) {
+    const el = this.wEl || (this.wEl = this.root.querySelector(".weapon")); if (!el) return;
+    el.hidden = !w; if (!w) return;
+    const k = w.ammo + "/" + w.left + (w.reloading ? "r" : ""); if (k === this.wKey) return; this.wKey = k;
+    el.querySelector("b").textContent = w.ammo; el.querySelector("span").textContent = "/ " + w.left; el.classList.toggle("reloading", !!w.reloading);
+  }
+  // shown while aiming; the ticks open with the spread and go red over a person
+  reticle(alpha, spreadPx, target) {
+    const el = this.rEl || (this.rEl = this.root.querySelector(".reticle")); if (!el) return;
+    const o = alpha > 0.3 ? 1 : 0, s = Math.round(4 + Math.min(40, spreadPx));
+    if (o !== this.rO) { el.style.opacity = o; this.rO = o; }
+    if (s !== this.rS) { el.style.setProperty("--s", s + "px"); this.rS = s; }
+    if (target !== this.rT) { el.classList.toggle("target", target); this.rT = target; }
+  }
+  hitmark(kill) {
+    const el = this.hEl || (this.hEl = this.root.querySelector(".hitmark")); if (!el) return;
+    el.classList.toggle("kill", !!kill); el.getAnimations().forEach((a) => a.cancel());
+    el.animate([{ opacity: 1, scale: 1.25 }, { opacity: 1, scale: 1, offset: 0.25 }, { opacity: 0, scale: 1 }], { duration: kill ? 420 : 260, easing: "cubic-bezier(.16,1,.3,1)" });
+  }
   setWanted(n) {
     this.wanted = n;
     this.starsEl.innerHTML = [0, 1, 2, 3, 4].map((i) => `<i class="${i < n ? "on" : ""}">★</i>`).join("");

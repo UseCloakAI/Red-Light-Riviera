@@ -7,13 +7,15 @@
    they pass. Some stand about instead: pairs in conversation (nodding, shaking
    their heads, taking turns) and people waiting by the buildings, who break up
    after a while and walk on. Walkers
-   flee or duck when something goes wrong nearby (alarm), sidestep a player running at them, and stagger if barged. They
+   flee or duck when something goes wrong nearby (alarm), take hits and go
+   down as ragdolls (bodies clear once out of sight), sidestep a player running at them, and stagger if barged. They
    are recycled out of sight as the player moves. Animation only runs near
    the camera, and the crowd shrinks if the machine is struggling. */
 import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
 import { P as PITCH } from "./world.js?v=dev";
 import { AMBIENT, BUMP, PANIC } from "./lines.js?v=dev";
+import { findBones, Ragdoll } from "./rig.js?v=dev";
 
 const INSET = 1.5;                       // walk this far in from the lot edge (sidewalk is 3 m)
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.4;
@@ -72,6 +74,19 @@ export async function spawnPeds(scene, world, o = {}) {
     m.st = { x: bx, z: bz, yaw: yawB - open * Math.sign(Math.sin(yawB - out)), t, lead: false, mate: pd, s: pd.s + 0.55 };
     m.L = L; m.s = pd.s;
   }
+  // back into the crowd as a fresh face somewhere out of sight
+  function revive(pd, near) {
+    pd.dead = false; pd.rag = null; pd.hp = 100; pd.fear = null; pd.cower = 0; pd.stagger = 0; pd.pause = 0; pd.st = null;
+    place(pd, near); pd.h.group.visible = false;
+  }
+  function die(pd, hit) {
+    if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
+    pd.B = pd.B || findBones(pd.h.group);
+    pd.dead = true; pd.fear = null; pd.cross = null;
+    if (!pd.B) { pd.h.group.visible = false; return; }
+    pd.h.group.updateMatrixWorld(true);
+    pd.rag = new Ragdoll(pd.B, world, new THREE.Vector3(pd.vx, 0, pd.vz), hit);
+  }
   // done talking: walk on from where they stood
   function breakUp(pd) {
     // pick up from the spot on the loop, still 0.75 m toward the buildings; side eases back to the line
@@ -100,7 +115,7 @@ export async function spawnPeds(scene, world, o = {}) {
     const mixer = new THREE.AnimationMixer(h.group), act = {};
     for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
-    const pd = { h, mixer, act, head, neck, dir: R() < 0.5 ? 1 : -1, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0,
+    const pd = { h, mixer, act, head, neck, dir: R() < 0.5 ? 1 : -1, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
       side: 0, look: 0, stagger: 0, cross: null, st: null, gW: 0, gT: 0, gest: null };
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
@@ -171,6 +186,12 @@ export async function spawnPeds(scene, world, o = {}) {
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
         if (idx >= limit) { g.visible = false; return; }
+        if (pd.dead) {   // a body: let it fall and settle; clear it away once nobody can see
+          const dd = Math.hypot(g.position.x - px, g.position.z - pz);
+          if (dd > FAR * 0.6) { revive(pd, player.pos); return; }
+          if (dd < NEAR && pd.rag.step(dt)) pd.rag.pose();
+          return;
+        }
         let x, z, hx, hz;
         const st = pd.st, lead = st && (st.lead ? pd : st.mate);
         if (st) {
@@ -223,8 +244,9 @@ export async function spawnPeds(scene, world, o = {}) {
             if (hit && maybeCross(pd, k)) break;
           }
         }
-        const gy = world.heightAt(x + rx * pd.side, z + rz * pd.side);
-        g.position.set(x + rx * pd.side, gy, z + rz * pd.side);
+        const gy = world.heightAt(x + rx * pd.side, z + rz * pd.side), nx = x + rx * pd.side, nz = z + rz * pd.side;
+        if (dt > 0) { pd.vx = (nx - g.position.x) / dt; pd.vz = (nz - g.position.z) / dt; if (Math.hypot(pd.vx, pd.vz) > 8) pd.vx = pd.vz = 0; }
+        g.position.set(nx, gy, nz);
         let yaw = Math.atan2(hx, hz);
         if (pd.stagger > 0) yaw = Math.atan2(toP.x, toP.z);                     // turn to see who did that
         else if (pd.cower > 0 && pd.fear) yaw = Math.atan2(x - pd.fear.x, z - pd.fear.z);   // duck, back to the danger
@@ -247,6 +269,16 @@ export async function spawnPeds(scene, world, o = {}) {
         }
       });
     },
+    // a round hit someone. hit: { point, dir, damage, head, from }. Returns "dead", "hurt" or "body"
+    damage(pd, hit) {
+      if (pd.dead) { if (pd.rag) { pd.rag.impulse(hit.point, hit.dir, 2.5); pd.rag.sleep = 0; } return "body"; }
+      pd.hp -= hit.head ? 1000 : hit.damage;
+      if (pd.hp <= 0) { die(pd, { point: hit.point, dir: hit.dir, force: hit.head ? 3 : 4.5 }); return "dead"; }
+      if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
+      pd.stagger = 0.7; pd.cower = 0; pd.pause = 0.4;
+      pd.fear = { x: hit.from.x, z: hit.from.z, t: 20 }; pd.speed *= 0.8;   // hurt: they still run, a little slower
+      return "hurt";
+    },
     // something went wrong at (x, z): people within r run from it; the closest may duck first
     alarm(x, z, r = 40, shout = true) {
       let nearest = null, nd = Infinity;
@@ -267,7 +299,8 @@ export async function spawnPeds(scene, world, o = {}) {
     // keep the player from walking through people; a sprinting player knocks them off their stride
     push(p, r, speed) {
       for (let i = 0; i < Math.min(limit, peds.length); i++) {
-        const pd = peds[i], g = pd.h.group.position, dx = p.x - g.x, dz = p.z - g.z, dd = Math.hypot(dx, dz), m = r + 0.3;
+        const pd = peds[i]; if (pd.dead) continue;
+        const g = pd.h.group.position, dx = p.x - g.x, dz = p.z - g.z, dd = Math.hypot(dx, dz), m = r + 0.3;
         if (dd < m && dd > 1e-4) {
           p.x = g.x + dx / dd * m; p.z = g.z + dz / dd * m;
           if ((speed || 0) > 5 && pd.stagger <= 0) { pd.stagger = 1.2; pd.side += (dx > 0 ? -0.4 : 0.4); say(BUMP[(R() * BUMP.length) | 0]); if (o.onBump) o.onBump(pd); }

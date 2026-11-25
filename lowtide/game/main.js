@@ -8,6 +8,7 @@ import { buildSky } from "./sky.js?v=dev";
 import { Player, CamRig, Input } from "./player.js?v=dev";
 import { Hud } from "./hud.js?v=dev";
 import { spawnPeds } from "./peds.js?v=dev";
+import { Arsenal } from "./weapons.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 
@@ -58,6 +59,9 @@ export async function start(o) {
   try { peds = await spawnPeds(scene, world, { count: o.peds || 18, near: player.pos, onSpeak: (t) => hud.subtitle(t), progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
+  // Stage 3: weapons
+  const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
+
   // warm up: compile every shader and fill the shadow map before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
   renderer.compile(scene, camera); renderer.render(scene, camera);
@@ -80,7 +84,7 @@ export async function start(o) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
-    if (input.locked) { player.update(dt, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
+    if (input.locked) { arsenal.update(dt, input); player.update(dt, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
     else player.animate(dt);
     if (peds) peds.update(dt, player);
     rig.update(dt, input, player);
@@ -100,7 +104,7 @@ export async function start(o) {
     lock() { input.lock(); },
     drawMap(ctx, w, h) { hud.drawFull(ctx, w, h, player); },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
-    rig, world, get peds() { return peds; }
+    rig, world, arsenal, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };
