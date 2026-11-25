@@ -15,11 +15,21 @@ import { HELD } from "./lines.js?v=dev";
 // hold: how it's carried and aimed. pellets > 1: a spread of shot; perShell: reloads one round at a time
 export const WEAPONS = {
   pistol: { id: "pistol", name: "Pistol", hold: "pistol", mag: 12, reserve: 60, damage: 34, rate: 0.16, reload: 1.4, spread: 0.004, range: 180, pellets: 1, recoil: 0.03 },
+  melee: { id: "melee", name: "Bat", hold: "bat", melee: true, damage: 48, rate: 0.62 },
   shotgun: { id: "shotgun", name: "Pump Shotgun", hold: "long", mag: 6, reserve: 24, damage: 16, rate: 0.95, reload: 0.55, perShell: true, spread: 0.055, range: 70, pellets: 8, recoil: 0.085 }
 };
 export const PISTOL = WEAPONS.pistol;
 // the wheel: eight places like the real thing; empty ones wait for later weapons
 export const WHEEL = [null, "melee", "pistol", "smg", "shotgun", "rifle", "sniper", "thrown"];
+
+/* ---------------- the bat: ash, taped grip, knob ---------------- */
+function batModel() {
+  const g = new THREE.Group(), wood = new THREE.MeshLambertMaterial({ color: 0xa8743e }), tape = new THREE.MeshLambertMaterial({ color: 0x1c1c1e });
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.017, 0.6, 8).rotateX(Math.PI / 2).translate(0, 0, 0.53), wood);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.015, 0.24, 6).rotateX(Math.PI / 2).translate(0, 0, 0.12), tape);
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 8).rotateX(Math.PI / 2), wood);
+  g.add(barrel, handle, knob); return g;   // the knob at the origin, the barrel along +z
+}
 
 /* ---------------- the pistol ---------------- */
 function canvasTex(size, draw) { const c = document.createElement("canvas"); c.width = c.height = size; draw(c.getContext("2d"), size); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
@@ -216,7 +226,9 @@ export class Arsenal {
     Object.assign(this, { scene, camera, world, player, rig, hud, peds, sfx: sfx || {}, onShot });
     this.B = player.model ? findBones(player.model) : null;
     const load = (w) => Object.assign({ ammo: w.mag, left: w.reserve }, w);
-    this.slots = [null, load(WEAPONS.pistol), load(WEAPONS.shotgun)];
+    this.slots = [null, load(WEAPONS.pistol), load(WEAPONS.shotgun), load(WEAPONS.melee)];
+    this.bat = batModel(); this.bat.visible = false; scene.add(this.bat);
+    this.atk = null; this.combo = 0; this.lastEnd = -9; this.queued = false; this.guardT = 0; this.gw = 0; this.hitStop = 0; this.clock = 0;
     this.cur = 0; this.aim = 0; this.quick = 0; this.cool = 0; this.reloading = 0; this.bloom = 0; this.kick = 0; this.pending = false; this.held = 0;
     this.latch = false; this.press = {}; this.assist = null; this.pumpT = 0; this.timeScale = 1; this.wheelOpen = false; this.wv = new THREE.Vector2(); this.wsel = 0;
     // one model per weapon, each with its own muzzle flash
@@ -254,7 +266,7 @@ export class Arsenal {
     this.reloading = w.perShell ? w.reload + 0.15 : w.reload;
     if (!w.perShell && this.sfx.reload) this.sfx.reload();
   }
-  hudSync() { const w = this.weapon; if (this.hud.weapon) this.hud.weapon(w ? { id: w.id, name: w.name, ammo: w.ammo, left: w.left, reloading: this.reloading > 0 } : null); }
+  hudSync() { const w = this.weapon; if (this.hud.weapon) this.hud.weapon(w ? { id: w.id, name: w.name, ammo: w.ammo, left: w.left, melee: !!w.melee, reloading: this.reloading > 0 } : null); }
 
   // tap = toggle, hold = while held (so a trackpad's two-finger click or Q locks the aim on)
   // aims from the moment it's pressed; let go quickly and the aim stays (or, if it was locked, comes off)
@@ -271,11 +283,15 @@ export class Arsenal {
     if (input.hit("Digit1")) this.equip(0);
     if (input.hit("Digit2")) this.equip(1);
     if (input.hit("Digit3")) this.equip(2);
+    if (input.hit("Digit4")) this.equip(3);
+    this.clock += dt;
+    if (this.hitStop > 0) { this.hitStop -= dt; this.timeScale = 0.12; }   // a beat of hit-stop on a landed blow
     if (input.wheel && !this.wheelOpen) { this.equip((this.cur + Math.sign(input.wheel) + this.slots.length) % this.slots.length); input.wheel = 0; }
-    const w = this.weapon, armed = !!w;
+    const w0 = this.weapon, melee = !w0 || !!w0.melee, w = melee ? null : w0, armed = !!w;
+    if (melee) this.meleeUpdate(dt, input); else if (this.atk) { this.atk = null; this.player.aimYaw = null; }
     this.quick = Math.max(0, this.quick - dt); this.cool = Math.max(0, this.cool - dt);
     const holdR = this.tapHold(input, "Mouse2", dt), holdQ = this.tapHold(input, "KeyQ", dt);
-    if (!armed || (input.down("ShiftLeft", "ShiftRight") && this.player.speed > 3)) this.latch = false;   // sprinting drops the aim
+    if (!armed || (input.down("ShiftLeft", "ShiftRight") && this.player.speed > 3)) this.latch = false;   // sprinting drops the aim   // sprinting drops the aim
     const wantAim = armed && !this.wheelOpen && (holdR || holdQ || this.latch || this.quick > 0);
     // assisted aim: raising the gun finds the nearest person near the reticle
     if (wantAim && this.aim < 0.15 && !this.assist) this.assist = this.findTarget(0.22, 45);
@@ -284,7 +300,7 @@ export class Arsenal {
     this.aim += ((wantAim ? 1 : 0) - this.aim) * Math.min(1, dt * (wantAim ? 12 : 8));
     if (this.aim < 0.002) this.aim = 0;
     this.rig.aim = this.aim;
-    this.player.aimYaw = wantAim ? this.rig.yaw + Math.PI : null;
+    if (!this.atk) this.player.aimYaw = wantAim ? this.rig.yaw + Math.PI : null;
     if (this.assist) this.pullToward(this.assist, dt);
 
     // where the reticle points
@@ -328,10 +344,122 @@ export class Arsenal {
     this.fx.update(dt, this.world, (v, p, kind) => this.sfx.shell && this.sfx.shell(v * 0.8, 0, kind));
     if (this.hud.reticle) this.hud.reticle(armed ? this.aim : 0, this.spread() * 900, !!this.over);
   }
+  /* ---- melee: fists (a jab, a cross, a hook that can put them down) and the bat ---- */
+  meleeUpdate(dt, input) {
+    const bat = !!(this.weapon && this.weapon.melee), P = this.player;
+    this.guardT = Math.max(0, this.guardT - dt);
+    const press = (input.hit("Mouse0") | input.hit("KeyF")) && !this.wheelOpen;
+    if (press) { if (!this.atk) this.swing(bat); else if (this.atk.t > this.atk.dur * 0.4) this.queued = true; }
+    const a = this.atk; if (!a) return;
+    a.t += dt;
+    // face the target and close the gap during the wind-up
+    if (a.target && !a.target.dead && !(a.target.down > 0)) {
+      const g = a.target.h.group.position, dx = g.x - P.pos.x, dz = g.z - P.pos.z, d = Math.hypot(dx, dz) || 1;
+      P.aimYaw = Math.atan2(dx, dz);
+      if (a.t < a.dur * a.at && d > a.reach * 0.7) { const st = Math.min(d - a.reach * 0.65, 3.4 * dt); P.pos.x += dx / d * st; P.pos.z += dz / d * st; }
+    } else P.aimYaw = a.yaw;
+    if (!a.done && a.t >= a.dur * a.at) { a.done = true; this.strike(a); }
+    if (a.t >= a.dur) {
+      this.atk = null; P.aimYaw = null; this.lastEnd = this.clock;
+      if (this.queued) { this.queued = false; this.swing(bat); }
+    }
+  }
+  swing(bat) {
+    this.combo = !bat && this.clock - this.lastEnd < 0.45 ? (this.combo % 3) + 1 : 1;
+    const k = this.combo, target = this.meleeTarget(3.2);
+    this.atk = { t: 0, bat, k, target, yaw: this.rig.yaw + Math.PI, done: false,
+      dur: bat ? 0.62 : k === 3 ? 0.5 : 0.34, at: bat ? 0.5 : k === 3 ? 0.48 : 0.42, reach: bat ? 1.95 : 1.4, hand: bat ? "bat" : k === 2 ? "L" : "R" };
+    this.guardT = 3; if (this.sfx.swing) setTimeout(() => this.sfx.swing(bat ? "bat" : "fist", 0), bat ? 260 : 90);
+    if (k === 1) this.emit(bat ? "swing:bat" : "swing:fist");
+  }
+  // who you'd swing at: the nearest person roughly where you're looking
+  meleeTarget(range) {
+    if (!this.peds) return null;
+    const P = this.player.pos, yaw = this.rig.yaw + Math.PI, fx = Math.sin(yaw), fz = Math.cos(yaw);
+    let best = null, bs = Infinity;
+    for (const pd of this.peds.peds) {
+      if (pd.dead || pd.down > 0 || !pd.h.group.visible) continue;
+      const g = pd.h.group.position, dx = g.x - P.x, dz = g.z - P.z, d = Math.hypot(dx, dz);
+      if (d > range || d < 1e-3) continue;
+      const c = (dx * fx + dz * fz) / d; if (c < 0.35) continue;
+      const sc = d + (1 - c) * 3; if (sc < bs) { bs = sc; best = pd; }
+    }
+    return best;
+  }
+  strike(a) {
+    const P = this.player, yaw = P.aimYaw !== null && P.aimYaw !== undefined ? P.aimYaw : P.yaw, fx = Math.sin(yaw), fz = Math.cos(yaw);
+    // a person in reach, in front
+    let pd = null, bd = Infinity;
+    if (this.peds) for (const q of this.peds.peds) {
+      if (q.dead || !q.h.group.visible) continue;
+      const g = q.h.group.position, dx = g.x - P.pos.x, dz = g.z - P.pos.z, d = Math.hypot(dx, dz);
+      if (d > a.reach + 0.25 || (dx * fx + dz * fz) / (d || 1) < 0.4) continue;
+      if (d < bd) { bd = d; pd = q; }
+    }
+    const dir = new THREE.Vector3(fx, 0.12, fz).normalize();
+    if (pd) {
+      const g = pd.h.group.position, low = pd.down > 0, point = new THREE.Vector3(g.x, g.y + (low ? 0.3 : a.k === 3 ? 1.5 : 1.35), g.z);
+      const dmg = a.bat ? 48 : a.k === 3 ? 26 : 15;
+      const knock = a.bat ? Math.random() < 0.75 : a.k === 3 && Math.random() < 0.8;
+      const r = this.peds.damage(pd, { point, dir, damage: dmg, from: P.pos.clone(), melee: true, blunt: a.bat ? 0.8 : 0.25, knock, force: a.bat ? 6.5 : a.k === 3 ? 5 : 3 });
+      if (this.sfx.punch) this.sfx.punch(a.bat ? "bat" : "fist", 0);
+      this.rig.shake = Math.max(this.rig.shake, a.bat ? 0.45 : 0.22); this.hitStop = a.bat ? 0.09 : a.k === 3 ? 0.07 : 0.045;
+      if (this.hud.hitmark && r !== "body") this.hud.hitmark(r === "dead");
+      this.peds.alarm(P.pos.x, P.pos.z, 16, true, "fight");
+      if (this.onMelee) this.onMelee(pd, r);
+      return;
+    }
+    // a car: a dent (and the driver's not pleased)
+    const hx = P.pos.x + fx * 1.0, hz = P.pos.z + fz * 1.0, V = this.vehicles;
+    if (V) {
+      const all = V.cars.concat(this.traffic ? this.traffic.cars.filter((c) => c.active) : []);
+      const c = all.find((k) => !k.wreck && V.touching(k, hx, hz, 0.35));
+      if (c) {
+        V.impactCar(c, hx, hz, fx, fz, a.bat ? 7.5 : 4); if (a.bat) V.hurt(c, 5);
+        if (c.ai) { c.stun = Math.max(c.stun || 0, 1.5); }
+        if (this.sfx.punch) this.sfx.punch("car", 0); this.rig.shake = Math.max(this.rig.shake, 0.3); this.hitStop = 0.05;
+      }
+    }
+  }
+  // the body for melee: fists up while fighting (the punching hand drives out and back), or the bat
+  poseMelee(B, w, dt) {
+    const a = this.atk, up = _up.set(0, 1, 0), yaw = this.player.yaw, fwd = _f.set(Math.sin(yaw), 0, Math.cos(yaw));
+    this.gw += ((a || this.guardT > 0 ? 1 : 0) - this.gw) * Math.min(1, dt * 10);
+    const chest = wpos(B.chest, _c), sL = wpos(B.armL[0], _sl), sR = wpos(B.armR[0], _sr), right = _r.copy(sR).sub(sL).normalize();
+    const p = a ? a.t / a.dur : 0, ext = !a ? 0 : p < a.at ? Math.pow(p / a.at, 1.6) : Math.max(0, 1 - (p - a.at) / (1 - a.at));
+    if (!w) {   // fists
+      if (this.gw < 0.01) return;
+      if (a) { _q.setFromAxisAngle(up, (a.hand === "L" ? 0.28 : -0.28) * ext); turnWorld(B.chest, _q); }   // the shoulders turn into it
+      for (const [arm, sgn, id] of [[B.armR, 1, "R"], [B.armL, -1, "L"]]) {
+        const e = a && a.hand === id ? ext : 0, hook = a && a.k === 3 && id === "R" ? 1 - ext : 0;
+        const T = _t.copy(chest).addScaledVector(fwd, 0.28 + e * 0.4).addScaledVector(up, 0.17 - e * 0.05).addScaledVector(right, sgn * (0.13 - e * 0.1 + hook * e * 0.25));
+        ik(arm, T, _p.set(0, -1, 0).addScaledVector(right, sgn * 0.9), this.gw);
+      }
+      return;
+    }
+    // the bat
+    const bat = this.bat;
+    if (!a) {   // carried in the right hand, barrel down and forward
+      const hand = wpos(B.armR[2], _h), fing = wpos(B.armR[3], _fg).sub(hand).normalize();
+      const dir = _lb.copy(fing).multiplyScalar(0.7).addScaledVector(fwd, 0.35).addScaledVector(up, -0.2).normalize();
+      gunQuat(bat.quaternion, dir, _gu.copy(fwd)); bat.position.copy(hand).addScaledVector(fing, 0.03).addScaledVector(dir, -0.08);
+      return;
+    }
+    // the swing: cocked back over the right shoulder, across the front, through to the left
+    const th = p < 0.38 ? THREE.MathUtils.lerp(0.5, 2.1, Math.sin(p / 0.38 * Math.PI / 2)) : p < 0.66 ? THREE.MathUtils.lerp(2.1, -1.5, (p - 0.38) / 0.28) : THREE.MathUtils.lerp(-1.5, -0.9, (p - 0.66) / 0.34);
+    const lift = p < 0.38 ? 0.55 : p < 0.66 ? THREE.MathUtils.lerp(0.55, 0.05, (p - 0.38) / 0.28) : 0.1;
+    const d = _v.copy(fwd).multiplyScalar(Math.cos(th)).addScaledVector(right, Math.sin(th)).normalize();
+    _q.setFromAxisAngle(up, Math.max(-0.6, Math.min(0.6, -th * 0.3))); turnWorld(B.chest, _q);
+    const grip = _t.copy(chest).addScaledVector(fwd, 0.22).addScaledVector(right, 0.06).addScaledVector(up, -0.06 + lift * 0.3);
+    const batDir = _ab.copy(d).addScaledVector(up, lift).normalize();
+    gunQuat(bat.quaternion, batDir, up); bat.position.copy(grip).addScaledVector(batDir, -0.04);
+    ik(B.armR, _tl.copy(grip).addScaledVector(batDir, 0.08), _p.set(0, -1, 0).addScaledVector(right, 0.8));
+    ik(B.armL, _m.copy(grip).addScaledVector(batDir, -0.02), _p.set(0, -1, 0).addScaledVector(right, -0.6));
+  }
   // effects keep running while you drive (smoke, sparks, brass)
   tickFx(dt) { this.fx.update(dt, this.world, () => {}); }
   spread() {
-    const w = this.weapon; if (!w) return 0;
+    const w = this.weapon; if (!w || w.melee) return 0;
     return w.spread + this.bloom + (1 - this.aim) * 0.03 + Math.min(this.player.speed, 3) * 0.004;
   }
 
@@ -475,10 +603,12 @@ export class Arsenal {
   }
 
   // after the clips: raise the arms onto the aim, seat the gun
-  pose() {
+  pose(dt = 0.016) {
     const B = this.B, w = this.weapon;
     for (const [id, m] of Object.entries(this.models)) m.visible = !!B && !!w && w.id === id;
-    if (!B || !w) return;
+    this.bat.visible = !!B && !!w && !!w.melee;
+    if (!B) return;
+    if (!w || w.melee) return this.poseMelee(B, w, dt);
     const a = this.aim, up = _up.set(0, 1, 0), yaw = this.player.yaw, fwd = _f.set(Math.sin(yaw), 0, Math.cos(yaw));
     const chest = wpos(B.chest, _c);
     this.aimDir.copy(this.target).sub(chest).normalize();

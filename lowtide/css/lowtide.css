@@ -188,7 +188,8 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .weapon b{font:extra-condensed 900 34px/1 var(--fd)}
 .weapon span{font:600 15px/1 var(--fu);opacity:.75;align-self:flex-end;margin-bottom:4px}
 .weapon.reloading b{opacity:.4}
-.weapon svg{display:none}.weapon[data-w=pistol] .i-pistol,.weapon[data-w=shotgun] .i-shotgun{display:block}
+.weapon svg{display:none}.weapon[data-w=pistol] .i-pistol,.weapon[data-w=shotgun] .i-shotgun,.weapon[data-w=melee] .i-melee{display:block}
+.weapon .i-melee{width:90px}
 .weapon .i-shotgun{width:96px}
 /* the weapon wheel: eight places round a ring; the world slows while it's up */
 .wheel{position:absolute;left:50%;top:50%;width:460px;height:460px;margin:-230px 0 0 -230px;border-radius:50%;opacity:0;scale:.92;transition:opacity .14s,scale .2s var(--e-out);

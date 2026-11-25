@@ -22,7 +22,7 @@ export const SIDEWALK = 3, KERB = 0.12;
 function author() {
   const N = {}, E = [];
   const node = (id, x, z) => (N[id] = { id, x, z, ends: [] });
-  const road = (a, b, w, name, via = [], kind = "street") => E.push({ a, b, w, name, via, kind });
+  const road = (a, b, w, name, via = [], kind = "street") => E.push({ a, b, w: kind === "street" ? w + 2 : w, name, via, kind });   // streets: room for a parked row and two lanes
   const zT = (x) => promenade(x) - 10;   // Tideline Avenue's centreline: its south pavement is the promenade
   const along = (x0, x1, f, step = 30) => { const v = []; const n = Math.max(1, Math.round(Math.abs(x1 - x0) / step)); for (let i = 1; i < n; i++) { const x = x0 + (x1 - x0) * i / n; v.push([x, f(x)]); } return v; };
 
