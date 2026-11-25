@@ -187,6 +187,21 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .weapon b{font:extra-condensed 900 34px/1 var(--fd)}
 .weapon span{font:600 15px/1 var(--fu);opacity:.75;align-self:flex-end;margin-bottom:4px}
 .weapon.reloading b{opacity:.4}
+.weapon svg{display:none}.weapon[data-w=pistol] .i-pistol,.weapon[data-w=shotgun] .i-shotgun{display:block}
+.weapon .i-shotgun{width:96px}
+/* the weapon wheel: eight places round a ring; the world slows while it's up */
+.wheel{position:absolute;left:50%;top:50%;width:460px;height:460px;margin:-230px 0 0 -230px;border-radius:50%;opacity:0;scale:.92;transition:opacity .14s,scale .2s var(--e-out);
+  background:radial-gradient(circle,rgba(7,9,12,.5) 0 30%,rgba(7,9,12,.78) 31% 70%,rgba(7,9,12,0) 71%)}
+.wheel.on{opacity:1;scale:1}
+.ws{position:absolute;left:50%;top:50%;width:112px;height:70px;margin:-35px 0 0 -56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  translate:calc(sin(var(--a)) * 160px) calc(cos(var(--a)) * -160px);border:2px solid rgba(247,242,234,.1);background:rgba(247,242,234,.04);color:rgba(247,242,234,.85)}
+.ws svg{height:26px;width:auto;fill:currentColor}
+.ws small{font:700 10px/1 var(--fu);letter-spacing:.14em;text-transform:uppercase;opacity:.7}
+.ws.empty{color:rgba(247,242,234,.18)}.ws.empty small{opacity:1}
+.ws.on{border-color:var(--gold);background:rgba(240,180,41,.16);color:#FFF5EA}
+.wc{position:absolute;left:50%;top:50%;translate:-50% -50%;text-align:center;display:flex;flex-direction:column;gap:6px;width:150px}
+.wc b{font:extra-condensed 900 26px/1 var(--fd);text-transform:uppercase;color:#FFF5EA}
+.wc span{font:600 13px/1 var(--fu);opacity:.75}
 .reticle{--s:6px;position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;transition:opacity .12s}
 .reticle i{position:absolute;background:#F7F2EA;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
 .reticle i:nth-child(1),.reticle i:nth-child(2){width:2px;height:7px;left:-1px}

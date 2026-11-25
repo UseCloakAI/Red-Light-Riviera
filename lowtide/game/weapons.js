@@ -12,7 +12,14 @@ import * as THREE from "three";
 import { findBones, ik, point, turnWorld, wpos } from "./rig.js?v=dev";
 import { HELD } from "./lines.js?v=dev";
 
-export const PISTOL = { id: "pistol", name: "Pistol", mag: 12, reserve: 60, damage: 34, rate: 0.16, reload: 1.4, spread: 0.004, range: 180 };
+// hold: how it's carried and aimed. pellets > 1: a spread of shot; perShell: reloads one round at a time
+export const WEAPONS = {
+  pistol: { id: "pistol", name: "Pistol", hold: "pistol", mag: 12, reserve: 60, damage: 34, rate: 0.16, reload: 1.4, spread: 0.004, range: 180, pellets: 1, recoil: 0.03 },
+  shotgun: { id: "shotgun", name: "Pump Shotgun", hold: "long", mag: 6, reserve: 24, damage: 16, rate: 0.95, reload: 0.55, perShell: true, spread: 0.055, range: 70, pellets: 8, recoil: 0.085 }
+};
+export const PISTOL = WEAPONS.pistol;
+// the wheel: eight places like the real thing; empty ones wait for later weapons
+export const WHEEL = [null, "melee", "pistol", "smg", "shotgun", "rifle", "sniper", "thrown"];
 
 /* ---------------- the pistol ---------------- */
 function canvasTex(size, draw) { const c = document.createElement("canvas"); c.width = c.height = size; draw(c.getContext("2d"), size); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
@@ -51,6 +58,36 @@ export function pistolModel() {
   g.userData.muzzle = new THREE.Vector3(0, 0.046, 0.16);
   g.userData.port = new THREE.Vector3(0.016, 0.055, 0.05);
   g.userData.slide = g.children[0];
+  return g;
+}
+
+/* A pump shotgun, original, about a metre long. Origin at the grip, barrel along +z.
+   userData: muzzle, port, butt (where it meets the shoulder), grip and pump (where the hands go), pumpMesh */
+export function shotgunModel() {
+  const steel = new THREE.MeshStandardMaterial({ color: 0x24262a, metalness: 0.85, roughness: 0.4 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5a3720, metalness: 0.0, roughness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x08080a, metalness: 0.3, roughness: 0.6 });
+  const g = new THREE.Group(), add = (geo, m, x, y, z, parent) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; (parent || g).add(o); return o; };
+  const cyl = (r, l) => new THREE.CylinderGeometry(r, r, l, 14).rotateX(Math.PI / 2);
+  add(new THREE.ExtrudeGeometry(rounded(0.034, 0.06, 0.008), { depth: 0.24, bevelEnabled: false }), steel, 0, 0.035, -0.06);   // receiver
+  add(new THREE.BoxGeometry(0.004, 0.022, 0.06), dark, 0.0172, 0.045, 0.06);                                                   // ejection port
+  add(cyl(0.0105, 0.5), steel, 0, 0.052, 0.43);                                                                                  // barrel
+  add(cyl(0.0068, 0.012), dark, 0, 0.052, 0.677);                                                                                // bore
+  add(cyl(0.0095, 0.4), steel, 0, 0.022, 0.38);                                                                                  // magazine tube
+  add(new THREE.SphereGeometry(0.004, 8, 6), new THREE.MeshStandardMaterial({ color: 0xd9c27a, metalness: 0.6, roughness: 0.3 }), 0, 0.066, 0.66);   // bead sight
+  const pump = new THREE.Group(); g.add(pump);
+  add(new THREE.ExtrudeGeometry(rounded(0.04, 0.036, 0.012), { depth: 0.17, bevelEnabled: false }), wood, 0, 0.028, 0.22, pump);   // fore-end
+  for (let i = 0; i < 6; i++) add(new THREE.BoxGeometry(0.041, 0.004, 0.006), dark, 0, 0.012, 0.24 + i * 0.024, pump);
+  // stock: a dropped side profile, extruded across
+  const sp = new THREE.Shape(); sp.moveTo(-0.055, 0.06); sp.lineTo(-0.4, 0.03); sp.lineTo(-0.405, -0.09); sp.quadraticCurveTo(-0.3, -0.08, -0.14, -0.03);
+  sp.quadraticCurveTo(-0.085, -0.06, -0.06, -0.075); sp.lineTo(-0.03, -0.07); sp.quadraticCurveTo(-0.045, -0.02, -0.03, 0.01); sp.lineTo(-0.055, 0.01);
+  const stock = new THREE.ExtrudeGeometry(sp, { depth: 0.036, bevelEnabled: true, bevelSize: 0.004, bevelThickness: 0.004, bevelSegments: 2, curveSegments: 8 });
+  stock.rotateY(-Math.PI / 2).translate(0.018, 0, 0); add(stock, wood, 0, 0, 0);
+  add(new THREE.BoxGeometry(0.044, 0.125, 0.014), dark, 0, -0.03, -0.405);                                                    // butt pad
+  add(new THREE.BoxGeometry(0.008, 0.004, 0.06), steel, 0, -0.008, 0.025); add(new THREE.BoxGeometry(0.008, 0.026, 0.004), steel, 0, 0.004, 0.055);   // guard
+  add(new THREE.BoxGeometry(0.004, 0.02, 0.004).rotateX(0.3), steel, 0, 0.012, 0.03);                                          // trigger
+  g.userData = { muzzle: new THREE.Vector3(0, 0.052, 0.69), port: new THREE.Vector3(0.022, 0.045, 0.06), butt: new THREE.Vector3(0, -0.01, -0.41),
+    grip: new THREE.Vector3(0, -0.035, -0.045), pump: new THREE.Vector3(0, 0.0, 0.31), pumpMesh: pump };
   return g;
 }
 
@@ -97,7 +134,10 @@ class Fx {
     // brass
     this.brass = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.0047, 0.0047, 0.019, 7), new THREE.MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.9, roughness: 0.3 }), 16);
     this.brass.count = 0; this.bi = 0; this.brass.frustumCulled = false; this.brass.castShadow = false; scene.add(this.brass);
-    this.shells = []; this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.one = new THREE.Vector3(1, 1, 1);
+    // shotgun hulls: red plastic, brass base
+    this.hulls = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.0105, 0.0105, 0.068, 9), new THREE.MeshStandardMaterial({ color: 0x9c1f1a, metalness: 0.1, roughness: 0.55 }), 12);
+    this.hulls.count = 0; this.hi2 = 0; this.hulls.frustumCulled = false; scene.add(this.hulls);
+    this.shells = []; this.hullS = []; this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.one = new THREE.Vector3(1, 1, 1);
   }
   puff(pos, vel, size, life, color, alpha) {
     const P = this.puffs[this.pi++ % this.puffs.length];
@@ -117,10 +157,12 @@ class Fx {
     this.m.compose(p, this.q, new THREE.Vector3(s, s, s)); this.holes.setMatrixAt(this.hi % 48, this.m); this.hi++;
     this.holes.count = Math.min(48, this.hi); this.holes.instanceMatrix.needsUpdate = true;
   }
-  shell(pos, vel) {
-    const s = this.shells[this.bi % 16] || (this.shells[this.bi % 16] = { p: new THREE.Vector3(), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3(), rest: false, bounced: 0 });
-    s.p.copy(pos); s.v.copy(vel); s.r.set(Math.random() * 6, Math.random() * 6, 0); s.w.set(20 + Math.random() * 20, 10, Math.random() * 10); s.rest = false; s.bounced = 0; s.i = this.bi % 16;
-    this.bi++; this.brass.count = Math.min(16, this.bi);
+  shell(pos, vel, kind) {
+    const hull = kind === "hull", list = hull ? this.hullS : this.shells, n = hull ? 12 : 16, idx = (hull ? this.hi2 : this.bi) % n;
+    const s = list[idx] || (list[idx] = { p: new THREE.Vector3(), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3(), rest: false, bounced: 0 });
+    s.p.copy(pos); s.v.copy(vel); s.r.set(Math.random() * 6, Math.random() * 6, 0); s.w.set(20 + Math.random() * 20, 10, Math.random() * 10); s.rest = false; s.bounced = 0; s.i = idx;
+    s.kind = hull ? "hull" : "brass"; s.mesh = hull ? this.hulls : this.brass; s.r0 = hull ? 0.0105 : 0.0047;
+    if (hull) { this.hi2++; this.hulls.count = Math.min(12, this.hi2); } else { this.bi++; this.brass.count = Math.min(16, this.bi); }
   }
   update(dt, world, onTink) {
     for (const P of this.puffs) {
@@ -137,19 +179,17 @@ class Fx {
       pa.setXYZ(i, s.p.x, s.p.y, s.p.z); const f = Math.max(0, Math.min(1, s.life * 6)); ca.setXYZ(i, s.c.r * f, s.c.g * f, s.c.b * f);
     }
     pa.needsUpdate = ca.needsUpdate = true;
-    let dirty = false;
-    for (const s of this.shells) {
-      if (!s || s.rest) continue; dirty = true;
+    for (const s of this.shells.concat(this.hullS)) {
+      if (!s || s.rest) continue; s.mesh.instanceMatrix.needsUpdate = true;
       s.v.y -= 9.8 * dt; s.p.addScaledVector(s.v, dt); s.r.x += s.w.x * dt; s.r.y += s.w.y * dt; s.r.z += s.w.z * dt;
-      const g = world.heightAt(s.p.x, s.p.z) + 0.0047;
+      const g = world.heightAt(s.p.x, s.p.z) + s.r0;
       if (s.p.y < g) {
-        s.p.y = g; if (s.v.y < -0.6 && onTink) onTink(Math.min(1, -s.v.y / 3), s.p);
+        s.p.y = g; if (s.v.y < -0.6 && onTink) onTink(Math.min(1, -s.v.y / 3), s.p, s.kind);
         s.v.y *= -0.35; s.v.x *= 0.5; s.v.z *= 0.5; s.w.multiplyScalar(0.5); s.bounced++;
         if (s.bounced > 3 || Math.abs(s.v.y) < 0.2) { s.rest = true; s.r.x = Math.PI / 2; }
       }
-      this.q.setFromEuler(s.r); this.m.compose(s.p, this.q, this.one); this.brass.setMatrixAt(s.i, this.m);
+      this.q.setFromEuler(s.r); this.m.compose(s.p, this.q, this.one); s.mesh.setMatrixAt(s.i, this.m);
     }
-    if (dirty) this.brass.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -175,49 +215,78 @@ export class Arsenal {
   constructor({ scene, camera, world, player, rig, hud, peds, sfx, onShot }) {
     Object.assign(this, { scene, camera, world, player, rig, hud, peds, sfx: sfx || {}, onShot });
     this.B = player.model ? findBones(player.model) : null;
-    this.slots = [null, Object.assign({ ammo: PISTOL.mag, left: PISTOL.reserve }, PISTOL)];
+    const load = (w) => Object.assign({ ammo: w.mag, left: w.reserve }, w);
+    this.slots = [null, load(WEAPONS.pistol), load(WEAPONS.shotgun)];
     this.cur = 0; this.aim = 0; this.quick = 0; this.cool = 0; this.reloading = 0; this.bloom = 0; this.kick = 0; this.pending = false; this.held = 0;
-    this.gun = pistolModel(); this.gun.visible = false; scene.add(this.gun);
-    // muzzle flash: a camera-facing burst plus two crossed planes along the barrel
+    this.latch = false; this.press = {}; this.assist = null; this.pumpT = 0; this.timeScale = 1; this.wheelOpen = false; this.wv = new THREE.Vector2(); this.wsel = 0;
+    // one model per weapon, each with its own muzzle flash
     const ft = flashTex(), fm = new THREE.MeshBasicMaterial({ map: ft, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-    this.flash = new THREE.Group(); this.flash.position.copy(this.gun.userData.muzzle).add(new THREE.Vector3(0, 0, 0.065));
-    for (const r of [0, Math.PI / 2]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.075, 0.16), fm); m.rotation.order = "ZYX"; m.rotation.set(Math.PI / 2, 0, r); this.flash.add(m); }
-    this.flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: ft, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-    this.flashSprite.scale.setScalar(0.13); this.flash.add(this.flashSprite);
-    this.flash.visible = false; this.gun.add(this.flash); this.flashT = 0;
+    this.models = {};
+    for (const [id, make, size] of [["pistol", pistolModel, 1], ["shotgun", shotgunModel, 1.9]]) {
+      const m = make(); m.visible = false; scene.add(m);
+      const fl = new THREE.Group(); fl.position.copy(m.userData.muzzle).add(new THREE.Vector3(0, 0, 0.065 * size));
+      for (const r of [0, Math.PI / 2]) { const q = new THREE.Mesh(new THREE.PlaneGeometry(0.075 * size, 0.16 * size), fm); q.rotation.order = "ZYX"; q.rotation.set(Math.PI / 2, 0, r); fl.add(q); }
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ft, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+      sp.scale.setScalar(0.13 * size); fl.add(sp); fl.visible = false; m.add(fl); m.userData.flash = fl;
+      this.models[id] = m;
+    }
+    this.flashT = 0;
     this.fx = new Fx(scene);
     this.target = new THREE.Vector3(); this.aimDir = new THREE.Vector3(0, 0, 1); this.over = null;
     player.afterPose = (dt) => this.pose(dt);
     this.hudSync();
   }
   get weapon() { return this.slots[this.cur]; }
+  get gun() { const w = this.weapon; return w ? this.models[w.id] : null; }
   equip(i) {
     if (i === this.cur || i < 0 || i >= this.slots.length) return;
-    this.cur = i; this.reloading = 0; this.pending = false;
+    for (const m of Object.values(this.models)) m.visible = false;
+    this.cur = i; this.reloading = 0; this.pending = false; this.latch = false; this.pumpT = 0;
     if (this.weapon && this.sfx.draw) this.sfx.draw();
     this.hudSync();
   }
+  equipId(id) { const i = this.slots.findIndex((w) => (w ? w.id : null) === id); if (i >= 0) this.equip(i); }
   startReload() {
     const w = this.weapon; if (!w || this.reloading > 0 || w.ammo === w.mag || w.left <= 0) return;
-    this.reloading = w.reload; if (this.sfx.reload) this.sfx.reload();
+    this.reloading = w.perShell ? w.reload + 0.15 : w.reload;
+    if (!w.perShell && this.sfx.reload) this.sfx.reload();
   }
-  hudSync() { const w = this.weapon; if (this.hud.weapon) this.hud.weapon(w ? { name: w.name, ammo: w.ammo, left: w.left, reloading: this.reloading > 0 } : null); }
+  hudSync() { const w = this.weapon; if (this.hud.weapon) this.hud.weapon(w ? { id: w.id, name: w.name, ammo: w.ammo, left: w.left, reloading: this.reloading > 0 } : null); }
+
+  // tap = toggle, hold = while held (so a trackpad's two-finger click or Q locks the aim on)
+  // aims from the moment it's pressed; let go quickly and the aim stays (or, if it was locked, comes off)
+  tapHold(input, code, dt) {
+    const d = input.down(code), p = this.press[code] || (this.press[code] = { t: 0, was: false, from: false });
+    if (d && !p.was) { p.t = 0; p.from = this.latch; this.latch = false; }
+    if (d) p.t += dt;
+    if (!d && p.was) this.latch = p.t < 0.25 ? !p.from : false;
+    p.was = d; return d;
+  }
 
   update(dt, input) {
+    this.wheel(dt, input);
     if (input.hit("Digit1")) this.equip(0);
     if (input.hit("Digit2")) this.equip(1);
-    if (input.wheel) { this.equip((this.cur + Math.sign(input.wheel) + this.slots.length) % this.slots.length); input.wheel = 0; }
+    if (input.hit("Digit3")) this.equip(2);
+    if (input.wheel && !this.wheelOpen) { this.equip((this.cur + Math.sign(input.wheel) + this.slots.length) % this.slots.length); input.wheel = 0; }
     const w = this.weapon, armed = !!w;
     this.quick = Math.max(0, this.quick - dt); this.cool = Math.max(0, this.cool - dt);
-    const wantAim = armed && (input.down("Mouse2") || this.quick > 0);
+    const holdR = this.tapHold(input, "Mouse2", dt), holdQ = this.tapHold(input, "KeyQ", dt);
+    if (!armed || (input.down("ShiftLeft", "ShiftRight") && this.player.speed > 3)) this.latch = false;   // sprinting drops the aim
+    const wantAim = armed && !this.wheelOpen && (holdR || holdQ || this.latch || this.quick > 0);
+    // assisted aim: raising the gun finds the nearest person near the reticle
+    if (wantAim && this.aim < 0.15 && !this.assist) this.assist = this.findTarget(0.22, 45);
+    if (!wantAim) this.assist = null;
     this.aim += ((wantAim ? 1 : 0) - this.aim) * Math.min(1, dt * (wantAim ? 12 : 8));
     if (this.aim < 0.002) this.aim = 0;
     this.rig.aim = this.aim;
     this.player.aimYaw = wantAim ? this.rig.yaw + Math.PI : null;
+    if (this.assist) this.pullToward(this.assist, dt);
 
     // where the reticle points
-    this.camera.getWorldDirection(_dir); const hit = this.trace(this.camera.position, _dir, PISTOL.range);
+    this.camera.getWorldDirection(_dir); const hit = this.trace(this.camera.position, _dir, 180);
     this.target.copy(hit.point); this.over = hit.ped && this.aim > 0.5 ? hit.ped : null;
+    this.rig.slow = this.over ? 0.55 : 1;   // friction over a target
     // a gun pointed at someone: they put their hands out and back away
     this.held = Math.max(0, this.held - dt);
     if (this.over && this.aim > 0.8 && hit.t < 20 && !this.over.fear && this.peds) {
@@ -226,15 +295,33 @@ export class Arsenal {
     }
 
     if (armed) {
-      if (this.reloading > 0) { this.reloading -= dt; if (this.reloading <= 0) { const n = Math.min(w.mag - w.ammo, w.left); w.ammo += n; w.left -= n; this.reloading = 0; this.hudSync(); } }
+      if (this.reloading > 0) {
+        this.reloading -= dt;
+        if (this.reloading <= 0) {
+          if (w.perShell) {   // one shell at a time; keeps going until full, or you shoot
+            w.ammo++; w.left--; if (this.sfx.shellIn) this.sfx.shellIn();
+            this.reloading = w.ammo < w.mag && w.left > 0 ? w.reload : 0;
+            if (!this.reloading) this.pumpT = 0.0001;
+          } else { const n = Math.min(w.mag - w.ammo, w.left); w.ammo += n; w.left -= n; this.reloading = 0; }
+          this.hudSync();
+        }
+      }
       if (input.hit("KeyR")) { this.startReload(); this.hudSync(); }
-      if (input.hit("Mouse0")) { this.quick = 1.1; if (this.aim > 0.7) this.fire(); else this.pending = true; }
+      const pull = input.hit("Mouse0") | input.hit("KeyE");
+      if (pull && !this.wheelOpen) { this.quick = 1.1; if (this.aim > 0.7) this.fire(); else this.pending = true; }
       if (this.pending && this.aim > 0.7) { this.pending = false; this.fire(); }
-      if (input.down("Mouse0")) this.quick = Math.max(this.quick, 0.6);
+      if (input.down("Mouse0", "KeyE")) this.quick = Math.max(this.quick, 0.6);
     }
-    this.bloom *= 1 - Math.min(1, dt * 5); this.kick *= 1 - Math.min(1, dt * 14);
-    if (this.flashT > 0 && (this.flashT -= dt) <= 0) this.flash.visible = false;
-    this.fx.update(dt, this.world, (v, p) => this.sfx.shell && this.sfx.shell(v * 0.8, 0));
+    // the pump: back, then forward; the spent hull flies out at the back of the stroke
+    if (this.pumpT > 0) {
+      const t0 = this.pumpT; this.pumpT += dt;
+      if (t0 < 0.12 && this.pumpT >= 0.12 && this.sfx.pump) this.sfx.pump();
+      if (t0 < 0.27 && this.pumpT >= 0.27 && this.gun && this.weapon && this.weapon.id === "shotgun" && this.spent) { this.eject("hull"); this.spent = false; }
+      if (this.pumpT > 0.5) this.pumpT = 0;
+    }
+    this.bloom *= 1 - Math.min(1, dt * 5); this.kick *= 1 - Math.min(1, dt * 10);
+    if (this.flashT > 0 && (this.flashT -= dt) <= 0) for (const m of Object.values(this.models)) m.userData.flash.visible = false;
+    this.fx.update(dt, this.world, (v, p, kind) => this.sfx.shell && this.sfx.shell(v * 0.8, 0, kind));
     if (this.hud.reticle) this.hud.reticle(armed ? this.aim : 0, this.spread() * 900, !!this.over);
   }
   spread() {
@@ -242,44 +329,107 @@ export class Arsenal {
     return w.spread + this.bloom + (1 - this.aim) * 0.03 + Math.min(this.player.speed, 3) * 0.004;
   }
 
+  /* ---- assisted aim ---- */
+  // the person closest to the reticle within `cone` radians and `range` metres, in clear view
+  findTarget(cone, range) {
+    if (!this.peds) return null;
+    this.camera.getWorldDirection(_dir); let best = null, ba = cone;
+    for (let i = 0; i < Math.min(this.peds.limit, this.peds.peds.length); i++) {
+      const pd = this.peds.peds[i]; if (pd.dead || !pd.h.group.visible) continue;
+      pd.B = pd.B || findBones(pd.h.group); if (!pd.B) continue;
+      const c = wpos(pd.B.chest, _t), to = _v.copy(c).sub(this.camera.position), d = to.length();
+      if (d > range || d < 1) continue;
+      const a = to.normalize().angleTo(_dir);
+      if (a < ba && this.world.grid.hit(this.camera.position, c).t >= 1) { ba = a; best = pd; }
+    }
+    return best ? { pd: best, t: 0.22 } : null;
+  }
+  // swing the view onto them quickly, then let go
+  pullToward(as, dt) {
+    if (as.pd.dead || (as.t -= dt) <= 0) { this.assist = null; return; }
+    const c = wpos(as.pd.B.chest, _t), f = _v.copy(c).sub(this.camera.position).normalize();
+    const yaw = Math.atan2(-f.x, -f.z), pitch = Math.asin(THREE.MathUtils.clamp(-f.y, -1, 1));
+    const k = Math.min(1, dt * 22), dy = Math.atan2(Math.sin(yaw - this.rig.yaw), Math.cos(yaw - this.rig.yaw));
+    this.rig.yaw += dy * k; this.rig.pitch += (pitch - this.rig.pitch) * k;
+  }
+
+  /* ---- the weapon wheel: hold Tab, point, let go ---- */
+  wheel(dt, input) {
+    const open = input.down("Tab") && !!this.B;
+    if (open && !this.wheelOpen) { this.wheelOpen = true; this.wv.set(0, 0); this.wsel = WHEEL.indexOf(this.weapon ? this.weapon.id : null); if (this.sfx.wheel) this.sfx.wheel(true); }
+    if (this.wheelOpen) {
+      const [dx, dy] = input.take(); this.wv.x += dx; this.wv.y += dy;
+      if (this.wv.length() > 120) this.wv.setLength(120);
+      if (this.wv.length() > 35) {
+        const a = Math.atan2(this.wv.x, -this.wv.y), k = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+        const has = k === 0 || this.slots.some((w) => w && w.id === WHEEL[k]);
+        if (has && k !== this.wsel) { this.wsel = k; if (this.sfx.tick) this.sfx.tick(); }
+      }
+      if (input.wheel) { input.wheel = 0; }
+    }
+    if (!open && this.wheelOpen) {
+      this.wheelOpen = false; const id = WHEEL[this.wsel];
+      if (id === null) this.equip(0); else this.equipId(id);
+      if (this.sfx.wheel) this.sfx.wheel(false);
+    }
+    this.timeScale += ((this.wheelOpen ? 0.25 : 1) - this.timeScale) * Math.min(1, dt * 10);
+    if (this.hud.wheel) this.hud.wheel(this.wheelOpen, this.wsel, this.slots.filter(Boolean).map((w) => ({ id: w.id, name: w.name, ammo: w.ammo, left: w.left })));
+  }
+
+  eject(kind) {
+    const g = this.gun, port = g.localToWorld(g.userData.port.clone()), right = _w.set(1, 0, 0).applyQuaternion(g.quaternion);
+    this.fx.shell(port, right.clone().multiplyScalar(kind === "hull" ? 1.8 + Math.random() : 2.2 + Math.random()).add(new THREE.Vector3(0, 2 + Math.random(), 0)), kind);
+  }
+
   fire() {
-    const w = this.weapon; if (!w || this.cool > 0 || this.reloading > 0) return;
+    const w = this.weapon; if (!w || this.cool > 0) return;
+    if (this.reloading > 0) { if (w.perShell && w.ammo > 0) this.reloading = 0; else return; }   // a shotgun can stop loading to shoot
     if (w.ammo <= 0) { if (this.sfx.dry) this.sfx.dry(); this.cool = 0.25; this.startReload(); this.hudSync(); return; }
     w.ammo--; this.cool = w.rate;
-    const muzzle = this.gun.localToWorld(this.gun.userData.muzzle.clone());
-    // aim with spread from the camera, then check the muzzle's path to that point
-    this.camera.getWorldDirection(_dir); const sp = this.spread();
-    _dir.add(_u.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(sp * 2)).normalize();
-    const aimed = this.trace(this.camera.position, _dir, w.range);
-    const to = aimed.point.clone().sub(muzzle), len = to.length(); to.normalize();
-    const hit = len > 0.05 ? this.trace(muzzle, to, len + 0.05) : aimed;
+    const g = this.gun, muzzle = g.localToWorld(g.userData.muzzle.clone());
+    this.camera.getWorldDirection(_dir); const base = _dir.clone(), sp = this.spread();
+    const shots = [];
+    for (let i = 0; i < w.pellets; i++) {
+      // a disc of spread around the reticle; then check the muzzle's path to that point
+      const r = sp * Math.sqrt(Math.random()), a = Math.random() * 6.283;
+      const side = _u.set(base.z, 0, -base.x).normalize(), upv = _w.crossVectors(side, base);
+      const d = base.clone().addScaledVector(side, Math.cos(a) * r).addScaledVector(upv, Math.sin(a) * r).normalize();
+      const aimed = this.trace(this.camera.position, d, w.range);
+      const to = aimed.point.clone().sub(muzzle), len = to.length(); to.normalize();
+      shots.push([len > 0.05 ? this.trace(muzzle, to, len + 0.05) : aimed, to]);
+    }
 
     // the gun goes off
-    this.flash.visible = true; this.flashT = 0.045; this.flash.rotation.z = Math.random() * 6.28; this.flash.scale.setScalar(0.8 + Math.random() * 0.5);
-    this.fx.puff(muzzle, to.clone().multiplyScalar(0.7), 0.35, 0.9, 0xb8b2a8, 0.3);
-    const port = this.gun.localToWorld(this.gun.userData.port.clone()), right = _w.set(1, 0, 0).applyQuaternion(this.gun.quaternion);
-    this.fx.shell(port, right.clone().multiplyScalar(2.2 + Math.random()).add(new THREE.Vector3(0, 2 + Math.random(), 0)));
+    const fl = g.userData.flash; fl.visible = true; this.flashT = 0.045; fl.rotation.z = Math.random() * 6.28; fl.scale.setScalar(0.8 + Math.random() * 0.5);
+    this.fx.puff(muzzle, shots[0][1].clone().multiplyScalar(0.7), w.pellets > 1 ? 0.6 : 0.35, 0.9, 0xb8b2a8, 0.3);
+    if (w.id === "shotgun") { this.spent = true; this.pumpT = 0.0001; } else this.eject("brass");
     this.kick = 1; this.bloom = Math.min(0.03, this.bloom + 0.012);
-    this.rig.recoil += 0.03 + Math.random() * 0.015; this.rig.yaw += (Math.random() - 0.5) * 0.012;
-    if (this.sfx.shot) this.sfx.shot(0, 0);
+    this.rig.recoil += w.recoil + Math.random() * w.recoil * 0.5; this.rig.yaw += (Math.random() - 0.5) * w.recoil * 0.4;
+    if (w.pellets > 1 ? this.sfx.boom : this.sfx.shot) (w.pellets > 1 ? this.sfx.boom : this.sfx.shot)(0, 0);
     this.hudSync();
 
-    // what it hit
-    if (hit.ped) {
-      const r = this.peds.damage(hit.ped, { point: hit.point, dir: to, damage: w.damage, head: hit.head, from: this.player.pos });
-      this.fx.puff(hit.point, to.clone().multiplyScalar(0.6), 0.22, 0.45, 0x4a0c0c, 0.55);
-      this.fx.sparks(hit.point, 6, to, 1.6, 0x3a0606, 0.35);
-      if (this.sfx.impact) this.sfx.impact("flesh", hit.t, 0);
-      if (this.hud.hitmark) this.hud.hitmark(r === "dead");
-    } else if (hit.t < w.range) {
-      const n = hit.normal, sand = hit.kind === "sand";
-      if (!sand) this.fx.hole(hit.point, n);
-      this.fx.puff(hit.point.clone().addScaledVector(n, 0.05), n.clone().multiplyScalar(0.8), sand ? 0.5 : 0.35, sand ? 1.1 : 0.8, sand ? 0xcdb48a : 0x9a948a, 0.5);
-      this.fx.sparks(hit.point, sand ? 10 : 7, n, sand ? 1.4 : 2.4, sand ? 0x5a4a30 : 0xffb050, sand ? 0.5 : 0.18);
-      if (this.sfx.impact) this.sfx.impact(sand ? "sand" : "hard", hit.t, 0);
+    // what it hit: people take every pellet; walls get a hole each
+    let marked = null, sounds = 0;
+    for (const [hit, to] of shots) {
+      if (hit.ped) {
+        const fall = w.pellets > 1 ? THREE.MathUtils.clamp(1 - (hit.t - 8) / 40, 0.3, 1) : 1;
+        const r = this.peds.damage(hit.ped, { point: hit.point, dir: to, damage: w.damage * fall * (hit.head && w.pellets > 1 ? 3 : 1), head: hit.head && w.pellets === 1,
+          from: this.player.pos, force: w.pellets > 1 ? 7 * fall : undefined });
+        this.fx.puff(hit.point, to.clone().multiplyScalar(0.6), 0.22, 0.45, 0x4a0c0c, 0.55);
+        this.fx.sparks(hit.point, 4, to, 1.6, 0x3a0606, 0.35);
+        if (sounds++ < 2 && this.sfx.impact) this.sfx.impact("flesh", hit.t, 0);
+        if (r !== "body") marked = marked === "dead" ? "dead" : r;
+      } else if (hit.t < w.range) {
+        const n = hit.normal, sand = hit.kind === "sand";
+        if (!sand) this.fx.hole(hit.point, n);
+        this.fx.puff(hit.point.clone().addScaledVector(n, 0.05), n.clone().multiplyScalar(0.8), sand ? 0.5 : 0.35, sand ? 1.1 : 0.8, sand ? 0xcdb48a : 0x9a948a, w.pellets > 1 ? 0.3 : 0.5);
+        this.fx.sparks(hit.point, sand ? 8 : 5, n, sand ? 1.4 : 2.4, sand ? 0x5a4a30 : 0xffb050, sand ? 0.5 : 0.18);
+        if (sounds++ < 2 && this.sfx.impact) this.sfx.impact(sand ? "sand" : "hard", hit.t, 0);
+      }
     }
-    if (this.peds) this.peds.alarm(this.player.pos.x, this.player.pos.z, 55);
-    if (this.onShot) this.onShot(this.player.pos, hit);
+    if (marked && this.hud.hitmark) this.hud.hitmark(marked === "dead");
+    if (this.peds) this.peds.alarm(this.player.pos.x, this.player.pos.z, w.pellets > 1 ? 70 : 55);
+    if (this.onShot) this.onShot(this.player.pos, shots[0][0]);
   }
 
   // nearest thing along o + d*t: buildings and posts, the ground, people
@@ -318,18 +468,22 @@ export class Arsenal {
     return { t: best, point: o.clone().addScaledVector(d, best), normal, kind, ped, head };
   }
 
-  // after the clips: raise the arms onto the aim, seat the gun in the hand
+  // after the clips: raise the arms onto the aim, seat the gun
   pose() {
-    const B = this.B, armed = !!this.weapon;
-    this.gun.visible = armed && !!B; if (!this.gun.visible) return;
+    const B = this.B, w = this.weapon;
+    for (const [id, m] of Object.entries(this.models)) m.visible = !!B && !!w && w.id === id;
+    if (!B || !w) return;
     const a = this.aim, up = _up.set(0, 1, 0), yaw = this.player.yaw, fwd = _f.set(Math.sin(yaw), 0, Math.cos(yaw));
     const chest = wpos(B.chest, _c);
     this.aimDir.copy(this.target).sub(chest).normalize();
     const D = this.aimDir;
-    if (a > 0.01) {
-      // the chest follows the aim's pitch
+    if (a > 0.01) {   // the chest follows the aim's pitch
       _q.setFromUnitVectors(fwd, _t.copy(fwd).multiplyScalar(Math.cos(Math.asin(THREE.MathUtils.clamp(D.y, -0.9, 0.9)) * 0.6)).setY(D.y * 0.6).normalize());
       _q.slerpQuaternions(_id, _q, a); turnWorld(B.chest, _q);
+    }
+    if (w.hold === "long") return this.poseLong(B, a, up, fwd, D);
+    const gun = this.gun;
+    if (a > 0.01) {
       const sL = wpos(B.armL[0], _sl), sR = wpos(B.armR[0], _sr), mid = _m.copy(sL).add(sR).multiplyScalar(0.5), right = _r.copy(sR).sub(sL).normalize();
       const k = this.kick;
       const T = _t.copy(mid).addScaledVector(D, 0.5 - k * 0.05).addScaledVector(up, -0.05 + k * 0.03).addScaledVector(right, 0.03);
@@ -345,8 +499,35 @@ export class Arsenal {
     gunQuat(_q1, lowBarrel, _gu.copy(fwd).addScaledVector(up, 0.2));
     const aimBarrel = _ab.copy(D); if (this.kick > 0.01) aimBarrel.addScaledVector(up, this.kick * 0.25).normalize();
     gunQuat(_q2, aimBarrel, up);
-    this.gun.quaternion.slerpQuaternions(_q1, _q2, a);
-    this.gun.position.copy(hand).addScaledVector(fing, 0.045 * (1 - a)).addScaledVector(D, 0.055 * a).addScaledVector(up, -0.01 * a);
+    gun.quaternion.slerpQuaternions(_q1, _q2, a);
+    gun.position.copy(hand).addScaledVector(fing, 0.045 * (1 - a)).addScaledVector(D, 0.055 * a).addScaledVector(up, -0.01 * a);
+  }
+  // a long gun: placed first (stock in the shoulder when aimed, across the body when not), then both hands go to it
+  poseLong(B, a, up, fwd, D) {
+    const gun = this.gun, U = gun.userData, k = this.kick;
+    const sL = wpos(B.armL[0], _sl), sR = wpos(B.armR[0], _sr), right = _r.copy(sR).sub(sL).normalize();
+    // aimed: butt in the shoulder pocket, barrel on the reticle, kicked up and back by recoil
+    const aimB = _ab.copy(D).addScaledVector(up, k * 0.3).normalize();
+    gunQuat(_q2, aimB, up);
+    const butt2 = _t.copy(sR).addScaledVector(right, -0.07).addScaledVector(up, -0.045).addScaledVector(D, -0.03 - k * 0.06);
+    const p2 = _tl.copy(U.butt).applyQuaternion(_q2).negate().add(butt2);
+    // carried: muzzle down and across to the left, grip by the right hip
+    const lowB = _lb.copy(fwd).multiplyScalar(0.62).addScaledVector(up, -0.55).addScaledVector(right, -0.45).normalize();
+    gunQuat(_q1, lowB, _gu.copy(fwd).addScaledVector(up, 0.5).normalize());
+    const p1 = _m.copy(sR).addScaledVector(up, -0.42).addScaledVector(fwd, 0.2).addScaledVector(right, -0.02);
+    gun.quaternion.slerpQuaternions(_q1, _q2, a); gun.position.lerpVectors(p1, p2, a);
+    // the pump rides back and forth on the magazine tube
+    const pt = this.pumpT, stroke = pt <= 0 ? 0 : pt < 0.12 ? 0 : pt < 0.25 ? (pt - 0.12) / 0.13 : pt < 0.38 ? 1 - (pt - 0.25) / 0.13 : 0;
+    U.pumpMesh.position.z = -0.085 * stroke;
+    gun.updateMatrixWorld(true);
+    const gz = _v.set(0, 0, 1).applyQuaternion(gun.quaternion), gy = _w.set(0, 1, 0).applyQuaternion(gun.quaternion);
+    // hands: the wrist sits a little behind and above where the palm closes
+    const rh = gun.localToWorld(_h.copy(U.grip)).addScaledVector(gz, -0.05).addScaledVector(gy, 0.02);
+    ik(B.armR, rh, _p.set(0, -1, 0).addScaledVector(right, 0.8));
+    point(B.armR[2], B.armR[3], _fg.copy(gz).multiplyScalar(0.4).addScaledVector(gy, -0.8).addScaledVector(right, -0.3).normalize());
+    const lh = gun.localToWorld(_e.copy(U.pump).add(_hc.set(0, 0, -0.085 * stroke))).addScaledVector(gy, -0.045).addScaledVector(gz, -0.03);
+    ik(B.armL, lh, _p.set(0, -1, 0).addScaledVector(right, -0.6));
+    point(B.armL[2], B.armL[3], _fg.copy(gz).multiplyScalar(0.6).addScaledVector(gy, -0.5).addScaledVector(right, 0.5).normalize());
   }
 }
 // orientation with the barrel (+z) along `barrel` and the top (+y) toward `up`

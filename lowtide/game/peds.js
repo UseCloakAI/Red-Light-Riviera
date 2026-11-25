@@ -273,7 +273,7 @@ export async function spawnPeds(scene, world, o = {}) {
     damage(pd, hit) {
       if (pd.dead) { if (pd.rag) { pd.rag.impulse(hit.point, hit.dir, 2.5); pd.rag.sleep = 0; } return "body"; }
       pd.hp -= hit.head ? 1000 : hit.damage;
-      if (pd.hp <= 0) { die(pd, { point: hit.point, dir: hit.dir, force: hit.head ? 3 : 4.5 }); return "dead"; }
+      if (pd.hp <= 0) { die(pd, { point: hit.point, dir: hit.dir, force: hit.force || (hit.head ? 3 : 4.5) }); return "dead"; }
       if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
       pd.stagger = 0.7; pd.cower = 0; pd.pause = 0.4;
       pd.fear = { x: hit.from.x, z: hit.from.z, t: 20 }; pd.speed *= 0.8;   // hurt: they still run, a little slower

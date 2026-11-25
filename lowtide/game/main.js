@@ -84,9 +84,12 @@ export async function start(o) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
-    if (input.locked) { arsenal.update(dt, input); player.update(dt, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
-    else player.animate(dt);
-    if (peds) peds.update(dt, player);
+    // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
+    if (input.locked) arsenal.update(dt, input);
+    const dw = dt * arsenal.timeScale;
+    if (input.locked) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
+    else player.animate(dw);
+    if (peds) peds.update(dw, player);
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
