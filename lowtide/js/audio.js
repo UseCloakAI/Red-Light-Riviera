@@ -499,45 +499,6 @@
       var env = [bus.gain]; env.forEach(function (gp) { var peak = gp.value; gp.setValueAtTime(0, t); gp.linearRampToValueAtTime(peak, t + o.attack); gp.setValueAtTime(peak, t + dur * 0.7); gp.exponentialRampToValueAtTime(0.0008, t + dur); });
       [a, b, vib, rough].forEach(function (x) { x.start(t); x.stop(t + dur + 0.05); });
     },
-    /* a scream. What makes one alarming is roughness: the voice beating 30-150 times a second
-       (fast amplitude flutter, a chaotic subharmonic), on top of a pitch pushed far above
-       speech, a wide-open "aah" or a tight "eee", a crack where the voice breaks, and a lot
-       of breath. Sometimes a ragged gasp and a second, worse one. who: { female, pitch, age } */
-    scream: function (who, dist, pan) {
-      if (!ctx) return; who = who || {}; var t = now() + 0.01, d = dist || 0, att = 1 / (1 + d / 14); if (att < 0.04) return;
-      var f = !!who.female, k = who.pitch || 1, old = (who.age || 35) > 58;
-      var f0 = (f ? 940 : 520) * k * (0.88 + rnd() * 0.24) * (old ? 0.82 : 1) * (who.again ? 1.08 : 1), dur = who.again ? 0.7 + rnd() * 0.5 : 1.0 + rnd() * 0.9;
-      var bus = G(0.0001), lp = F("lowpass", 11000 / (1 + d / 30), 0.5), pn = P(pan || 0); chain(bus, lp, pn, B.vox); send(pn, street(), 0.2 + Math.min(0.45, d / 50));
-      duck(dur + 0.5, 0.35);
-      var a = O("sawtooth", f0, t), b = O("sawtooth", f0 * 1.006, t), sub = O("square", f0 / 2, t), src = G(0.6), subG = G(0.15);
-      a.connect(src); b.connect(src); chain(sub, subG, src);
-      var oscs = [[a, 1], [b, 1.006], [sub, 0.5]], end = t + dur + 0.45;
-      var fq = function (at, r, glide) { oscs.forEach(function (o) { var pr = o[0].frequency; if (glide) pr.linearRampToValueAtTime(f0 * r * o[1], at); else pr.setValueAtTime(f0 * r * o[1], at); }); };
-      fq(t, 0.6); fq(t + 0.07, 1.1, 1); fq(t + 0.17, 1, 1);                                   // the onset scoops up and overshoots
-      if (rnd() < 0.6) { var brk = t + dur * (0.35 + rnd() * 0.3); fq(brk - 0.02, 1.03, 1); fq(brk, 0.74); fq(brk + 0.11, 0.99, 1); }   // the voice cracks
-      fq(t + dur * 0.82, 0.96, 1); fq(t + dur + 0.2, 0.5, 1);                                  // and gives out
-      var jn = noise("white", t, dur + 0.5), jl = F("lowpass", 24, 0.7), jg = G(f0 * 0.06); chain(jn, jl, jg);   // jitter: nothing about it is steady
-      var vib = O("sine", 5 + rnd() * 3, t), vg = G(f0 * 0.022); chain(vib, vg);
-      oscs.forEach(function (o) { jg.connect(o[0].frequency); vg.connect(o[0].frequency); });
-      var sn = noise("pink", t, dur + 0.5), sl = F("lowpass", 7), sg = G(0.45); chain(sn, sl, sg, subG.gain);   // the subharmonic comes and goes: chaos
-      var am = G(1), rough = O("sine", 65 + rnd() * 55, t), rg = G(0.5); chain(rough, rg, am.gain); chain(src, am);   // roughness
-      var pre = G(3.2), dr = ctx.createWaveShaper(); dr.curve = SAT2; chain(am, pre, dr);     // a throat pushed past clean
-      var Fm = rnd() < 0.6 ? [f ? 1150 : 880, f ? 1700 : 1380, f ? 3200 : 2850] : [f ? 760 : 620, f ? 2350 : 2050, f ? 3400 : 3050];
-      var tract = F("lowpass", 6000, 0.5); tract.connect(bus);
-      Fm.forEach(function (fr, i) { var bp = F("bandpass", fr, [3.5, 5, 6][i]), g = G([1.5, 1.1, 0.7][i]); chain(dr, bp, g, tract); });
-      var br = noise("white", t, dur + 0.5), bh = F("bandpass", Fm[1], 0.9), bg = G(0); chain(br, bh, bg, bus);   // breath, more of it as it runs out
-      bg.gain.setValueAtTime(0.06, t); bg.gain.linearRampToValueAtTime(0.16, t + dur); bg.gain.linearRampToValueAtTime(0, t + dur + 0.35);
-      var pk = 1.1 * att, g = bus.gain;
-      g.setValueAtTime(0.0001, t); g.exponentialRampToValueAtTime(pk, t + 0.035); g.linearRampToValueAtTime(pk * 0.8, t + 0.3);
-      g.linearRampToValueAtTime(pk * (0.9 + rnd() * 0.25), t + dur * 0.6); g.linearRampToValueAtTime(pk * 0.7, t + dur * 0.92); g.exponentialRampToValueAtTime(0.0001, t + dur + 0.3);
-      [a, b, sub, vib, rough].forEach(function (x) { x.start(t); x.stop(end); });
-      if (!who.again && rnd() < 0.4) {   // a ragged gasp, then another
-        var gt = t + dur + 0.2, gn = noise("white", gt, 0.32), gb = F("bandpass", 900, 1.5), gg = G(0);
-        gb.frequency.exponentialRampToValueAtTime(2600, gt + 0.28); gg.gain.setValueAtTime(0, gt); gg.gain.linearRampToValueAtTime(0.18 * att, gt + 0.08); gg.gain.linearRampToValueAtTime(0, gt + 0.3); chain(gn, gb, gg, pn);
-        var again = Object.assign({}, who, { again: true });
-        setTimeout(function () { sfx.scream(again, d, pan); }, (dur + 0.5) * 1000);
-      }
-    },
     // a hit: a short grunt of pain
     grunt: function (who, dist, pan) {
       var f = who && who.female, base = (f ? 300 : 150) * (who && who.pitch || 1) * (0.9 + rnd() * 0.2);
@@ -559,14 +520,18 @@
        between silences, which clicked like a far-off gunshot through the street reverb: take
        the offset out with a DC blocker and fade the ends. Then the voice bus, duller and
        quieter with distance, with the street under it ducked. */
-    pcm: function (data, rate, gain, dist, pan) {
+    pcm: function (data, rate, gain, dist, pan, opt) {
       if (!ctx || !data || !data.length) return; var t = now() + 0.02, d = dist || 0, att = 1 / (1 + d / 14); if (att < 0.05) return;
       var n = data.length, x = new Float32Array(n), px = data[0], py = 0, fade = Math.min(n >> 2, Math.round(rate * 0.012));
       for (var i = 0; i < n; i++) { py = data[i] - px + 0.995 * py; px = data[i]; x[i] = py; }
       for (var j = 0; j < fade; j++) { var w = j / fade; x[j] *= w; x[n - 1 - j] *= w; }
       var buf = ctx.createBuffer(1, n, rate), src = ctx.createBufferSource(); buf.copyToChannel(x, 0); src.buffer = buf;
-      var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0); chain(src, g, lp, p, B.vox); send(p, street(), 0.08 + Math.min(0.3, d / 60));
-      duck(n / rate + 0.1, 0.55);
+      var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0);
+      if (opt && opt.scream) {   // a scream: driven into distortion, a fast shake on it, the throat's rasp brought up
+        var pre = G(3.2), sh = ctx.createWaveShaper(), trem = G(1), tl = O("sine", 8 + rnd() * 5, t), tg = G(0.38), pk = F("peaking", 2900, 1.1);
+        sh.curve = SAT2; pk.gain.value = 7; chain(tl, tg, trem.gain); tl.start(t); tl.stop(t + n / rate + 0.2);
+        chain(src, pre, sh, trem, pk, g, lp, p, B.vox); send(p, street(), 0.2 + Math.min(0.35, d / 50)); duck(n / rate + 0.3, 0.35);
+      } else { chain(src, g, lp, p, B.vox); send(p, street(), 0.08 + Math.min(0.3, d / 60)); duck(n / rate + 0.1, 0.55); }
       src.start(t);
     },
     /* police: a siren (a wail that rises and falls, switching to a fast yelp now and then), heard

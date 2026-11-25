@@ -73,7 +73,8 @@ export async function start(o) {
   // Stage 2: the people of Marlowe Keys
   let peds = null;
   const gore = new Gore(scene, world);
-  const voice = makeVoice(o.sfx);   // S.A.M. reads the lines
+  const voice = makeVoice(o.sfx);   // eSpeak reads the lines (and does the screaming)
+  if (o.sfx) o.sfx.scream = (who, dist) => voice.scream(who, dist);
   const heard = (pd) => (pd ? Math.hypot(pd.h.group.position.x - player.pos.x, pd.h.group.position.z - player.pos.z) : 0);
   const pedHooks = { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos };   // the fight callbacks get filled in once there's a player to hit
   try { peds = await spawnPeds(scene, world, Object.assign(pedHooks, { onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) })); }
