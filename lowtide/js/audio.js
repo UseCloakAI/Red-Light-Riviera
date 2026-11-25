@@ -524,9 +524,10 @@
   }
 
   /* ---------------- pre-rendered audio ----------------
-     The intro (up to the drop) and a seamless 8-bar title loop are rendered
-     offline from this same engine (tools/render-intro.js) and played back as
-     buffers, which costs almost nothing on low-end devices. */
+     The intro (up to the drop) is rendered offline from this same engine
+     (tools/render-intro.js); the title plays the Lowtide theme on a loop. Both
+     are decoded once and played as buffers, which costs almost nothing. The
+     first theme (an 8-bar loop from this engine) is in archive/theme-v1. */
   var BAKE = {}, playing = [];
   function loadBaked(map) {
     return Promise.all(Object.keys(map).map(function (k) {
@@ -545,7 +546,8 @@
   function startTitle(t, quiet) {
     if (!ctx) return; t = t || now() + 0.03;
     if (BAKE.loop) {
-      if (!startTitle.on) { startTitle.on = true; playBaked("loop", t, 0, true, B.bed); }
+      // the Lowtide theme (media/theme.mp3), with the sea under it, live
+      if (!startTitle.on) { startTitle.on = true; playBaked("loop", t, 0, true, B.bed); ambStart(t, 0.4); }
     } else {
       if (!(M.on && sectionAt(t) !== "intro")) musicStart(t, "drop");
       ambStart(t);
