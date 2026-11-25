@@ -227,7 +227,7 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .wasted b{font:extra-condensed 900 clamp(64px,11vw,150px)/.9 var(--fd);text-transform:uppercase;color:#E5484D;letter-spacing:.02em;text-align:center;padding:0 5vw;
   text-shadow:0 4px 0 rgba(0,0,0,.6),0 0 40px rgba(0,0,0,.5);background:linear-gradient(90deg,transparent,rgba(5,5,6,.55) 20%,rgba(5,5,6,.55) 80%,transparent);width:100%;scale:1.4;transition:scale .5s .5s var(--e-out)}
 .wasted.on b{scale:1}
-.wasted b .emoji{width:1.1em;height:1.1em;vertical-align:middle;margin:0 .04em;filter:drop-shadow(0 6px 0 rgba(0,0,0,.45))}
+.wasted b .emoji{width:.55em;height:.55em;vertical-align:middle;margin:0 .04em;filter:drop-shadow(0 6px 0 rgba(0,0,0,.45))}
 .wasted{grid-template-rows:auto auto;align-content:center;gap:18px}
 .wasted small{font:600 13px/1 var(--fu);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,245,234,.75);text-shadow:0 2px 0 rgba(0,0,0,.6)}
 @media (prefers-reduced-motion:reduce){.health.low i{animation:none}.wasted b{transition:none}}
