@@ -7,6 +7,7 @@ import { buildWorld } from "./world.js?v=dev";
 import { buildSky } from "./sky.js?v=dev";
 import { Player, CamRig, Input } from "./player.js?v=dev";
 import { Hud } from "./hud.js?v=dev";
+import { spawnPeds } from "./peds.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 
@@ -52,6 +53,10 @@ export async function start(o) {
   player.onStep = (n, surface) => o.sfx && o.sfx.step && o.sfx.step(0.45 + n * 0.55, surface);
   player.onLand = (v) => o.sfx && o.sfx.step && o.sfx.step(Math.min(1.4, v / 6), player.surface);
   await step(0.82);
+  // Stage 2: the people of Marlowe Keys
+  let peds = null;
+  try { peds = await spawnPeds(scene, world, { count: o.peds || 18, near: player.pos, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
+  catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
   // warm up: compile every shader and fill the shadow map before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
@@ -75,8 +80,9 @@ export async function start(o) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
-    if (input.locked) player.update(dt, input, rig.yaw);
+    if (input.locked) { player.update(dt, input, rig.yaw); if (peds) peds.push(player.pos, 0.32); }
     else player.animate(dt);
+    if (peds) peds.update(dt, player);
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
@@ -94,7 +100,7 @@ export async function start(o) {
     lock() { input.lock(); },
     drawMap(ctx, w, h) { hud.drawFull(ctx, w, h, player); },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
-    rig, world
+    rig, world, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };

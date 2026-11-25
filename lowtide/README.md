@@ -16,7 +16,8 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no
 
 | `game/` | The game, loaded on demand from Story Mode: `main.js` (renderer, loop, adaptive quality), `world.js` (Marlowe Keys), `sky.js` (dusk sky, sea, light), `player.js` (controller, camera, input), `hud.js` (radar, area names, map) |
 | `vendor/three/` | three.js r180, pinned and served from this folder (MIT, see `LICENSE`) |
-| `assets/characters/` | The player: `michelle.glb` (Mixamo, slimmed to 409 KB) and `anims.json` (idle, walk and run, retargeted onto her rig). See `CREDITS.md` |
+| `assets/human/` | Creator and crowd data built from MakeHuman (CC0): `human.json` / `human.bin`, `motion.json`, `tex/` |
+| `assets/characters/` | Fallback player: `michelle.glb` (Mixamo, slimmed to 409 KB) and `anims.json` (idle, walk and run, retargeted onto her rig). See `CREDITS.md` |
 
 QA deep links: `?scene=title`, `?scene=menu` and `?scene=pause`.
 
@@ -47,7 +48,13 @@ node tools/retarget/run.js tools/retarget/src/Xbot.glb lowtide/assets/characters
 
 The source rig isn't committed. Download `Xbot.glb` from the three.js examples into `tools/retarget/src/`.
 
-Coming next: pedestrians (Stage 2), weapons (3), police and wanted levels (4), vehicles (5), the first mission (6).
+## Characters (creator) and pedestrians (Stage 2)
+
+Characters are built from MakeHuman's CC0 data (`tools/human/`, see its README). `game/human.js` turns slider values into a rigged, clothed, animated person. `game/creator.js` is the creator, opened by Story Mode the first time and by Character in the menu. The result is saved in `localStorage` and becomes the player.
+
+`game/peds.js` fills the streets with 18 unique people from the same generator, built on MakeHuman's 1,600-vertex body proxy. They walk the block sidewalks, stop now and then, wait for you to pass, and are recycled out of sight. Animation only runs within 70 m.
+
+Coming next: weapons (Stage 3), police and wanted levels (4), vehicles (5), the first mission (6).
 
 ## The intro
 
