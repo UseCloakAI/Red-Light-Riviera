@@ -3,18 +3,18 @@
    then runs the loop. Quality adapts: if frames run long it lowers the
    resolution, then turns shadows off, so low-end machines stay playable. */
 import * as THREE from "three";
-import { buildWorld } from "./world.js";
-import { buildSky } from "./sky.js";
-import { Player, CamRig, Input } from "./player.js";
-import { Hud } from "./hud.js";
+import { buildWorld } from "./world.js?v=dev";
+import { buildSky } from "./sky.js?v=dev";
+import { Player, CamRig, Input } from "./player.js?v=dev";
+import { Hud } from "./hud.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // the player character: a slimmed Mixamo model plus idle/walk/run retargeted onto her rig (tools/retarget)
 async function loadCharacter() {
   try {
     const [gltf, anims] = await Promise.all([
-      new GLTFLoader().loadAsync("assets/characters/michelle.glb"),
-      fetch("assets/characters/anims.json").then((r) => r.json())
+      new GLTFLoader().loadAsync("assets/characters/michelle.glb?v=dev"),
+      fetch("assets/characters/anims.json?v=dev").then((r) => r.json())
     ]);
     return { scene: gltf.scene, clips: anims.clips.map((c) => THREE.AnimationClip.parse(c)) };
   } catch (e) { console.warn("Lowtide: character failed to load, using the stand-in", e); return null; }

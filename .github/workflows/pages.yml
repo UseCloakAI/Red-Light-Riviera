@@ -25,6 +25,12 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      # stamp this build on every script, style and module URL so a page load never mixes versions
+      - name: Version asset URLs
+        run: |
+          V="${GITHUB_SHA::8}"
+          grep -rlZ --include='*.html' --include='*.js' --include='*.css' '?v=dev' lowtide | xargs -0 -r sed -i "s/?v=dev/?v=$V/g"
+          echo "stamped $V"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: lowtide
