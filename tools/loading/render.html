@@ -9,7 +9,7 @@
    from depth and normals, banded shading, halftone in the shadows, paper grain.
    The game pans the two layers at different speeds. Nothing here ships. */
 import * as THREE from "three";
-import { buildWorld } from "/lowtide/game/world.js";
+import { buildWorld, lanePoint } from "/lowtide/game/world.js";
 import { buildSky } from "/lowtide/game/sky.js";
 import { loadHumanData, Human, HOLLIS } from "/lowtide/game/human.js";
 import { Arsenal } from "/lowtide/game/weapons.js";
@@ -50,17 +50,11 @@ const CAST = {
 
 /* ---------- places ---------- */
 const { PIER } = world;
-function blockIn(district, pick = 0) {
-  const bs = world.map.blocks.filter(([x0, z0, x1, z1]) => world.districtAt((x0 + x1) / 2, (z0 + z1) / 2) === district);
-  return bs[pick % bs.length];
-}
-// a spot on a block's sidewalk; side: "s" (the sea side, +z) etc.; along 0..1 along that edge
+// a spot on a pavement in a district (the n-th long lane there, `along` of the way down it); out points at the road
 function curb(district, pick, side, along) {
-  const [x0, z0, x1, z1] = blockIn(district, pick), k = along;
-  if (side === "s") return { x: x0 + (x1 - x0) * k, z: z1 + 1.5, out: [0, 1] };
-  if (side === "n") return { x: x0 + (x1 - x0) * k, z: z0 - 1.5, out: [0, -1] };
-  if (side === "e") return { x: x1 + 1.5, z: z0 + (z1 - z0) * k, out: [1, 0] };
-  return { x: x0 - 1.5, z: z0 + (z1 - z0) * k, out: [-1, 0] };
+  const ls = world.lanes.filter((l) => l.L > 30 && world.districtAt(lanePoint(l, l.L / 2).x, lanePoint(l, l.L / 2).z) === district);
+  const l = ls[pick % ls.length], p = lanePoint(l, along * l.L);
+  return { x: p.x, z: p.z, out: [-p.ox, -p.oz] };
 }
 
 /* ---------- slides ----------
