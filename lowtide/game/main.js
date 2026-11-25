@@ -8,9 +8,13 @@ import { buildSky } from "./sky.js?v=dev";
 import { Player, CamRig, Input } from "./player.js?v=dev";
 import { Hud } from "./hud.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { createHuman } from "./human.js?v=dev";
 
-// the player character: a slimmed Mixamo model plus idle/walk/run retargeted onto her rig (tools/retarget)
-async function loadCharacter() {
+// the player: the character from the creator (MakeHuman, game/human.js); the Mixamo model is the fallback
+async function loadCharacter(params) {
+  try {
+    if (params) { const h = await createHuman(params); return { scene: h.group, clips: h.clips }; }
+  } catch (e) { console.warn("Lowtide: created character failed, using the fallback", e); }
   try {
     const [gltf, anims] = await Promise.all([
       new GLTFLoader().loadAsync("assets/characters/michelle.glb?v=dev"),
@@ -36,7 +40,7 @@ export async function start(o) {
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 2600);
   await step(0.12);
 
-  const charP = loadCharacter();   // download while the city builds
+  const charP = loadCharacter(o.character);   // download while the city builds
   const sky = buildSky(scene, renderer);
   await step(0.25);
   const world = buildWorld(scene, {});

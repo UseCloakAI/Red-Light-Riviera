@@ -1,0 +1,32 @@
+<!doctype html><meta charset="utf-8"><title>Extract motion</title>
+<script type="importmap">{"imports":{"three":"/lowtide/vendor/three/three.module.min.js","three/addons/":"/lowtide/vendor/three/addons/"}}</script>
+<script type="module">
+/* Mixamo clips as rig-independent motion: every bone's world rotation relative
+   to its T-pose, the rest positions (for directions and hip height), and the
+   hips' vertical bob. The game aligns this to any MakeHuman body at runtime. */
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+const P = new URLSearchParams(location.search), CLIPS = P.get("clips").split(",");
+const g = await new GLTFLoader().loadAsync(P.get("src"));
+const S = g.scene; S.updateMatrixWorld(true);
+const bones = []; S.traverse((o) => { if (o.isBone) bones.push(o); });
+const rest = new Map(), r4 = (v) => Math.round(v * 1e4) / 1e4;
+for (const b of bones) rest.set(b, b.getWorldQuaternion(new THREE.Quaternion()));
+const out = { source: P.get("src").split("/").pop(), bones: bones.map((b) => b.name.replace("mixamorig", "")),
+  rest: bones.map((b) => b.getWorldPosition(new THREE.Vector3()).toArray().map(r4)), clips: [] };
+const hips = bones.find((b) => /Hips$/.test(b.name)), hipRest = hips.getWorldPosition(new THREE.Vector3()).y;
+for (const name of CLIPS) {
+  const clip = g.animations.find((a) => a.name === name); if (!clip) throw new Error("no clip " + name);
+  const mixer = new THREE.AnimationMixer(S); mixer.clipAction(clip).play();
+  const fps = 30, n = Math.max(2, Math.round(clip.duration * fps) + 1), q = bones.map(() => []), hy = [];
+  for (let i = 0; i < n; i++) {
+    mixer.setTime(Math.min(clip.duration, i / fps)); S.updateMatrixWorld(true);
+    bones.forEach((b, k) => q[k].push(...b.getWorldQuaternion(new THREE.Quaternion()).multiply(rest.get(b).clone().invert()).toArray().map(r4)));
+    hy.push(r4(hips.getWorldPosition(new THREE.Vector3()).y - hipRest));
+  }
+  out.clips.push({ name, fps, frames: n, duration: r4(clip.duration), q, hipsY: hy });
+  mixer.stopAllAction(); mixer.uncacheRoot(S);
+}
+out.hipRest = r4(hipRest);
+window.result = JSON.stringify(out);
+</script>

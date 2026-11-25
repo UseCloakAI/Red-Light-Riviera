@@ -19,7 +19,7 @@
   };
 
   var el = {
-    gate: $("#gate"), film: $("#film"), studio: $("#studio"), loading: $("#loading"), game: $("#game"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
+    gate: $("#gate"), film: $("#film"), studio: $("#studio"), creator: $("#creator"), loading: $("#loading"), game: $("#game"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
     grid: $("#studio .grid"), orb: $("#studio .orb"), shadow: $("#studio .orb-shadow"),
     railL: $("#studio .side.l .rail"), railR: $("#studio .side.r .rail"), lids: $("#studio .lids"), look: $("#studio .look"), sub: $("#studio .studio-sub"),
     sea: $("#sea"), wrap: $(".logo-wrap"), lt: $(".lt"), below: $(".lt-below"), refl: $(".lt-refl"), line: $(".lt-line"), tag: $(".lt-tag"),
@@ -53,7 +53,7 @@
     live = []; timers.forEach(clearTimeout); timers = [];
   }
   function show(id) {
-    ["gate", "film", "studio", "title", "loading", "game", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === base)); });
+    ["gate", "film", "studio", "title", "creator", "loading", "game", "pause"].forEach(function (k) { el[k].classList.toggle("on", k === id || (id === "pause" && k === base)); });
   }
   function horizonY() {   // where the horizon lands on screen: live shader, or the cover-fitted film
     if (!filmed) return S.horizonY();
@@ -278,8 +278,29 @@
     "Tideline Avenue looks best from the pier. Most things do.",
     "Press Esc for the map. Marlowe Keys is smaller than it acts."
   ];
-  function startGame() {
+  /* ---- the character creator ---- */
+  var character = null;
+  function savedChar() { try { var s = localStorage.getItem("lowtide_character"); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function openCreatorScene(thenGame) {
+    state = "creator"; LT.ui.select(); LT.bed(0.45, 0.6);
+    show("creator"); play(el.creator, [{ opacity: 0 }, { opacity: 1 }], 500, cueNow(), E.out);
+    import(new URL("game/creator.js?v=dev", document.baseURI).href).then(function (m) {
+      return m.openCreator({ root: el.creator, sfx: function (k) { if (LT.ui[k]) LT.ui[k](); } });
+    }).then(function (p) {
+      LT.bed(1, 0.6);
+      if (p) character = p;
+      if (p && thenGame) { state = "title"; return startGame(true); }
+      show("title"); state = "menu"; setSel(sel, true);
+    }).catch(function (e) {
+      console.error(e); $(".cc-rows").innerHTML = '<p class="cc-wait">The creator did not load. Press Esc.</p>';
+      var back = function (ev) { if (ev.key === "Escape") { removeEventListener("keydown", back); show("title"); state = "menu"; } };
+      addEventListener("keydown", back);
+    });
+  }
+  function startGame(fromCreator) {
     if (GAME) { base = "game"; show("game"); state = "game"; GAME.resume(); clickToPlay(true); return; }
+    character = character || savedChar();
+    if (!character && !fromCreator) return openCreatorScene(true);   // first time: make Hollis yours
     state = "loading-game"; LT.ui.select(); LT.bed(0, 0.5);
     var tip = $(".ld-tip"), bar = $(".ld-bar i"), k = 0;
     tip.textContent = TIPS[(Math.random() * TIPS.length) | 0];
@@ -291,7 +312,7 @@
       return m.start({
         mount: $("#gl"), hud: $("#game .hud"),
         progress: function (p) { bar.style.transform = "scaleX(" + p + ")"; },
-        sfx: { step: LT.sfx.step }, onLock: onLock
+        sfx: { step: LT.sfx.step }, onLock: onLock, character: character
       });
     }).then(function (g) {
       GAME = g;
@@ -358,6 +379,7 @@
     var li = items[sel];
     play(li.firstElementChild, [{ transform: "translateX(18px) scale(1)" }, { transform: "translateX(18px) scale(.965)", offset: 0.35 }, { transform: "translateX(18px) scale(1)" }], 240, cueNow(), E.out, "none");
     if (li.dataset.go === "game") startGame();
+    else if (li.dataset.go === "creator") openCreatorScene(false);
     else if (li.dataset.go === "pause") openPause(+(li.dataset.tab || 0)); else LT.ui.tab();
   }
 
@@ -403,6 +425,7 @@
       return;
     }
     if (state === "game") { if (k === "Escape") openPause(0); return; }
+    if (state === "creator" || state === "loading-game") return;
     if (state === "pause") {
       if (k === "e" || k === "E" || k === "ArrowRight") setTab(tab + 1);
       else if (k === "q" || k === "Q" || k === "ArrowLeft") setTab(tab - 1);
