@@ -149,6 +149,12 @@ class Fx {
     this.hulls.count = 0; this.hi2 = 0; this.hulls.frustumCulled = false; scene.add(this.hulls);
     this.shells = []; this.hullS = []; this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.one = new THREE.Vector3(1, 1, 1);
   }
+  snapshotNear(x, z, r) {
+    const p = new THREE.Vector3(), out = [];
+    for (let i = 0; i < this.holes.count; i++) { this.holes.getMatrixAt(i, this.m); p.setFromMatrixPosition(this.m); if (this.m.elements[0] !== 0 && Math.hypot(p.x - x, p.z - z) < r) out.push(this.m.clone()); }
+    return out;
+  }
+  restore(list) { for (const m of list) { this.holes.setMatrixAt(this.hi % 48, m); this.hi++; } this.holes.count = Math.min(48, this.hi); this.holes.instanceMatrix.needsUpdate = true; }
   clearNear(x, z, r) {
     const p = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
     for (const im of [this.holes, this.brass, this.hulls]) { for (let i = 0; i < im.count; i++) { im.getMatrixAt(i, this.m); p.setFromMatrixPosition(this.m); if (Math.hypot(p.x - x, p.z - z) < r) im.setMatrixAt(i, zero); } im.instanceMatrix.needsUpdate = true; }

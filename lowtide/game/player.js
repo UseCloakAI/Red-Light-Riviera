@@ -197,6 +197,7 @@ export class CamRig {
     const d = Math.max(0.6, t * len - 0.25);
     const pos = look.clone().addScaledVector(back, d);
     pos.y = Math.max(pos.y, this.w.heightAt(pos.x, pos.z) + 0.3);
+    if (this.bounds) { const b = this.bounds; pos.x = Math.max(b.x0, Math.min(b.x1, pos.x)); pos.z = Math.max(b.z0, Math.min(b.z1, pos.z)); pos.y = Math.min(pos.y, b.y1); }   // indoors: never through a wall
     if (!this.cur) this.cur = pos.clone(); else this.cur.lerp(pos, t < 1 ? 1 : 1 - Math.exp(-dt * 25));
     this.cam.position.copy(this.cur);
     if (this.shake > 0 && this.shakeMul > 0) { const k = this.shake * this.shakeMul * 0.3; this.cam.position.add(new THREE.Vector3((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, 0)); }

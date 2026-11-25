@@ -14,7 +14,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildRoads, Mask, promenade, PROMENADE_GLSL, SIDEWALK, KERB, at, inPoly } from "./city/roads.js?v=dev";
-import { makeKit, Frame, geometry, ptex, canvas, speckle } from "./city/build.js?v=dev";
+import { makeKit, Frame, geometry, ptex, canvas, speckle, setBuilding, ROOMS } from "./city/build.js?v=dev";
 import * as TY from "./city/types.js?v=dev";
 import { flat } from "./ps1.js?v=dev";
 export { lanePoint, linkPath, laneEndPos } from "./city/roads.js?v=dev";
@@ -284,7 +284,9 @@ export async function buildWorld(scene, opts = {}) {
     const c = F.p((u0 + u1) / 2, (v0 + v1) / 2, 0), ang = Math.atan2(F.t[2], F.t[0]);
     grid.obb(c[0], c[2], (u1 - u0) / 2, (v1 - v0) / 2, ang, h);
   };
-  const lotsToPaint = [], specials = new Set(), cars = [], entrances = [];
+  const lotsToPaint = [], specials = new Set(), cars = [], entrances = [], roomRows = [];
+  // the kinds of room, as the window shader numbers them (build.js SHOP_GLSL)
+  const ROOM_KIND = { store: 1, pharmacy: 1, hardware: 1, surf: 14, pawn: 13, checks: 17, cafe: 15, diner: 2, bar: 3, laundry: 4, barber: 5, hotel: 6, office: 7, apartment: 8, house: 8, warehouse: 9, garage: 16, hall: 10, theatre: 11, motel: 12 };
 
   // what goes on a frontage, by district; specials (one of each) first where they fit
   function choose(d, e, R) {
@@ -309,6 +311,7 @@ export async function buildWorld(scene, opts = {}) {
   }
   function place(F, W, D, c, d) {
     let r;
+    const row = roomRows.length; roomRows.push(null); setBuilding(row + 1);   // its faces know which building they are (the window shader's room data)
     switch (c.t) {
       case "deco": r = TY.decoHotel(kit, F, W, D, R); break;
       case "motel": r = TY.motel(kit, F, W, D, R); specials.add("motel"); break;
@@ -325,6 +328,7 @@ export async function buildWorld(scene, opts = {}) {
       case "theatre": r = TY.theatre(kit, F, W, D, R); specials.add("theatre"); break;
       case "gas": r = TY.gasStation(kit, F, W, D, R); specials.add("gas"); break;
     }
+    setBuilding(0);
     const big = c.t === "motel" || c.t === "gas" || c.t === "house";
     if (r.solid) for (const s of r.solid) solid(F, ...s);
     else if (c.t === "motel") solid(F, 0, W, D - 11, D, r.h);
@@ -351,7 +355,11 @@ export async function buildWorld(scene, opts = {}) {
         F.box(B.lamp, B.lamp, u - 0.12, u + 0.12, v - 0.3, v - 0.04, 2.62, 2.8, null, null, 8, 8);           // a lamp over it
       }
       const p = F.p(u, v - 1.3, 0);
-      entrances.push({ x: p[0], z: p[2], yaw: Math.atan2(F.n[0], F.n[2]), kind: dr.kind, name: dr.name, W: Math.min(W, 16), D, seed: (R() * 2147483647) | 0 });
+      if (dr.face !== "none" && !dr.roller) { const rr = roomRows[row] || (roomRows[row] = { F, v, depth: dr.depth ?? D, units: [] }); if (rr.units.length < 4) rr.units.push([dr.u0 ?? 0, dr.u1 ?? W, ROOM_KIND[dr.kind] || 1]); }
+      entrances.push({ x: p[0], z: p[2], yaw: Math.atan2(F.n[0], F.n[2]), kind: dr.kind, name: dr.name, seed: (R() * 2147483647) | 0,
+        // the room behind it, in the building's own frame: interiors.js builds exactly this
+        u0: dr.u0 ?? 0, u1: dr.u1 ?? W, door: u, depth: dr.depth ?? D, face: dr.face || "shop", ws: dr.ws || 0, front: dr.front ?? v,
+        frame: { ox: F.o[0], oz: F.o[2], tx: F.t[0], tz: F.t[2], nx: F.n[0], nz: F.n[2] } });
     }
   }
   // walk every street's frontage, both sides, placing parcels that fit
@@ -377,8 +385,17 @@ export async function buildWorld(scene, opts = {}) {
       }
     }
   }
+  { // the rooms behind the ground-floor windows: 8 texels a building (frame, front/depth/count, up to four rooms)
+    const n = Math.max(1, roomRows.length), data = new Float32Array(8 * 4 * n);
+    roomRows.forEach((rr, i) => {
+      if (!rr) return; const o = i * 32, F = rr.F;
+      data.set([F.o[0], F.o[2], F.t[0], F.t[2]], o); data.set([rr.v, rr.depth, rr.units.length, 0], o + 4);
+      rr.units.forEach((un, k) => data.set([un[0], un[1], un[2], 0], o + 8 + k * 4));
+    });
+    const tx = new THREE.DataTexture(data, 8, n, THREE.RGBAFormat, THREE.FloatType); tx.needsUpdate = true; ROOMS.value = tx;
+  }
   // geometry from the kit: one mesh per material for everything laid down since the last flush
-  const flush = () => { for (const [k, Bf] of Object.entries(B)) { const n0 = Bf.done || 0; if (Bf.p.length > n0) { add(new THREE.Mesh(geometry({ p: Bf.p.slice(n0), n: Bf.n.slice(n0), u: Bf.u.slice(n0 / 3 * 2), c: Bf.c.slice(n0) }), kit.M[k]), false, true); Bf.done = Bf.p.length; } } };
+  const flush = () => { for (const [k, Bf] of Object.entries(B)) { const n0 = Bf.done || 0; if (Bf.p.length > n0) { add(new THREE.Mesh(geometry({ p: Bf.p.slice(n0), n: Bf.n.slice(n0), u: Bf.u.slice(n0 / 3 * 2), c: Bf.c.slice(n0), r: Bf.r ? Bf.r.slice(n0 / 3) : null }), kit.M[k]), false, true); Bf.done = Bf.p.length; } } };
   flush();
   await breathe();
 

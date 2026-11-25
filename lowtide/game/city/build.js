@@ -87,12 +87,87 @@ const ROOM_GLSL = `
     if(lit>.5&&t!=tx&&h.y>.99) col+=vec3(.55,.45,.3)*smoothstep(.3,0.,length(h.xz-vec2(.5,.5)));   // the ceiling lamp
     return mix(col,vec3(.28,.34,.42),.14);   // a little glass
   }`;
+export const ROOMS = { value: null };   // a DataTexture: per enterable building, its frame and up to four rooms (world.js)
+/* through the ground-floor windows of a building you can go into: that room, cheaply. The same
+   size, the same floor, walls and light, the same counter, shelves, booths, bar, beds and
+   desks in the same places as interiors.js builds them, traced as boxes (kind ids match
+   ROOM_KIND in world.js) */
+const SHOP_GLSL = `
+  uniform highp sampler2D uRooms; varying float vBld;
+  vec4 rd4(int x,int r){return texelFetch(uRooms,ivec2(x,r),0);}
+  float boxT(vec3 ro,vec3 rd,vec3 a,vec3 b){vec3 i=1./rd;vec3 t0=(a-ro)*i,t1=(b-ro)*i;vec3 lo=min(t0,t1),hi=max(t0,t1);float tn=max(max(lo.x,lo.y),lo.z),tf=min(min(hi.x,hi.y),hi.z);return tf>max(tn,0.)?tn:1e9;}
+  // the nearest piece of furniture: returns t, writes its colour
+  float furn(float k,float w,float d,vec3 ro,vec3 rd,out vec3 col){
+    float best=1e9,t; col=vec3(0.);
+    #define BX(a,b,c) t=boxT(ro,rd,a,b); if(t<best){best=t;col=c;}
+    if(k==1.||k==14.){ BX(vec3(.5,0.,1.5),vec3(3.2,1.05,2.2),vec3(.3,.2,.14))
+      for(int i=0;i<4;i++){float z=3.6+2.4*float(i); if(z>d-1.8) break; t=boxT(ro,rd,vec3(3.8,0.,z-.42),vec3(w-1.7,1.65,z+.42)); if(t<best){best=t; vec3 h=ro+rd*t; col=fract(h.y*2.4)<.6?vec3(ih(floor(h.xz*4.)),ih(floor(h.xz*4.)+9.),ih(floor(h.zx*4.)+3.))*.9+.1:vec3(.45);}}
+      if(k==1.){BX(vec3(w-1.,0.,2.),vec3(w,2.2,d-.4),vec3(.75,.9,1.))} }
+    else if(k==13.||k==17.){ BX(vec3(.5,0.,1.5),vec3(3.2,1.05,2.2),vec3(.3,.2,.14)) for(int i=0;i<4;i++){float z=3.2+2.2*float(i); if(z>d-1.5) break; BX(vec3(1.5,0.,z),vec3(w-1.5,1.2,z+.7),vec3(.45,.6,.7))} }
+    else if(k==2.||k==15.){ BX(vec3(1.,0.,d-2.6),vec3(w-1.,1.05,d-2.),vec3(.9,.88,.84)) for(int i=0;i<4;i++){float x=1.+3.2*float(i); if(x>w-3.) break; BX(vec3(x+.3,0.,.6),vec3(x+2.3,.95,1.45),vec3(.72,.18,.16)) BX(vec3(x+.5,.72,1.55),vec3(x+1.7,.78,2.45),vec3(.9,.88,.84))} }
+    else if(k==3.){ BX(vec3(1.,0.,d-2.4),vec3(w-1.,1.1,d-1.8),vec3(.25,.14,.08)) BX(vec3(w*.5-1.2,0.,2.2),vec3(w*.5+1.2,.86,3.6),vec3(.16,.4,.2)) BX(vec3(.3,0.,1.),vec3(1.1,1.6,1.6),vec3(1.,.4,.7)) }
+    else if(k==4.){ BX(vec3(.2,0.,2.),vec3(1.,.95,d-1.),vec3(.9)) BX(vec3(w-1.,0.,2.),vec3(w-.2,.95,d-1.),vec3(.9)) }
+    else if(k==5.){ BX(vec3(w-1.3,0.,2.),vec3(w-.65,1.2,d-1.5),vec3(.7,.18,.16)) }
+    else if(k==6.){ BX(vec3(w*.5-3.,0.,d-3.2),vec3(w*.5+3.,1.18,d-2.5),vec3(.36,.24,.14)) BX(vec3(2.,0.,3.),vec3(5.,.95,3.85),vec3(.18,.29,.43)) BX(vec3(w-5.,0.,3.),vec3(w-2.,.95,3.85),vec3(.18,.29,.43)) }
+    else if(k==7.){ BX(vec3(w*.5-2.,0.,d*.5-.4),vec3(w*.5+2.,1.05,d*.5+.4),vec3(.2,.2,.23)) }
+    else if(k==8.){ BX(vec3(1.,0.,d-3.),vec3(4.,.95,d-2.15),vec3(.3,.35,.48)) BX(vec3(w-.8,0.,1.5),vec3(w-.1,.95,d-1.),vec3(.85,.82,.78)) BX(vec3(w-3.5,0.,3.),vec3(w-1.3,.75,4.),vec3(.4,.28,.18)) }
+    else if(k==10.){ BX(vec3(w*.5-1.5,0.,d-2.5),vec3(w*.5+1.5,.4,d-.5),vec3(.36,.24,.16)) }
+    else if(k==11.){ for(int i=0;i<8;i++){float z=4.+1.2*float(i); if(z>d-4.) break; BX(vec3(1.5,0.,z),vec3(w-1.5,1.,z+.55),vec3(.55,.16,.16))} }
+    else if(k==12.){ BX(vec3(.5,0.,d-2.6),vec3(2.6,.7,d-.3),vec3(.9,.88,.84)) }
+    return best;
+  }
+  vec3 kindFloor(float k,vec2 p){
+    if(k==2.||k==5.||k==15.) return mod(floor(p.x)+floor(p.y),2.)<1.?vec3(.92,.9,.86):vec3(.13);
+    if(k==3.||k==8.||k==10.) return vec3(.54,.35,.21)*(fract(p.x*2.)<.08?.6:1.);
+    if(k==6.||k==11.) return vec3(.48,.16,.19);
+    if(k==12.) return vec3(.18,.27,.4);
+    if(k==9.||k==16.) return vec3(.55,.54,.52);
+    return vec3(.83,.81,.77)*(fract(p.x)<.05||fract(p.y)<.05?.85:1.);
+  }
+  vec3 kindWall(float k){
+    if(k==2.||k==4.||k==5.) return vec3(.9,.93,.94);
+    if(k==3.||k==14.) return vec3(.37,.24,.14);
+    if(k==6.||k==8.||k==15.) return vec3(.88,.82,.7);
+    if(k==9.) return vec3(.54,.55,.56);
+    if(k==16.) return vec3(.55,.54,.52);
+    if(k==10.||k==13.) return vec3(.6,.35,.27);
+    if(k==11.) return vec3(.35,.12,.14);
+    return vec3(.91,.89,.84);
+  }
+  vec3 kindLamp(float k){ if(k==3.) return vec3(1.,.69,.44)*.6; if(k==11.) return vec3(1.,.63,.44)*.5; if(k==9.||k==16.) return vec3(.75); if(k==12.||k==8.) return vec3(1.,.88,.72)*.8; if(k==6.) return vec3(1.,.9,.76); return vec3(1.,.97,.92); }
+  // the room behind a ground-floor window of a building you can enter (or false)
+  bool shopRoom(vec3 wp,out vec3 col){
+    int row=int(vBld-.5); vec4 f0=rd4(0,row),f1=rd4(1,row);
+    vec2 T=f0.zw,N=vec2(T.y,-T.x),rel=wp.xz-f0.xy; float u=dot(rel,T),v=dot(rel,N);
+    if(abs(v-f1.x)>.3||wp.y>3.7) return false;
+    for(int i=0;i<4;i++){
+      if(float(i)>=f1.z) break;
+      vec4 un=rd4(2+i,row);
+      if(u<un.x||u>un.y) continue;
+      float w=un.y-un.x,d=f1.y,k=un.z;
+      vec3 V=normalize(wp-cameraPosition);
+      vec3 rd=vec3(-dot(V.xz,T),V.y,max(dot(V.xz,N),.02)); rd=normalize(rd);
+      vec3 ro=vec3(un.y-u,wp.y-f1.w,.02);
+      float tx=rd.x>0.?(w-ro.x)/rd.x:-ro.x/min(rd.x,-1e-4), ty=rd.y>0.?(3.3-ro.y)/rd.y:-ro.y/min(rd.y,-1e-4), tz=(d-ro.z)/rd.z;
+      float t=min(min(tx,ty),tz); vec3 h=ro+rd*t;
+      vec3 fc; float tf=furn(k,w,d,ro,rd,fc);
+      if(tf<t){ col=fc; h=ro+rd*tf; }
+      else if(t==ty&&rd.y<0.) col=kindFloor(k,h.xz);
+      else if(t==ty) col=vec3(.85,.84,.8);
+      else { col=kindWall(k)*(t==tx?.82:1.); if(t==tz&&(k==3.)) col=mix(col,vec3(ih(floor(h.xy*6.)),.4,.2),step(1.2,h.y)*step(h.y,2.6)*.6); if(t==tz&&k==11.) col=mix(col,vec3(1.,.97,.9),step(.8,h.y)*step(h.y,3.1)); }
+      col*=kindLamp(k)*(1.05-.3*clamp(h.z/max(d,1.),0.,1.));
+      col=floor(col*20.)/20.;
+      col=mix(col,vec3(.26,.32,.4),.12);
+      return true;
+    }
+    return false;
+  }`;
 function interiorRooms(mat, t) {
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uWin = { value: t.win }; sh.uniforms.uCells = { value: new THREE.Vector2(...t.cells) }; sh.uniforms.uRoom = { value: new THREE.Vector3(...t.room) };
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vIWP; varying vec3 vIWN;")
-      .replace("#include <project_vertex>", "#include <project_vertex>\nvIWP=(modelMatrix*vec4(transformed,1.)).xyz; vIWN=normalize(mat3(modelMatrix)*objectNormal);");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uWin; uniform vec2 uCells; uniform vec3 uRoom; varying vec3 vIWP; varying vec3 vIWN;" + ROOM_GLSL)
+    sh.uniforms.uWin = { value: t.win }; sh.uniforms.uCells = { value: new THREE.Vector2(...t.cells) }; sh.uniforms.uRoom = { value: new THREE.Vector3(...t.room) }; sh.uniforms.uRooms = ROOMS;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vIWP; varying vec3 vIWN; attribute float aBld; varying float vBld;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvIWP=(modelMatrix*vec4(transformed,1.)).xyz; vIWN=normalize(mat3(modelMatrix)*objectNormal); vBld=aBld;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uWin; uniform vec2 uCells; uniform vec3 uRoom; varying vec3 vIWP; varying vec3 vIWN;" + ROOM_GLSL + SHOP_GLSL)
       .replace("#include <opaque_fragment>", `#include <opaque_fragment>
         #ifdef USE_MAP
         if(texture2D(uWin,vMapUv).r>.5){
@@ -100,7 +175,7 @@ function interiorRooms(mat, t) {
           #ifdef USE_EMISSIVEMAP
           litIn=step(.15,texture2D(emissiveMap,vEmissiveMapUv).r);
           #endif
-          gl_FragColor.rgb=interiorRoom(vMapUv,vIWP,vIWN,litIn);
+          vec3 sc; if(vBld>.5&&shopRoom(vIWP,sc)) gl_FragColor.rgb=sc; else gl_FragColor.rgb=interiorRoom(vMapUv,vIWP,vIWN,litIn);
         }
         #endif`);
   };
@@ -161,7 +236,7 @@ export function makeKit(R) {
   T.siding = { map: ptex(canvas(64, 48, (g) => {
     g.fillStyle = "#ece8df"; g.fillRect(0, 0, 64, 48); for (let y = 0; y < 48; y += 3) { g.fillStyle = "rgba(0,0,0,.1)"; g.fillRect(0, y, 64, 1); }
     for (let f = 0; f < 2; f++) for (let b = 0; b < 2; b++) { const x = b * 32 + 9, y = f * 24 + 6; g.fillStyle = "#fbfaf6"; g.fillRect(x - 1, y - 1, 14, 14); g.fillStyle = "#2a323e"; g.fillRect(x, y, 12, 12); g.fillStyle = "#fbfaf6"; g.fillRect(x + 5, y, 1, 12); g.fillRect(x, y + 6, 12, 1); g.fillStyle = "#5a6e7a"; g.fillRect(x - 4, y, 3, 12); g.fillRect(x + 13, y, 3, 12); }
-  })), emissiveMap: ptex(canvas(64, 48, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 64, 48); for (let f = 0; f < 2; f++) for (let b = 0; b < 2; b++) if (R() < 0.35) { g.fillStyle = "hsl(36,85%,52%)"; g.fillRect(b * 32 + 9, f * 24 + 6, 12, 12); } })) };
+  })), win: winMask(64, 48, [[9, 6, 12, 12], [41, 6, 12, 12], [9, 30, 12, 12], [41, 30, 12, 12]]), cells: [2, 2], room: [4, 3, 4], emissiveMap: ptex(canvas(64, 48, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 64, 48); for (let f = 0; f < 2; f++) for (let b = 0; b < 2; b++) if (R() < 0.35) { g.fillStyle = "hsl(36,85%,52%)"; g.fillRect(b * 32 + 9, f * 24 + 6, 12, 12); } })) };
   T.roof = { map: ptex(canvas(64, 64, (g) => { g.fillStyle = "#6e6a66"; g.fillRect(0, 0, 64, 64); speckle(g, 64, 64, 900, 0.25, R); g.strokeStyle = "rgba(0,0,0,.2)"; g.strokeRect(0.5, 0.5, 63, 63); })) };
   T.tile = { map: ptex(canvas(32, 32, (g) => { g.fillStyle = "#b5583a"; g.fillRect(0, 0, 32, 32); for (let y = 0; y < 32; y += 4) { g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(0, y + 3, 32, 1); for (let x = (y / 4 % 2) * 4; x < 32; x += 8) { g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(x, y, 4, 3); } } speckle(g, 32, 32, 60, 0.15, R); })) };
   T.shingle = { map: ptex(canvas(32, 32, (g) => { g.fillStyle = "#5c5f66"; g.fillRect(0, 0, 32, 32); for (let y = 0; y < 32; y += 4) { g.fillStyle = "rgba(0,0,0,.3)"; g.fillRect(0, y + 3, 32, 1); for (let x = (y / 4 % 2) * 3; x < 32; x += 6) g.fillRect(x, y, 1, 3); } speckle(g, 32, 32, 80, 0.18, R); })) };
@@ -182,31 +257,34 @@ export function makeKit(R) {
     M[k] = new THREE.MeshLambertMaterial({ map: t.map, vertexColors: true, side: ["roof", "tile", "shingle", "awning", "plain", "concrete"].includes(k) ? THREE.DoubleSide : THREE.FrontSide,
       ...(t.emissiveMap ? { emissiveMap: t.emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.95 } : {}) });
   }
-  for (const k of ["stucco", "deco", "office", "brick", "shop", "motel"]) if (T[k].win) interiorRooms(M[k], T[k]);
+  for (const k of ["stucco", "deco", "office", "brick", "shop", "motel", "siding"]) if (T[k].win) interiorRooms(M[k], T[k]);
   M.signs = new THREE.MeshLambertMaterial({ map: signs.map, emissiveMap: signs.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.2, vertexColors: true });
   M.glass = new THREE.MeshLambertMaterial({ color: 0x9fc4dc, emissive: 0x24384a, vertexColors: true });
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xffd9a0, vertexColors: true });
   M.water = new THREE.MeshLambertMaterial({ color: 0x4aa3b8, emissive: 0x0e3a48 });
-  const B = Object.fromEntries(Object.keys(M).map((k) => [k, { p: [], n: [], u: [], c: [] }]));
+  const B = Object.fromEntries(Object.keys(M).map((k) => [k, { p: [], n: [], u: [], c: [], r: [] }]));
   return { M, B, T, signs };
 }
 
 /* ---------- the builder ---------- */
 const WHITE = new THREE.Color(1, 1, 1);
+let BLD = 0;
+export function setBuilding(i) { BLD = i; }   // the row in the room data (1-based) for the next faces laid down; 0 for none
 export function emit(B, a, b, c, d, n, uv, col) {   // a quad, counter-clockwise seen from the front
   col = col || WHITE;
   for (const [v, t] of [[a, uv[0]], [b, uv[1]], [c, uv[2]], [a, uv[0]], [c, uv[2]], [d, uv[3]]]) {
-    B.p.push(v[0], v[1], v[2]); B.n.push(n[0], n[1], n[2]); B.u.push(t[0], t[1]); B.c.push(col.r, col.g, col.b);
+    B.p.push(v[0], v[1], v[2]); B.n.push(n[0], n[1], n[2]); B.u.push(t[0], t[1]); B.c.push(col.r, col.g, col.b); if (B.r) B.r.push(BLD);
   }
 }
 export function tri(B, a, b, c, n, uv, col) {
   col = col || WHITE;
-  for (const [v, t] of [[a, uv[0]], [b, uv[1]], [c, uv[2]]]) { B.p.push(v[0], v[1], v[2]); B.n.push(n[0], n[1], n[2]); B.u.push(t[0], t[1]); B.c.push(col.r, col.g, col.b); }
+  for (const [v, t] of [[a, uv[0]], [b, uv[1]], [c, uv[2]]]) { B.p.push(v[0], v[1], v[2]); B.n.push(n[0], n[1], n[2]); B.u.push(t[0], t[1]); B.c.push(col.r, col.g, col.b); if (B.r) B.r.push(BLD); }
 }
 export function geometry(B) {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(B.p, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(B.n, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(B.u, 2)); g.setAttribute("color", new THREE.Float32BufferAttribute(B.c, 3));
+  if (B.r && B.r.length * 3 === B.p.length) g.setAttribute("aBld", new THREE.Float32BufferAttribute(B.r, 1));
   g.computeBoundingSphere(); return g;
 }
 // a building's frame: origin on the street-side front corner, u along the street, v back from it

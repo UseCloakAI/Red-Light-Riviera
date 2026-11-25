@@ -87,7 +87,25 @@ export class Interiors {
     for (const e of this.list) { const d = Math.hypot(P.x - e.x, P.z - e.z); if (d < bd) { bd = d; best = e; } }
     return best;
   }
+  /* what happened in a building stays there: the bodies (as they fell), the blood, the bullet holes */
+  saved(e) { const k = e.x.toFixed(1) + "," + e.z.toFixed(1); this.memory = this.memory || new Map(); let st = this.memory.get(k); if (!st) this.memory.set(k, st = { bodies: [], dead: new Set(), gore: null, holes: null }); return st; }
+  save(e) {
+    const st = this.saved(e);
+    for (const pd of this.people) if (pd.dead) {
+      if (pd.rag) { for (let i = 0; i < 150 && pd.rag.step(1 / 30); i++); pd.rag.pose(); }   // let them come to rest first
+      st.bodies.push(bakeBody(pd.h.group)); st.dead.add(pd.spotKey);
+    }
+    for (const b of st.bodies) this.scene.remove(b);
+    if (this.gore && this.gore.snapshotNear) st.gore = this.gore.snapshotNear(ORIGIN.x, ORIGIN.z, 60);
+    if (this.fx && this.fx.snapshotNear) st.holes = this.fx.snapshotNear(ORIGIN.x, ORIGIN.z, 60);
+  }
+  restore(st) {
+    for (const b of st.bodies) this.scene.add(b);
+    if (st.gore && this.gore && this.gore.restore) this.gore.restore(st.gore);
+    if (st.holes && this.fx && this.fx.restore) this.fx.restore(st.holes);
+  }
   update(dt, input, camera) {
+    this.camera = camera;
     if (this.fadeT > 0) { this.fadeT -= dt; if (this.fadeT <= 0 && this.then) { const f = this.then; this.then = null; f(); } }
     if (this.inside) this.tickInside(dt);
     const busy = this.fadeT > 0 || (this.vehicles && this.vehicles.driving);
@@ -112,21 +130,28 @@ export class Interiors {
 
   enter(e) {
     const R = rng(e.seed), kind = e.kind;
-    const size = { motel: [6, 7], apartment: [9, 8], house: [10, 9], barber: [7, 9], laundry: [8, 11], checks: [8, 7], office: [16, 13], hotel: [16, 13], theatre: [18, 24], warehouse: [24, 20], garage: [24, 20], hall: [16, 14] }[kind];
-    const w = size ? size[0] : THREE.MathUtils.clamp(e.W - 1, 7, 14), d = size ? size[1] : THREE.MathUtils.clamp(e.D - 1, 7, 13);
-    this.inside = { e, w, d, kind, R, t: 0, greeted: false };
-    this.build(this.inside);
+    // the room is the building: the unit's width along the street, its depth back from the front
+    const w = THREE.MathUtils.clamp(e.u1 - e.u0, 3.5, 30), d = THREE.MathUtils.clamp(e.depth, 4, 30);
+    this.inside = { e, w, d, kind, R, t: 0, greeted: false, doorX: THREE.MathUtils.clamp(e.u1 - e.door, 0.9, w - 0.9) };
+    const st = this.saved(e);
+    this.build(this.inside, st);
+    this.restore(st);
     this.world.heightAt = (x, z) => (Math.abs(x - ORIGIN.x) < 200 && Math.abs(z - ORIGIN.z) < 200 ? 0 : this.heightAt0(x, z));
     const P = this.player, ex = this.inside.exit;
     P.pos.set(ex.x, 0, ex.z + 1.8); P.vel.set(0, 0, 0); P.yaw = 0;
     this.rig.yaw = Math.PI; this.rig.pitch = 0.12; this.rig.cur = null;
+    // the camera stays in the room: a shorter boom, a closer near plane, walls it can't pass
+    const ox = ORIGIN.x - w / 2, m = 0.28; this.rig.bounds = { x0: ox + m, x1: ox + w - m, z0: ORIGIN.z + m, z1: ORIGIN.z + d - m, y1: H - 0.18 };
+    this.dist0 = this.rig.dist; this.rig.dist = Math.min(3, this.rig.dist); if (this.camera) { this.near0 = this.camera.near; this.camera.near = 0.08; this.camera.updateProjectionMatrix(); }
     if (this.hud.root) this.hud.root.classList.add("inside");
     this.tone = this.sfx.roomTone ? this.sfx.roomTone(STORES.includes(kind) ? "store" : kind) : null;
     if (this.onEnter) this.onEnter(e);
   }
   leave() {
     const e = this.inside.e;
+    this.save(e);
     this.clear();
+    this.rig.bounds = null; if (this.dist0) this.rig.dist = this.dist0; if (this.camera && this.near0) { this.camera.near = this.near0; this.camera.updateProjectionMatrix(); }
     this.world.heightAt = this.heightAt0;
     const P = this.player; P.pos.set(e.x, this.heightAt0(e.x, e.z), e.z); P.vel.set(0, 0, 0); P.yaw = e.yaw + Math.PI;
     this.rig.yaw = e.yaw; this.rig.pitch = 0.14; this.rig.cur = null;
@@ -160,10 +185,10 @@ export class Interiors {
   }
 
   /* ---------------- the rooms ---------------- */
-  build(I) {
+  build(I, st) {
     const { w, d, kind, R } = I, g = new THREE.Group(), layers = new Map();
     const ox = ORIGIN.x - w / 2, oz = ORIGIN.z;
-    I.exit = { x: ORIGIN.x, z: oz + 0.9 };
+    const DX = I.doorX; I.exit = { x: ox + DX, z: oz + 0.9 };
     const lamps = []; for (let x = 2; x < w - 1; x += 4) for (let z = 2; z < d - 1; z += 4) lamps.push([x, z]);
     const dim = { bar: 0.55, theatre: 0.45, warehouse: 0.72, garage: 0.72, hall: 0.85, motel: 0.75, apartment: 0.8, house: 0.8 }[kind] || 1;
     const warm = { bar: C("#ffb070"), theatre: C("#ffa070"), motel: C("#ffd0a0"), apartment: C("#ffe0b8"), house: C("#ffe0b8"), hotel: C("#ffe4c0") }[kind] || C("#fff8ec");
@@ -197,10 +222,10 @@ export class Interiors {
     };
     // the shell
     const isStore = STORES.includes(kind);
-    const FLOOR = { diner: "checker", cafe: "checker", barber: "checker", bar: "plank", laundry: "tile", hotel: "carpet", motel: "bluecarpet", apartment: "plank", house: "plank", office: "tile", warehouse: "concrete", garage: "concrete", theatre: "carpet", hall: "plank", checks: "tile" }[kind] || "tile";
-    const WALL = { diner: "walltile", cafe: "stripe", bar: "wood", laundry: "walltile", barber: "walltile", hotel: "stripe", motel: "paint", apartment: R() < 0.5 ? "stripe" : "paint", house: "stripe", office: "paint", warehouse: "metal", garage: "concrete", theatre: "damask", hall: "brick", pawn: "brick", surf: "wood" }[kind] || "paint";
+    const FLOOR = { diner: "checker", cafe: "checker", barber: "checker", bar: "plank", laundry: "tile", hotel: "carpet", pawn: "tile", surf: "tile", motel: "bluecarpet", apartment: "plank", house: "plank", office: "tile", warehouse: "concrete", garage: "concrete", theatre: "carpet", hall: "plank", checks: "tile" }[kind] || "tile";
+    const WALL = { diner: "walltile", cafe: "stripe", bar: "wood", laundry: "walltile", barber: "walltile", hotel: "stripe", motel: "paint", apartment: "stripe", house: "stripe", office: "paint", warehouse: "metal", garage: "concrete", theatre: "damask", hall: "brick", pawn: "brick", surf: "wood" }[kind] || "paint";
     quad([0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d], C("#ffffff"), { tex: FLOOR, shade: 0.95, uv: [[0, 0], [w / 2, 0], [w / 2, d / 2], [0, d / 2]] });
-    const wallCol = C(WALL === "paint" ? ["#e8e2d6", "#d6e0e4", "#e6d8c8", "#d8e4d4"][(R() * 4) | 0] : "#ffffff");
+    const wallCol = C("#ffffff");
     const wall = (x0, z0, x1, z1, inset) => {
       const L = Math.hypot(x1 - x0, z1 - z0), ix = inset[0], iz = inset[1];
       quad([x0, 0, z0], [x1, 0, z1], [x1, H, z1], [x0, H, z0], wallCol, { tex: WALL, shade: 0.88, uv: [[0, 0], [L / 2, 0], [L / 2, H / 2], [0, H / 2]] });
@@ -217,13 +242,24 @@ export class Interiors {
       else quad([lx - 0.6, H - 0.02, lz - 0.25], [lx + 0.6, H - 0.02, lz - 0.25], [lx + 0.6, H - 0.02, lz + 0.25], [lx - 0.6, H - 0.02, lz + 0.25], C("#fff6e0"), { glow: true });   // panels
     }
     // the way in, and windows out to the night
-    quad([w / 2 - 0.7, 0, 0.03], [w / 2 + 0.7, 0, 0.03], [w / 2 + 0.7, 2.3, 0.03], [w / 2 - 0.7, 2.3, 0.03], C("#5a3a24"), { shade: 0.95 });
-    quad([w / 2 - 0.45, 1.3, 0.04], [w / 2 + 0.45, 1.3, 0.04], [w / 2 + 0.45, 2.1, 0.04], [w / 2 - 0.45, 2.1, 0.04], C("#1c2a44"), { glow: true });
-    quad([w / 2 + 0.4, 1.05, 0.045], [w / 2 + 0.55, 1.05, 0.045], [w / 2 + 0.55, 1.15, 0.045], [w / 2 + 0.4, 1.15, 0.045], C("#e0b040"), { glow: true });
-    if (!["warehouse", "garage", "theatre", "hall"].includes(kind)) for (const x of [0.8, w - 2.8]) if (Math.abs(x + 1 - w / 2) > 2) {
-      quad([x, 0.9, 0.03], [x + 2, 0.9, 0.03], [x + 2, 2.5, 0.03], [x, 2.5, 0.03], C("#141c30"), { glow: true });
-      for (let k = 0; k < 4; k++) { const lx = x + 0.2 + R() * 1.6, ly = 1 + R() * 1.3; quad([lx, ly, 0.035], [lx + 0.06, ly, 0.035], [lx + 0.06, ly + 0.06, 0.035], [lx, ly + 0.06, 0.035], C("#ffd890"), { glow: true }); }   // lights across the street
-      box(x - 0.05, x + 2.05, 0.82, 0.9, 0.02, 0.2, "#d8d2c8", { solid: false });   // the sill
+    quad([DX - 0.7, 0, 0.03], [DX + 0.7, 0, 0.03], [DX + 0.7, 2.3, 0.03], [DX - 0.7, 2.3, 0.03], C("#5a3a24"), { shade: 0.95 });
+    quad([DX - 0.45, 1.3, 0.04], [DX + 0.45, 1.3, 0.04], [DX + 0.45, 2.1, 0.04], [DX - 0.45, 2.1, 0.04], C("#1c2a44"), { glow: true });
+    quad([DX + 0.4, 1.05, 0.045], [DX + 0.55, 1.05, 0.045], [DX + 0.55, 1.15, 0.045], [DX + 0.4, 1.15, 0.045], C("#e0b040"), { glow: true });
+    // the front windows, exactly where they are outside (each 4 m bay of the facade tile, from where the tile starts), dark glass and blinds from in here
+    const FACE = { shop: [0.25, 3.75, 0.05, 2.7], stucco: [1, 3, 0.73, 2.48], siding: [1.125, 2.625, 0.75, 2.25], motel: [2.25, 3.75, 1.3, 2.33] }[I.e.face];
+    if (FACE) {
+      const ws = I.e.ws || 0, u0 = I.e.u0, u1 = I.e.u1;
+      for (let b = ws; b < u1; b += 4) {
+        let a = Math.max(b + FACE[0], u0), c = Math.min(b + FACE[1], u1);
+        // not over the door
+        const du = I.e.door; if (a < du + 0.8 && c > du - 0.8) { if (du - 0.8 - a > 0.4) c = du - 0.8; else if (c - (du + 0.8) > 0.4) a = du + 0.8; else continue; }
+        if (c - a < 0.3) continue;
+        const x0 = u1 - c, x1 = u1 - a, y0 = FACE[2], y1 = FACE[3];   // into room coordinates (the room's x runs the other way from the street's u)
+        quad([x0, y0, 0.03], [x1, y0, 0.03], [x1, y1, 0.03], [x0, y1, 0.03], C("#121a2c"), { glow: true });
+        for (let y = y0 + 0.12; y < y1; y += 0.14) quad([x0, y, 0.035], [x1, y, 0.035], [x1, y + 0.03, 0.035], [x0, y + 0.03, 0.035], C("#3a4458"), { glow: true });   // the blinds
+        for (let k = 0; k < 3; k++) { const lx = x0 + 0.1 + R() * (x1 - x0 - 0.2), ly = y0 + 0.2 + R() * (y1 - y0 - 0.4); quad([lx, ly, 0.04], [lx + 0.05, ly, 0.04], [lx + 0.05, ly + 0.05, 0.04], [lx, ly + 0.05, 0.04], C("#ffd890"), { glow: true }); }
+        box(x0 - 0.04, x1 + 0.04, y0 - 0.08, y0, 0.02, 0.16, "#d8d2c8", { solid: false });   // the sill
+      }
     }
     // what's in it
     const fan = (x, z) => { const f = new THREE.Group(), m = this.mat("flat", null, false), geo = new THREE.BoxGeometry(1.4, 0.03, 0.16); for (const r of [0, Math.PI / 2]) { const b = new THREE.Mesh(geo, m); b.rotation.y = r; f.add(b); } geo.setAttribute("color", new THREE.Float32BufferAttribute(new Array(geo.attributes.position.count * 3).fill(0.28), 3)); f.position.set(ox + x, H - 0.35, oz + z); g.add(f); this.fans.push(f); };
@@ -238,14 +274,34 @@ export class Interiors {
     }
     this.scene.add(g); this.group = g;
     // people: the worker (or a resident), and a customer or two
-    const place = (spot, worker) => {
+    const place = (spot, worker, key) => {
+      if (st && st.dead.has(key)) return;   // they died here; their body's still where it fell
+      if (spot[0] < 0.4 || spot[0] > w - 0.4 || spot[1] < 0.4 || spot[1] > d - 0.4) return;   // the room's too small for them
       const pd = this.npcs && this.npcs.find((q) => !q.inUse && !q.dead); if (!pd) return;
-      pd.inUse = true; pd.worker = worker; pd.face = spot[2] ?? Math.PI; this.people.push(pd);
+      pd.inUse = true; pd.worker = worker; pd.spotKey = key; pd.face = spot[2] ?? Math.PI; this.people.push(pd);
       const g2 = pd.h.group; g2.position.set(ox + spot[0], 0, oz + spot[1]); g2.rotation.y = pd.face; g2.visible = true; pd.hp = 100;
     };
-    if (spots.worker && !((kind === "apartment" || kind === "house") && R() < 0.3)) place(spots.worker, true);
-    for (const s of spots.extra) if (R() < 0.75) place(s, false);
+    if (spots.worker && !((kind === "apartment" || kind === "house") && R() < 0.3)) place(spots.worker, true, "w");
+    spots.extra.forEach((s2, i) => { if (R() < 0.75) place(s2, false, "e" + i); });
   }
+}
+
+/* a body left where it fell: every skinned part's posed vertices baked into a plain mesh */
+function bakeBody(group) {
+  const out = new THREE.Group(), v = new THREE.Vector3();
+  group.updateMatrixWorld(true);
+  group.traverse((o) => {
+    if (!o.isMesh || !o.visible || !o.geometry.attributes.position) return;
+    const g = o.geometry, n = g.attributes.position.count, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { if (o.isSkinnedMesh) o.getVertexPosition(i, v); else v.fromBufferAttribute(g.attributes.position, i); v.applyMatrix4(o.matrixWorld); pos[i * 3] = v.x; pos[i * 3 + 1] = v.y; pos[i * 3 + 2] = v.z; }
+    const ng = new THREE.BufferGeometry(); ng.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    if (g.attributes.uv) ng.setAttribute("uv", g.attributes.uv);
+    if (g.index) ng.setIndex(g.index);
+    for (const gr of g.groups) ng.addGroup(gr.start, gr.count, gr.materialIndex);
+    ng.computeVertexNormals();
+    const m = new THREE.Mesh(ng, o.material); m.frustumCulled = false; out.add(m);
+  });
+  return out;
 }
 
 /* ---------------- furniture, by kind ---------------- */
