@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { inPoly } from "./city/roads.js?v=dev";
 import { lanePoint, beachY, promenade, SEA, PIER, DISTRICT_NAMES } from "./world.js?v=dev";
 
-export const COOLDOWN = 90;   // seconds between trips
+export const COOLDOWN = 30;   // seconds between trips
 const V = THREE.Vector3;
 const outExpo = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
 const inOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);

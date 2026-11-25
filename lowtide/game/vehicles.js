@@ -339,7 +339,7 @@ export class Vehicles {
         const v = Math.abs(c.speed), dir = _v.set(fx * Math.sign(c.speed), 0.25, fz * Math.sign(c.speed)).normalize().clone();
         this.peds.damage(pd, { point: new THREE.Vector3(g.x, g.y + 0.9, g.z), dir, damage: v * 9, head: false, from: { x: c.x, z: c.z }, force: Math.min(9, v * 0.7) });
         c.speed *= 0.85; if (this.sfx.impact) this.sfx.impact("flesh", 0, 0);
-        this.peds.alarm(c.x, c.z, 35);
+        this.peds.alarm(c.x, c.z, 35, true, "car");
       }
     }
     if (this.engine) this.engine.set(Math.abs(c.speed) / MAX, thr);

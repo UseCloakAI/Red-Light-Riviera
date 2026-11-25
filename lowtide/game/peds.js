@@ -17,7 +17,7 @@
 import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
 import { lanePoint, linkPath, laneEndPos } from "./world.js?v=dev";
-import { AMBIENT, BUMP, PANIC } from "./lines.js?v=dev";
+import { AMBIENT, BUMP, PANIC, STRUCK } from "./lines.js?v=dev";
 import { findBones, Ragdoll } from "./rig.js?v=dev";
 
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.35;
@@ -306,7 +306,14 @@ export async function spawnPeds(scene, world, o = {}) {
       return "hurt";
     },
     // something went wrong at (x, z): people within r run from it; the closest may duck first
-    alarm(x, z, r = 40, shout = true) {
+    // a car nudged them: a stagger, a step aside and a word for the driver
+    bump(pd, x, z) {
+      if (pd.dead || pd.stagger > 0) return;
+      const g = pd.h.group.position; pd.stagger = 1.2; pd.side += (g.x - x > 0 ? 0.5 : -0.5);
+      if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
+    },
+    // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
+    alarm(x, z, r = 40, shout = true, kind = "gun") {
       let nearest = null, nd = Infinity;
       for (let i = 0; i < Math.min(limit, peds.length); i++) {
         const pd = peds[i], g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z);
@@ -319,7 +326,7 @@ export async function spawnPeds(scene, world, o = {}) {
         if (pd.w) { pointOn(pd.w, pd.s + 2, tmp); const a = Math.hypot(tmp.x - x, tmp.z - z); pointOn(pd.w, Math.max(0, pd.s - 2), tmp); if (a < Math.hypot(tmp.x - x, tmp.z - z)) reverse(pd); }
         if (d < nd) { nd = d; nearest = pd; }
       }
-      if (shout && nearest && nd < 25) { quiet = 0; say(PANIC[(R() * PANIC.length) | 0], nearest, "scared"); quiet = 3 + R() * 3; }
+      if (shout && nearest && nd < 25) { quiet = 0; { const L = kind === "car" ? STRUCK : PANIC; say(L[(R() * L.length) | 0], nearest, "scared"); } quiet = 3 + R() * 3; }
       // someone near it screams
       if (nearest && nd < 30 && R() < 0.8) scream(nearest);
       return nearest;
