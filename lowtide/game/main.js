@@ -15,6 +15,7 @@ import { Vehicles } from "./vehicles.js?v=dev";
 import { Traffic } from "./traffic.js?v=dev";
 import { Life } from "./life.js?v=dev";
 import { Gore } from "./gore.js?v=dev";
+import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
@@ -68,7 +69,9 @@ export async function start(o) {
   // Stage 2: the people of Marlowe Keys
   let peds = null;
   const gore = new Gore(scene, world);
-  try { peds = await spawnPeds(scene, world, { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos, onSpeak: (t) => hud.subtitle(t), progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
+  const voice = makeVoice(o.sfx);   // S.A.M. reads the lines
+  const heard = (pd) => (pd ? Math.hypot(pd.h.group.position.x - player.pos.x, pd.h.group.position.z - player.pos.z) : 0);
+  try { peds = await spawnPeds(scene, world, { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos, onSpeak: (t, pd) => { hud.subtitle(t); voice.speak(t, pd && pd.voice, heard(pd)); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
   // Stage 3: weapons
@@ -78,6 +81,7 @@ export async function start(o) {
   const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
   // your health; cars and blasts take it
   const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
+  arsenal.say = (t, pd) => voice.speak(t, pd && pd.voice, heard(pd)); life.voice = voice;
   traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
   // gunfire: drivers panic, and cars take rounds (enough of them and they go up)
