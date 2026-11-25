@@ -67,7 +67,12 @@ const ROOM_GLSL = `
     vec3 wallC=mix(vec3(.36,.29,.22),vec3(.62,.56,.46),ih(vec2(id,1.)));
     wallC*=mix(vec3(1.),vec3(.62,.78,.92),step(.62,ih(vec2(id,2.))));
     vec3 col;
-    if(t==tz){
+    if(t==tz&&uCells.y<1.5){   // a shop window: shelves of stock along the back
+      col=vec3(.45,.43,.4);
+      float row=fract(h.y*4.);
+      vec3 stock=vec3(ih(vec2(floor(h.x*9.),floor(h.y*4.)+id)),ih(vec2(floor(h.x*9.)+3.,floor(h.y*4.))),ih(vec2(floor(h.x*9.)+7.,id)));
+      col=mix(col,stock*.9+.1,step(.25,row)*step(h.y,.85)*step(.08,h.y));
+    } else if(t==tz){
       col=wallC;
       float fx=.25+.5*ih(vec2(id,3.)), kind=ih(vec2(id,6.));
       float base=step(abs(h.x-fx),kind<.5?.24:.12)*step(h.y,kind<.5?.3:.62);       // a sofa, or a cabinet
@@ -163,6 +168,12 @@ export function makeKit(R) {
   T.awning = { map: ptex(canvas(16, 16, (g) => { for (let x = 0; x < 16; x += 4) { g.fillStyle = x % 8 ? "#f4f0e8" : "#c0c0c0"; g.fillRect(x, 0, 4, 16); } g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(0, 14, 16, 2); })) };
   T.plain = { map: ptex(canvas(16, 16, (g) => { g.fillStyle = "#e6e4de"; g.fillRect(0, 0, 16, 16); speckle(g, 16, 16, 40, 0.15, R); })) };
   T.concrete = { map: ptex(canvas(32, 32, (g) => { g.fillStyle = "#bdb8ae"; g.fillRect(0, 0, 32, 32); speckle(g, 32, 32, 160, 0.16, R); g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(0, 31, 32, 1); g.fillRect(31, 0, 1, 32); })) };
+  // an entrance: frame, a door with a glass panel and a brass handle
+  T.entry = { map: ptex(canvas(32, 48, (g) => {
+    g.fillStyle = "#2a2622"; g.fillRect(0, 0, 32, 48); g.fillStyle = "#6a4a32"; g.fillRect(3, 3, 26, 45);
+    g.fillStyle = "#1c2a3a"; g.fillRect(6, 6, 20, 20); g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(6, 6, 20, 2);
+    g.fillStyle = "#5a3c28"; g.fillRect(6, 30, 20, 14); g.fillStyle = "#e0b040"; g.fillRect(23, 27, 3, 2);
+  }), false), emissiveMap: ptex(canvas(32, 48, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 32, 48); g.fillStyle = "#6a4a20"; g.fillRect(6, 6, 20, 20); }), false) };
   const signs = signAtlas(R); T.signs = signs;
   // materials: lambert, tinted by vertex colour, lit windows glow
   const M = {};
@@ -174,6 +185,7 @@ export function makeKit(R) {
   for (const k of ["stucco", "deco", "office", "brick", "shop", "motel"]) if (T[k].win) interiorRooms(M[k], T[k]);
   M.signs = new THREE.MeshLambertMaterial({ map: signs.map, emissiveMap: signs.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.2, vertexColors: true });
   M.glass = new THREE.MeshLambertMaterial({ color: 0x9fc4dc, emissive: 0x24384a, vertexColors: true });
+  M.lamp = new THREE.MeshBasicMaterial({ color: 0xffd9a0, vertexColors: true });
   M.water = new THREE.MeshLambertMaterial({ color: 0x4aa3b8, emissive: 0x0e3a48 });
   const B = Object.fromEntries(Object.keys(M).map((k) => [k, { p: [], n: [], u: [], c: [] }]));
   return { M, B, T, signs };

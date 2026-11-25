@@ -149,6 +149,11 @@ class Fx {
     this.hulls.count = 0; this.hi2 = 0; this.hulls.frustumCulled = false; scene.add(this.hulls);
     this.shells = []; this.hullS = []; this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.one = new THREE.Vector3(1, 1, 1);
   }
+  clearNear(x, z, r) {
+    const p = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const im of [this.holes, this.brass, this.hulls]) { for (let i = 0; i < im.count; i++) { im.getMatrixAt(i, this.m); p.setFromMatrixPosition(this.m); if (Math.hypot(p.x - x, p.z - z) < r) im.setMatrixAt(i, zero); } im.instanceMatrix.needsUpdate = true; }
+    this.shells = this.shells.filter((s) => !s.p || Math.hypot(s.p.x - x, s.p.z - z) >= r); this.hullS = this.hullS.filter((s) => !s.p || Math.hypot(s.p.x - x, s.p.z - z) >= r);
+  }
   puff(pos, vel, size, life, color, alpha) {
     const P = this.puffs[this.pi++ % this.puffs.length];
     P.s.position.copy(pos); P.v.copy(vel); P.life = 0; P.max = life; P.grow = size; P.a = alpha; P.s.visible = true;

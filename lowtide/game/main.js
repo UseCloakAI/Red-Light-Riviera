@@ -84,7 +84,7 @@ export async function start(o) {
   const cops = [];   // the Marlowe Keys PD: eight officers, kept out of sight until they're needed
   if (peds) try { for (let i = 0; i < 12; i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
   const npcs = [];   // the people behind counters, three of them, reused room to room
-  if (peds) try { for (let i = 0; i < 3; i++) { npcs.push(await peds.makeNpc()); await frame(); } } catch (e) { console.warn("Lowtide: interior people failed to load", e); }
+  if (peds) try { for (let i = 0; i < 6; i++) { npcs.push(await peds.makeNpc()); await frame(); } } catch (e) { console.warn("Lowtide: interior people failed to load", e); }
   let police = null;
 
   // Stage 3: weapons
@@ -167,11 +167,11 @@ export async function start(o) {
     return bulletcam.start({ from: muzzle, to: hit.point, dir, apply, body: () => (pd.rag ? pd.rag.p[0] : pd.h.group.position) });
   };
   // interiors: nearly every building's door opens
-  const interiors = new Interiors({ scene, world, player, rig, hud, sfx: o.sfx || {}, npcs, police, vehicles, root: o.hud,
+  const interiors = new Interiors({ scene, world, player, rig, hud, sfx: o.sfx || {}, npcs, police, vehicles, root: o.hud, gore, fx: arsenal.fx,
     say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "calm"); } });
   interiors.on = (e) => { if (e === "near-door") hud.tipOnce("door", "{E} goes in. Nearly every door on the island opens."); };
   // the police's hooks into everything else
-  hud.blips = () => police.blips(); travel.police = police; interiors.police = police; arsenal.targets = () => police.targets();
+  hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets();
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
   { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }
@@ -315,7 +315,7 @@ export async function start(o) {
         ["Headshots", stats.headshots], ["Highest wanted", stats.maxWanted ? "\u2605".repeat(stats.maxWanted) : "None"], ["Times busted", stats.busted], ["Officers downed", stats.copsDowned]];
     },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
-    rig, world, arsenal, vehicles, traffic, life, get peds() { return peds; }
+    rig, world, arsenal, vehicles, traffic, life, gore, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };
