@@ -113,6 +113,7 @@
     B.seq = G(1); B.seq.connect(B.sfx);          // intro cues live here so a skip can cut them
     B.ui = G(0.75); B.ui.connect(out); send(B.ui, plate, 0.16);
     B.amb = G(0); B.amb.connect(out);
+    B.song = G(0); B.song.connect(out);           // the loading-screen song
 
     // music: everything feeds a tone filter so the pause menu can muffle it
     B.mus = G(0); B.tone = F("lowpass", 18000, 0.6); chain(B.mus, B.tone, out);
@@ -540,6 +541,20 @@
     var s = ctx.createBufferSource(); s.buffer = BAKE[k]; s.loop = !!loop;
     s.connect(dest); s.start(t, offset || 0); playing.push(s); return s;
   }
+  /* the loading song: in on the loading screen, out when the city appears; loops if loading runs long */
+  var SONG = { src: null, want: false };
+  function songPlay(fade) {
+    if (!ctx) return; SONG.want = true;
+    if (!BAKE.song || SONG.src) return;   // not decoded yet: starts when it is (loadBaked resolves, then call again)
+    var t = now() + 0.02; SONG.src = playBaked("song", t, 0, true, B.song);
+    B.song.gain.cancelScheduledValues(t); B.song.gain.setValueAtTime(0, t); B.song.gain.linearRampToValueAtTime(0.9, t + (fade || 0.6));
+  }
+  function songStop(fade) {
+    SONG.want = false; if (!ctx || !SONG.src) return;
+    var t = now(), s = SONG.src; SONG.src = null; fade = fade || 1.5;
+    B.song.gain.cancelScheduledValues(t); B.song.gain.setValueAtTime(B.song.gain.value, t); B.song.gain.linearRampToValueAtTime(0, t + fade);
+    s.stop(t + fade + 0.05);
+  }
   // the intro film's soundtrack, positioned so buffer time p is heard when the video shows p
   function playIntro(t, offset) { return BAKE.intro ? playBaked("intro", t, offset, false, B.seq) : null; }
   // title: the drop. Hit + looping bed (baked if available, live engine otherwise).
@@ -560,6 +575,7 @@
     get baked() { return !!(BAKE.intro && BAKE.loop); },
     init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix,
     cue: { intro: cueIntro, skip: cueSkip },
+    song: { play: songPlay, stop: songStop, get wanted() { return SONG.want; } },
     music: { start: musicStart, section: musicSection, stop: musicStop, get on() { return M.on; } },
     amb: { start: ambStart, stop: ambStop, get on() { return W.on; } },
     _pump: pump,

@@ -208,6 +208,9 @@
     V.intro.load(); V.bg.load();
     LT.init();   // created suspended; resumed by the key press
     var aud = LT.loadBaked({ intro: MEDIA + "intro.flac", loop: MEDIA + "theme.mp3?v=dev" });
+    // the loading screen's song and art: fetched behind the intro, never holding it up
+    aud.then(function () { preloadSlides(); return LT.loadBaked({ song: MEDIA + "loading.mp3?v=dev" }); })
+      .then(function () { if (LT.song.wanted) LT.song.play(1); }).catch(function (e) { console.warn("Lowtide: loading song", e); });
     var vid = new Promise(function (res, rej) {
       if (V.intro.readyState >= 3) return res();
       V.intro.addEventListener("canplaythrough", res, { once: true });
@@ -278,6 +281,45 @@
     "Tideline Avenue looks best from the pier. Most things do.",
     "Press Esc for the map. Marlowe Keys is smaller than it acts."
   ];
+  /* ---- the loading screen: the cast, pre-rendered in two layers (tools/loading) ---- */
+  var LD = [
+    { id: "hollis", name: "Hollis Vane", role: "Former Marlowe bar pilot", line: "I'm not a criminal. I'm between licenses." },
+    { id: "dez", name: "Dez Ruelas", role: "Ruelas Bait & Ice, Tideline Pier", line: "You're late. Tide's already turning." },
+    { id: "ashby", name: "Calvin and June Ashby", role: "Ashby Tidewater", line: "Port Salt gave this city its name. We're going to give it a future." },
+    { id: "odette", name: "Det. Odette Pruitt", role: "Marine Recovery, Marlowe Keys Public Safety", line: "Bring me something that floats." },
+    { id: "docks", name: "Bernie Szabo and Wade Purcell", role: "Longshore Hall · Purcell Salvage & Tow", line: "I lift what comes. I don't read labels." },
+    { id: "seagrape", name: "Rafi Castellan and Lionel Pike", role: "Ashby Tidewater · The Seagrape Motor Inn", line: "I'll be honest with you, which I don't usually do." },
+    { id: "showdown", name: "Hollis Vane", role: "Port Salt", line: "High water's 12:18. After that, nobody's leaving." }
+  ];
+  var ldImg = {}, SHOW = { t: 0, i: -1, order: [] };
+  function preloadSlides() {
+    LD.forEach(function (s) {
+      [["bg", ".jpg"], ["fg", ".webp"]].forEach(function (l) { var im = new Image(); im.alt = ""; im.decoding = "async"; im.src = MEDIA + "loading/" + s.id + "-" + l[0] + l[1] + "?v=dev"; ldImg[s.id + l[0]] = im; });
+    });
+  }
+  function slideStart() {
+    var rest = LD.map(function (_, i) { return i; }).slice(1);
+    for (var i = rest.length - 1; i > 0; i--) { var j = (Math.random() * (i + 1)) | 0, x = rest[i]; rest[i] = rest[j]; rest[j] = x; }
+    SHOW.order = [0].concat(rest); SHOW.i = -1; $(".ld-slides").innerHTML = "";
+    nextSlide(); SHOW.t = setInterval(nextSlide, 7000);
+  }
+  function nextSlide() {
+    SHOW.i = (SHOW.i + 1) % SHOW.order.length;
+    var s = LD[SHOW.order[SHOW.i]], box = $(".ld-slides"), d = document.createElement("div"), dir = SHOW.i % 2 ? 1 : -1;
+    d.className = "ld-slide";
+    var bg = ldImg[s.id + "bg"].cloneNode(), fg = ldImg[s.id + "fg"].cloneNode(); d.appendChild(bg); d.appendChild(fg); box.appendChild(d);
+    if (!RM) {   // parallax: the cast drifts further than the city behind them
+      bg.animate([{ transform: "translateX(" + (-1.1 * dir) + "%) scale(1.02)" }, { transform: "translateX(" + (1.1 * dir) + "%) scale(1.05)" }], { duration: 9000, easing: "linear", fill: "both" });
+      fg.animate([{ transform: "translateX(" + (-2.8 * dir) + "%) scale(1.03)" }, { transform: "translateX(" + (2.8 * dir) + "%) scale(1.08)" }], { duration: 9000, easing: "linear", fill: "both" });
+    }
+    d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: RM ? 300 : 1100, easing: "ease-out", fill: "forwards" });
+    var old = box.children.length > 1 ? box.children[0] : null; if (old) setTimeout(function () { old.remove(); }, 1300);
+    var cap = $(".ld-cap");
+    $(".ld-name").textContent = s.name; $(".ld-role").textContent = s.role; $(".ld-line").textContent = s.line;
+    cap.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 700, delay: 250, easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
+  }
+  function slideStop() { clearInterval(SHOW.t); }
+
   /* ---- the character creator ---- */
   var character = null;
   function savedChar() { try { var s = localStorage.getItem("lowtide_character"); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
@@ -301,24 +343,29 @@
     if (GAME) { base = "game"; show("game"); state = "game"; GAME.resume(); clickToPlay(true); return; }
     character = character || savedChar();
     if (!character && !fromCreator) return openCreatorScene(true);   // first time: make Hollis yours
-    state = "loading-game"; LT.ui.select(); LT.bed(0, 0.5);
+    state = "loading-game"; LT.ui.select(); LT.bed(0, 0.5); LT.song.play(1.2);
+    if (!ldImg.hollisbg) preloadSlides();
+    slideStart();
     var tip = $(".ld-tip"), bar = $(".ld-bar i"), k = 0;
     tip.textContent = TIPS[(Math.random() * TIPS.length) | 0];
     var tipT = setInterval(function () { tip.textContent = TIPS[(++k + (Math.random() * 3 | 0)) % TIPS.length]; }, 4200);
     play(el.loading, [{ opacity: 0 }, { opacity: 1 }], 600, cueNow(), E.out);
     show("loading");
-    var t0 = performance.now();
+    // the screen stays up 15 to 25 s whatever the real load takes; the bar follows the slower of the two
+    var t0 = performance.now(), hold = 15000 + Math.random() * 10000, real = 0;
+    var barT = setInterval(function () { bar.style.transform = "scaleX(" + Math.min(real, (performance.now() - t0) / hold) + ")"; }, 200);
     import(new URL("game/main.js?v=dev", document.baseURI).href).then(function (m) {
       return m.start({
         mount: $("#gl"), hud: $("#game .hud"),
-        progress: function (p) { bar.style.transform = "scaleX(" + p + ")"; },
+        progress: function (p) { real = p; },
         sfx: LT.sfx, onLock: onLock, character: character
       });
     }).then(function (g) {
       GAME = g;
-      return new Promise(function (r) { setTimeout(r, Math.max(0, 1800 - (performance.now() - t0))); });   // let the art breathe
+      real = 1;
+      return new Promise(function (r) { setTimeout(r, Math.max(0, hold - (performance.now() - t0))); });
     }).then(function () {
-      clearInterval(tipT);
+      clearInterval(tipT); clearInterval(barT); slideStop(); LT.song.stop(2.4);
       base = "game"; state = "game"; V.bg.pause();
       show("game"); play(el.game, [{ opacity: 0 }, { opacity: 1 }], 900, cueNow(), E.out);
       LT.amb.start(LT.now(), 0.3);
@@ -326,7 +373,7 @@
       var help = $(".help"); play(help, [{ opacity: 0, transform: "translateX(-12px)" }, { opacity: 1, transform: "none" }], 500, cueNow() + 0.8, E.out);
       play(help, [{ opacity: 1 }, { opacity: 0 }], 600, cueNow() + 14, E.in, "forwards");
     }).catch(function (e) {
-      clearInterval(tipT); console.error(e);
+      clearInterval(tipT); clearInterval(barT); slideStop(); console.error(e);
       tip.textContent = "Marlowe Keys didn't load. Refresh to try again.";
     });
   }
