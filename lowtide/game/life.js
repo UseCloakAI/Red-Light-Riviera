@@ -2,13 +2,13 @@
    blasts that catch you take health; hard enough hits throw you as a ragdoll
    even if you live. At zero: the body goes limp (the same ragdoll the street
    gets), the world slows, the picture drains to grey, and a line drops in, in
-   the spirit of the classic, but ours: DEAD, REALLY?, and worse. Three seconds
+   the spirit of the classic, but ours: CMON BRO..., BRUH, REALLY? Three seconds
    later (or sooner: Enter or Space) you wake outside Marlowe General with a bill. */
 import * as THREE from "three";
 import { findBones, Ragdoll } from "./rig.js?v=dev";
 import { lanePoint } from "./world.js?v=dev";
 
-const LINES = ["DEAD", "REALLY?", "WELL. THAT HAPPENED.", "TOTALED", "NOT LIKE THIS", "OOF", "SKILL ISSUE", "BETWEEN LICENSES. AND LIVES.", "BRUH", "THAT'LL LEAVE A MARK", "SUNK", "WRITTEN OFF", "FLATLINED", "CALL YOUR MOM"];
+const LINES = ["CMON BRO...", "BRUH", "DEAD", "REALLY?", "NAH", "BE FR", "WHY", "UNLUCKY", "YOU GOOD?", "BRO WHAT", "COME ON MAN", "NOT AGAIN", "GG", "THAT'S CRAZY", "OK THEN"];
 const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
 const BILL = 150;
 
