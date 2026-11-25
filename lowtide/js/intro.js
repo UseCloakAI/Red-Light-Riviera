@@ -207,7 +207,7 @@
     V.intro.src = MEDIA + "intro.mp4"; V.bg.src = MEDIA + "ocean.mp4";
     V.intro.load(); V.bg.load();
     LT.init();   // created suspended; resumed by the key press
-    var aud = LT.loadBaked({ intro: MEDIA + "intro.flac", loop: MEDIA + "loop.flac" });
+    var aud = LT.loadBaked({ intro: MEDIA + "intro.flac", loop: MEDIA + "theme.mp3?v=dev" });
     var vid = new Promise(function (res, rej) {
       if (V.intro.readyState >= 3) return res();
       V.intro.addEventListener("canplaythrough", res, { once: true });
