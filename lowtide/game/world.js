@@ -10,6 +10,18 @@ export const P = 64, ROAD = 14, LOT = P - ROAD, WALK = 3;
 const I0 = -4, I1 = 4, J0 = -4, J1 = 3;                 // block index range (x, z)
 export const EDGE = { w: (I0 - 0.5) * P - 7, e: (I1 + 0.5) * P + 7, n: (J0 - 0.5) * P - 7, s: (J1 + 0.5) * P + 7 };
 export const SHORE = 272, PIER = { x0: 36, x1: 46, z0: EDGE.s, z1: 400, y: 0.15 };
+/* Tideline Beach: sand sloping under the sea, its line pushed in and out by a
+   few slow waves of noise so the shore has coves and spits. One function for the
+   sand mesh, the ground under your feet and the shore wall; the same in GLSL for
+   the sea and the swash (sky.js). */
+export const SEA = -0.6;
+const coast = (x) => 0.16 * Math.sin(x * 0.021 + 1.3) + 0.09 * Math.sin(x * 0.057 + 4.1) + 0.05 * Math.sin(x * 0.13 + 0.7);
+const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+export function beachY(x, z) { const d = z - EDGE.s; return -Math.max(0, d - 2) * 0.017 - Math.max(0, d - 40) * 0.01 + coast(x) * ss(10, 30, d); }
+export const BEACH_GLSL = `float coast(float x){return .16*sin(x*.021+1.3)+.09*sin(x*.057+4.1)+.05*sin(x*.13+.7);}
+float beachY(vec2 p){float d=p.y-(${EDGE.s.toFixed(2)});return -max(0.,d-2.)*.017-max(0.,d-40.)*.01+coast(p.x)*smoothstep(10.,30.,d);}`;
+// where the sand meets the sea at x (the z of the waterline)
+export function waterline(x) { let lo = EDGE.s + 2, hi = EDGE.s + 140; for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; if (beachY(x, m) > SEA) lo = m; else hi = m; } return lo; }
 
 function seeded(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
@@ -311,13 +323,18 @@ export function buildWorld(scene, opts) {
 
   // Tideline beach: sand sloping under the water, wet sand where the waves reach
   const sandC = tex(canvas(256, 256, (g, w, h) => { g.fillStyle = "#D9C49A"; g.fillRect(0, 0, w, h); speckle(g, w, h, 6000, 0.14, R); }), true, true); sandC.repeat.set(60, 20);
-  const bw = EDGE.e - EDGE.w + 60, beachG = new THREE.PlaneGeometry(bw, 140, 1, 14).rotateX(-Math.PI / 2);
+  const bw = EDGE.e - EDGE.w + 60, beachG = new THREE.PlaneGeometry(bw, 140, Math.ceil(bw / 4), 56).rotateX(-Math.PI / 2);
+  beachG.translate((EDGE.w + EDGE.e) / 2, 0, EDGE.s + 70);
   const bp = beachG.attributes.position;
-  for (let k = 0; k < bp.count; k++) { const z = bp.getZ(k) + 70; bp.setY(k, -Math.max(0, z - 2) * 0.017 - Math.max(0, z - 40) * 0.01); }
-  beachG.translate((EDGE.w + EDGE.e) / 2, 0, EDGE.s + 70); beachG.computeVertexNormals();
+  for (let k = 0; k < bp.count; k++) bp.setY(k, beachY(bp.getX(k), bp.getZ(k)));
+  beachG.computeVertexNormals();
   add(new THREE.Mesh(beachG, lambert({ map: sandC })), false, true);
-  // the shore: an invisible wall at the waterline, with a gap for the pier
-  grid.box(EDGE.w, SHORE, PIER.x0 - 0.3, SHORE + 4, 0.5); grid.box(PIER.x1 + 0.3, SHORE, EDGE.e, SHORE + 4, 0.5);
+  // the shore: an invisible wall knee-deep past the waterline, following it, with a gap for the pier
+  for (let x = EDGE.w; x < EDGE.e; x += 6) {
+    const x1 = Math.min(EDGE.e, x + 6), z = waterline(x + 3) + 5;
+    if (x1 > PIER.x0 - 0.3 && x < PIER.x1 + 0.3) { if (x < PIER.x0 - 0.3) grid.box(x, z, PIER.x0 - 0.3, z + 4, 0.5); if (x1 > PIER.x1 + 0.3) grid.box(PIER.x1 + 0.3, z, x1, z + 4, 0.5); continue; }
+    grid.box(x, z, x1, z + 4, 0.5);
+  }
 
   // Tideline Pier: deck on piles, rails, a hut at the end
   const wood = tex(canvas(128, 128, (g, w, h) => { g.fillStyle = "#8A6A4C"; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 16) { g.fillStyle = `rgba(0,0,0,${0.1 + R() * 0.15})`; g.fillRect(0, y, w, 2); } speckle(g, w, h, 600, 0.15, R); }), true, true);
@@ -360,7 +377,7 @@ export function buildWorld(scene, opts) {
   /* queries */
   const heightAt = (x, z) => {
     if (x > PIER.x0 && x < PIER.x1 && z > PIER.z0 && z < PIER.z1) return PIER.y;
-    if (z > EDGE.s) { const d = z - EDGE.s; return -Math.max(0, d - 2) * 0.017 - Math.max(0, d - 40) * 0.01; }
+    if (z > EDGE.s) return beachY(x, z);
     const i = Math.round(x / P), j = Math.round(z / P);
     if (i >= I0 && i <= I1 && j >= J0 && j <= J1 && Math.abs(x - i * P) <= LOT / 2 && Math.abs(z - j * P) <= LOT / 2) return 0.15;
     return 0;

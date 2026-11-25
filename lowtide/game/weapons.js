@@ -234,8 +234,10 @@ export class Arsenal {
     this.fx = new Fx(scene);
     this.target = new THREE.Vector3(); this.aimDir = new THREE.Vector3(0, 0, 1); this.over = null;
     player.afterPose = (dt) => this.pose(dt);
+    this.on = null;   // events for key tips: equip:<id>, aim, empty, wheel
     this.hudSync();
   }
+  emit(e) { if (this.on) this.on(e); }
   get weapon() { return this.slots[this.cur]; }
   get gun() { const w = this.weapon; return w ? this.models[w.id] : null; }
   equip(i) {
@@ -243,6 +245,7 @@ export class Arsenal {
     for (const m of Object.values(this.models)) m.visible = false;
     this.cur = i; this.reloading = 0; this.pending = false; this.latch = false; this.pumpT = 0;
     if (this.weapon && this.sfx.draw) this.sfx.draw();
+    if (this.weapon) this.emit("equip:" + this.weapon.id);
     this.hudSync();
   }
   equipId(id) { const i = this.slots.findIndex((w) => (w ? w.id : null) === id); if (i >= 0) this.equip(i); }
@@ -277,6 +280,7 @@ export class Arsenal {
     // assisted aim: raising the gun finds the nearest person near the reticle
     if (wantAim && this.aim < 0.15 && !this.assist) this.assist = this.findTarget(0.22, 45);
     if (!wantAim) this.assist = null;
+    if (wantAim && !this.wasAim) this.emit("aim"); this.wasAim = wantAim;
     this.aim += ((wantAim ? 1 : 0) - this.aim) * Math.min(1, dt * (wantAim ? 12 : 8));
     if (this.aim < 0.002) this.aim = 0;
     this.rig.aim = this.aim;
@@ -356,7 +360,7 @@ export class Arsenal {
   /* ---- the weapon wheel: hold Tab, point, let go ---- */
   wheel(dt, input) {
     const open = input.down("Tab") && !!this.B;
-    if (open && !this.wheelOpen) { this.wheelOpen = true; this.wv.set(0, 0); this.wsel = WHEEL.indexOf(this.weapon ? this.weapon.id : null); if (this.sfx.wheel) this.sfx.wheel(true); }
+    if (open && !this.wheelOpen) { this.wheelOpen = true; this.wv.set(0, 0); this.wsel = WHEEL.indexOf(this.weapon ? this.weapon.id : null); if (this.sfx.wheel) this.sfx.wheel(true); this.emit("wheel"); }
     if (this.wheelOpen) {
       const [dx, dy] = input.take(); this.wv.x += dx; this.wv.y += dy;
       if (this.wv.length() > 120) this.wv.setLength(120);
@@ -385,7 +389,7 @@ export class Arsenal {
     const w = this.weapon; if (!w || this.cool > 0) return;
     if (this.reloading > 0) { if (w.perShell && w.ammo > 0) this.reloading = 0; else return; }   // a shotgun can stop loading to shoot
     if (w.ammo <= 0) { if (this.sfx.dry) this.sfx.dry(); this.cool = 0.25; this.startReload(); this.hudSync(); return; }
-    w.ammo--; this.cool = w.rate;
+    w.ammo--; this.cool = w.rate; if (!w.ammo) this.emit("empty");
     const g = this.gun, muzzle = g.localToWorld(g.userData.muzzle.clone());
     this.camera.getWorldDirection(_dir); const base = _dir.clone(), sp = this.spread();
     const shots = [];

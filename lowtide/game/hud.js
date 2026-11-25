@@ -1,7 +1,7 @@
 /* HUD: a rotating radar drawn from the world's own layout, area names as you
    cross into a district, a help box, cash and wanted stars. Plain canvas and
    DOM, so it costs next to nothing. */
-import { DISTRICT_NAMES } from "./world.js?v=dev";
+import { DISTRICT_NAMES, waterline } from "./world.js?v=dev";
 
 const S = 1.5;   // map pixels per metre
 
@@ -11,7 +11,9 @@ export function drawMap(world) {
   const c = document.createElement("canvas"); c.width = Math.ceil((x1 - x0) * S); c.height = Math.ceil((z1 - z0) * S);
   const g = c.getContext("2d"), X = (x) => (x - x0) * S, Z = (z) => (z - z0) * S, rect = (a, b, cc, d) => g.fillRect(X(a), Z(b), (cc - a) * S, (d - b) * S);
   g.fillStyle = "#0E2436"; g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = "#8C7A58"; rect(EDGE.w, EDGE.s, EDGE.e, world.SHORE);                    // beach
+  g.fillStyle = "#8C7A58"; g.beginPath(); g.moveTo(X(EDGE.w - 30), Z(EDGE.s));          // beach, out to the real waterline
+  for (let x = EDGE.w - 30; x <= EDGE.e + 30; x += 4) g.lineTo(X(x), Z(waterline(x)));
+  g.lineTo(X(EDGE.e + 30), Z(EDGE.s)); g.closePath(); g.fill();
   g.fillStyle = "#5E6A80"; rect(EDGE.w, EDGE.n, EDGE.e, EDGE.s);                          // roads
   for (const [a, b, cc, d] of map.blocks) { g.fillStyle = "#1B2433"; rect(a, b, cc, d); }
   for (const [a, b, cc, d] of map.parks) { g.fillStyle = "#2B4C34"; rect(a, b, cc, d); }
@@ -29,6 +31,26 @@ export class Hud {
     this.cash = 4820; this.wanted = 0;
     this.cashEl.textContent = "$" + this.cash.toLocaleString("en-US");
     this.setWanted(0);
+  }
+  /* key tips, GTA style: a box top left, one at a time, queued. {Key} becomes a key cap.
+     tipOnce shows a tip the first time only (remembered in localStorage). */
+  tip(text, ms) {
+    (this.tq || (this.tq = [])).push([text, ms || 6500 + text.length * 25]);
+    if (!this.tOn) this.nextTip();
+  }
+  nextTip() {
+    const el = this.tEl || (this.tEl = this.root.querySelector(".help")), n = this.tq.shift();
+    if (!el || !n) { this.tOn = false; return; }
+    this.tOn = true;
+    el.innerHTML = n[0].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\{([^}]+)\}/g, "<kbd>$1</kbd>");
+    el.classList.add("on"); if (this.sfxTip) this.sfxTip();
+    clearTimeout(this.tT); this.tT = setTimeout(() => { el.classList.remove("on"); this.tT = setTimeout(() => this.nextTip(), 500); }, n[1]);
+  }
+  tipOnce(key, text) {
+    let seen = []; try { seen = JSON.parse(localStorage.getItem("lowtide_tips") || "[]"); } catch (e) { /* private mode: show it */ }
+    if (seen.includes(key) || (this.tSeen || (this.tSeen = new Set())).has(key)) return;
+    this.tSeen.add(key); seen.push(key); try { localStorage.setItem("lowtide_tips", JSON.stringify(seen)); } catch (e) { /* fine */ }
+    this.tip(text);
   }
   // a line of overheard speech, bottom centre, like film subtitles
   subtitle(text) {
