@@ -287,7 +287,7 @@
     play(el.loading, [{ opacity: 0 }, { opacity: 1 }], 600, cueNow(), E.out);
     show("loading");
     var t0 = performance.now();
-    import(new URL("game/main.js", document.baseURI).href).then(function (m) {
+    import(new URL("game/main.js?v=dev", document.baseURI).href).then(function (m) {
       return m.start({
         mount: $("#gl"), hud: $("#game .hud"),
         progress: function (p) { bar.style.transform = "scaleX(" + p + ")"; },

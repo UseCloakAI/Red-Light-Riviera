@@ -1,7 +1,7 @@
 /* HUD: a rotating radar drawn from the world's own layout, area names as you
    cross into a district, a help box, cash and wanted stars. Plain canvas and
    DOM, so it costs next to nothing. */
-import { DISTRICT_NAMES } from "./world.js";
+import { DISTRICT_NAMES } from "./world.js?v=dev";
 
 const S = 1.5;   // map pixels per metre
 
