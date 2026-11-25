@@ -61,6 +61,31 @@ class Grid {
       }
     }
   }
+  // bullets: first box or post along a->b, with the face normal it struck
+  hit(a, b) {
+    let best = 1, nx = 0, nz = 0, ny = 0;
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    for (const o of this.near(Math.min(a.x, b.x) - 1, Math.min(a.z, b.z) - 1, Math.max(a.x, b.x) + 1, Math.max(a.z, b.z) + 1)) {
+      if (o.r) {   // a vertical post: circle in plan, capped at its height
+        const fx = a.x - o.x, fz = a.z - o.z, A = dx * dx + dz * dz, B = 2 * (fx * dx + fz * dz), C = fx * fx + fz * fz - o.r * o.r, disc = B * B - 4 * A * C;
+        if (A < 1e-9 || disc < 0) continue;
+        const t = (-B - Math.sqrt(disc)) / (2 * A);
+        if (t < 0 || t >= best || a.y + dy * t > o.h) continue;
+        best = t; const hx = a.x + dx * t - o.x, hz = a.z + dz * t - o.z, l = Math.hypot(hx, hz) || 1; nx = hx / l; nz = hz / l; ny = 0;
+        continue;
+      }
+      let t0 = 0, t1 = 1, axis = -1, sgn = 0;
+      const slabs = [[a.x, dx, o.x0, o.x1], [a.y, dy, o.y0 || -10, o.h], [a.z, dz, o.z0, o.z1]];
+      for (let k = 0; k < 3; k++) {
+        const [s, d, lo, hi] = slabs[k];
+        if (Math.abs(d) < 1e-9) { if (s < lo || s > hi) { t0 = 2; break; } continue; }
+        let u = (lo - s) / d, v = (hi - s) / d, sg = -1; if (u > v) { [u, v] = [v, u]; sg = 1; }
+        if (u > t0) { t0 = u; axis = k; sgn = sg; } t1 = Math.min(t1, v); if (t0 > t1) break;
+      }
+      if (t0 <= t1 && t0 < best && axis >= 0) { best = t0; nx = axis === 0 ? sgn : 0; ny = axis === 1 ? sgn : 0; nz = axis === 2 ? sgn : 0; }
+    }
+    return { t: best, nx, ny, nz };
+  }
   // fraction along a->b where the segment first hits a box (camera collision)
   ray(a, b) {
     let best = 1;

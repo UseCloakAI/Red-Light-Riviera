@@ -171,6 +171,26 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .help kbd{font-size:10px;padding:1px 5px;margin:0 2px}
 .subtitle{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);max-width:min(760px,70vw);text-align:center;font:500 19px/1.4 var(--fu);color:#FFF8EE;text-shadow:0 2px 3px rgba(0,0,0,.85),0 0 12px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .35s var(--e-out)}
 .subtitle.on{opacity:1}
+/* weapons: ammo box under the cash, reticle, hit marker */
+.weapon{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px;color:#F7F2EA;text-shadow:0 2px 0 rgba(0,0,0,.6)}
+.weapon[hidden]{display:none}
+.weapon svg{width:54px;height:34px;fill:#F7F2EA;filter:drop-shadow(0 2px 0 rgba(0,0,0,.55))}
+.weapon b{font:extra-condensed 900 34px/1 var(--fd)}
+.weapon span{font:600 15px/1 var(--fu);opacity:.75;align-self:flex-end;margin-bottom:4px}
+.weapon.reloading b{opacity:.4}
+.reticle{--s:6px;position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;transition:opacity .12s}
+.reticle i{position:absolute;background:#F7F2EA;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+.reticle i:nth-child(1),.reticle i:nth-child(2){width:2px;height:7px;left:-1px}
+.reticle i:nth-child(3),.reticle i:nth-child(4){width:7px;height:2px;top:-1px}
+.reticle i:nth-child(1){top:calc(-7px - var(--s))}.reticle i:nth-child(2){top:var(--s)}
+.reticle i:nth-child(3){left:calc(-7px - var(--s))}.reticle i:nth-child(4){left:var(--s)}
+.reticle b{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:#F7F2EA;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+.reticle.target i,.reticle.target b{background:#E5484D}
+.hitmark{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}
+.hitmark i{position:absolute;width:2px;height:9px;background:#F7F2EA;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.hitmark i:nth-child(1){left:-12px;top:-12px;rotate:-45deg}.hitmark i:nth-child(2){left:10px;top:-12px;rotate:45deg}
+.hitmark i:nth-child(3){left:-12px;top:3px;rotate:45deg}.hitmark i:nth-child(4){left:10px;top:3px;rotate:-45deg}
+.hitmark.kill i{background:#E5484D}
 .clickplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:auto;cursor:pointer;background:rgba(7,9,12,.8);border:2px solid rgba(247,242,234,.6);color:var(--off);font:extra-condensed 800 22px/1 var(--fd);letter-spacing:.2em;text-transform:uppercase;padding:16px 26px 14px;display:none}
 .clickplay.on{display:block}
 .pmap{display:none;width:100%;height:100%;max-height:60vh;border:2px solid rgba(247,242,234,.22)}
