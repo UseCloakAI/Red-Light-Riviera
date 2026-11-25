@@ -295,7 +295,7 @@ export class Arsenal {
     this.held = Math.max(0, this.held - dt);
     if (this.over && this.aim > 0.8 && hit.t < 20 && !this.over.fear && this.peds) {
       const p = this.over.h.group.position; this.peds.alarm(p.x, p.z, 6, false);
-      if (this.held <= 0 && this.hud.subtitle) { this.hud.subtitle(HELD[(Math.random() * HELD.length) | 0]); this.held = 8; }
+      if (this.held <= 0 && this.hud.subtitle) { const line = HELD[(Math.random() * HELD.length) | 0]; this.hud.subtitle(line); if (this.say) this.say(line, this.over); this.held = 8; }
     }
 
     if (armed) {

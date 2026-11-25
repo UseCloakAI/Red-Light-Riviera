@@ -498,6 +498,13 @@
       o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 1.8); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.22, t + 0.2); og.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
       chain(o, ol, og, bus); o.start(t); o.stop(t + 2);
     },
+    // raw samples (the SAM voice renders to these): through the sfx bus, quieter and duller with distance
+    pcm: function (data, rate, gain, dist, pan) {
+      if (!ctx || !data || !data.length) return; var t = now() + 0.02, d = dist || 0, att = 1 / (1 + d / 14); if (att < 0.05) return;
+      var buf = ctx.createBuffer(1, data.length, rate), src = ctx.createBufferSource(); buf.copyToChannel(data, 0); src.buffer = buf;
+      var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0); chain(src, g, lp, p, B.sfx); send(p, street(), 0.12 + Math.min(0.35, d / 60));
+      src.start(t);
+    },
     // dying: a low thud and a long falling tone
     wasted: function () {
       if (!ctx) return; var t = now(), o = O("sawtooth", 220, t), lp = F("lowpass", 900, 1), g = G(0);
