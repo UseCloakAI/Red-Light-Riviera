@@ -29,13 +29,14 @@ export const flat = (offset = 0) => ({ defines: { PS1_NOSNAP: "" }, ...(offset ?
 // the upscale: tone map, 15-bit colour with an ordered dither, nearest-neighbour onto the screen
 export function makeBlit() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tSrc: { value: null }, res: { value: new THREE.Vector2(PS1.w, PS1.h) } },
+    uniforms: { tSrc: { value: null }, res: { value: new THREE.Vector2(PS1.w, PS1.h) }, uGrey: { value: 0 } },
     vertexShader: "varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}",
-    fragmentShader: `uniform sampler2D tSrc;uniform vec2 res;varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tSrc;uniform vec2 res;uniform float uGrey;varying vec2 vUv;
       float bayer(vec2 p){ivec2 q=ivec2(mod(p,4.));int i=q.x+q.y*4;
         float m[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);return m[i]/16.-.47;}
       void main(){
         vec2 px=floor(vUv*res);vec4 c=texture2D(tSrc,(px+.5)/res);
+        float l=dot(c.rgb,vec3(.299,.587,.114));c.rgb=mix(c.rgb,vec3(l)*vec3(1.,.97,.93)*.8,uGrey);   // dying: drained to grey
         gl_FragColor=vec4(c.rgb,1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

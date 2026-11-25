@@ -13,6 +13,7 @@ import { spawnPeds } from "./peds.js?v=dev";
 import { Arsenal } from "./weapons.js?v=dev";
 import { Vehicles } from "./vehicles.js?v=dev";
 import { Traffic } from "./traffic.js?v=dev";
+import { Life } from "./life.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
@@ -73,6 +74,22 @@ export async function start(o) {
   // Stage 5, early: the parked cars drive
   const traffic = new Traffic(scene, world, { count: 16, sfx: o.sfx });
   const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
+  // your health; cars and blasts take it
+  const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
+  traffic.life = life; vehicles.life = life;
+  traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
+  // gunfire: drivers panic, and cars take rounds (enough of them and they go up)
+  arsenal.onShot = (pos, hit) => {
+    traffic.panic(pos.x, pos.z, 75);
+    if (!hit || !hit.point) return;
+    // the first car along the round's path takes it
+    const all = vehicles.cars.concat(traffic.cars.filter((k) => k.active || k.taken)), dx = hit.point.x - pos.x, dz = hit.point.z - pos.z, L = Math.hypot(dx, dz);
+    for (let t = 0.5; t < L; t += 0.5) {
+      const x = pos.x + dx * t / L, z = pos.z + dz * t / L, y = pos.y + 1.4 + (hit.point.y - pos.y - 1.4) * t / L;
+      const c = all.find((k) => !k.wreck && Math.abs(k.x - x) < 3 && Math.abs(k.z - z) < 3 && vehicles.touching(k, x, z, 0) && y < (k.y || 0) + 1.5);
+      if (c) { vehicles.impactCar(c, x, z, dx / L, dz / L, 4); vehicles.hurt(c, 9); break; }
+    }
+  };
   // key tips: the basics as you start, the rest the first time they matter
   const TIPS = {
     move: "{W} {A} {S} {D} to move. Hold {Shift} to sprint, {Space} to jump.",
@@ -142,14 +159,17 @@ export async function start(o) {
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
     // a car first (it may take E for the door), then the gun, unless you're driving
-    const dw = dt * arsenal.timeScale;
+    const dw = dt * arsenal.timeScale * life.timeScale;
     let inCar = false;
     traffic.update(dw, player, vehicles, peds);
-    if (input.locked) { const used = vehicles.update(dw, input); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    life.update(dw);
+    const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
+    if (input.locked && !down) { const used = vehicles.update(dw, input); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    else if (down) { vehicles.update(dw, { hit: () => false, down: () => false, keys: new Set() }); arsenal.tickFx(dw); player.aimYaw = null; rig.aim = 0; }
     if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
-    if (input.locked && !inCar) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
-    else if (!inCar) player.animate(dw);
+    if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
+    else if (!inCar && !down) player.animate(dw);
     if (peds) peds.update(dw, player);
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
@@ -168,7 +188,7 @@ export async function start(o) {
     lock() { input.lock(); },
     drawMap(ctx, w, h) { hud.drawFull(ctx, w, h, player); },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
-    rig, world, arsenal, vehicles, traffic, get peds() { return peds; }
+    rig, world, arsenal, vehicles, traffic, life, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };

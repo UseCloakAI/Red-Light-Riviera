@@ -217,6 +217,17 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .hitmark i:nth-child(3){left:-12px;top:3px;rotate:45deg}.hitmark i:nth-child(4){left:10px;top:3px;rotate:-45deg}
 .hitmark.kill i{background:#E5484D}
 /* the E over a car's door handle: a key cap on a little stem, following the handle */
+/* health: a bar under the radar; the death screen */
+.health{position:absolute;left:28px;bottom:16px;width:220px;height:6px;background:rgba(10,10,10,.6);box-shadow:0 0 0 2px rgba(10,10,10,.55)}
+.health i{position:absolute;inset:0;background:#5fbf6a;transform-origin:0 0;transition:transform .25s var(--e-out)}
+.health.low i{background:#E5484D;animation:hpulse .8s ease-in-out infinite}
+@keyframes hpulse{50%{opacity:.45}}
+.wasted{position:absolute;inset:0;display:grid;place-items:center;opacity:0;pointer-events:none;transition:opacity .6s .5s}
+.wasted.on{opacity:1}
+.wasted b{font:extra-condensed 900 clamp(64px,11vw,150px)/.9 var(--fd);text-transform:uppercase;color:#E5484D;letter-spacing:.02em;text-align:center;padding:0 5vw;
+  text-shadow:0 4px 0 rgba(0,0,0,.6),0 0 40px rgba(0,0,0,.5);background:linear-gradient(90deg,transparent,rgba(5,5,6,.55) 20%,rgba(5,5,6,.55) 80%,transparent);width:100%;scale:1.4;transition:scale .5s .5s var(--e-out)}
+.wasted.on b{scale:1}
+@media (prefers-reduced-motion:reduce){.health.low i{animation:none}.wasted b{transition:none}}
 .prompt{position:absolute;left:0;top:0;opacity:0;transition:opacity .15s;pointer-events:none}
 .prompt.on{opacity:1}
 .prompt kbd{position:absolute;left:0;top:0;translate:-50% -100%;display:block;font:800 15px/1 var(--fu);padding:6px 9px;background:rgba(7,9,12,.85);color:#FFF5EA;border:2px solid var(--gold);box-shadow:0 3px 0 rgba(0,0,0,.4);animation:promptbob 1.4s ease-in-out infinite}
