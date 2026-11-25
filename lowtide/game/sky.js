@@ -122,7 +122,7 @@ export function buildSky(scene, renderer) {
   swG.translate((EDGE.w + EDGE.e) / 2, 0, 258);
   const swash = new THREE.Mesh(swG, new THREE.ShaderMaterial({
     uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
-    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
     fragmentShader: BEACH_GLSL + PS1 + `uniform float uTime;uniform vec3 uFogC,uLow;uniform float uFogD;varying vec3 vW;
     void main(){
       if(vW.z<promenade(vW.x)+4.)discard;
