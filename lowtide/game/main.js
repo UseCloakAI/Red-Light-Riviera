@@ -72,7 +72,7 @@ export async function start(o) {
     if (avg < 0.022 || perf.stage > 2) return;
     perf.stage++;
     if (perf.stage === 1) { ratio = Math.max(0.75, ratio * 0.75); renderer.setPixelRatio(ratio); }
-    else if (perf.stage === 2) { renderer.shadowMap.enabled = false; scene.traverse((m) => { if (m.material) m.material.needsUpdate = true; }); }
+    else if (perf.stage === 2) { if (peds) peds.limit = 10; renderer.shadowMap.enabled = false; scene.traverse((m) => { if (m.material) m.material.needsUpdate = true; }); }
     else { ratio = Math.max(0.6, ratio * 0.8); renderer.setPixelRatio(ratio); }
     console.info("Lowtide quality step", perf.stage, "avg frame", (avg * 1000).toFixed(1), "ms");
   }
@@ -80,7 +80,7 @@ export async function start(o) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
-    if (input.locked) { player.update(dt, input, rig.yaw); if (peds) peds.push(player.pos, 0.32); }
+    if (input.locked) { player.update(dt, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
     else player.animate(dt);
     if (peds) peds.update(dt, player);
     rig.update(dt, input, player);
