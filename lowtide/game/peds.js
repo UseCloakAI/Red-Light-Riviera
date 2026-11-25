@@ -151,7 +151,7 @@ export async function spawnPeds(scene, world, o = {}) {
   for (let i = 0; i < count; i++) {
     await make(o.near || world.spawn);
     if (o.progress) o.progress((i + 1) / count);
-    if (i % 3 === 2) await new Promise((r) => setTimeout(r));   // keep the loading bar moving
+    await new Promise((r) => setTimeout(r));   // one person at a time, so the loading screen keeps moving
   }
   // some of the crowd stands about instead of walking (spread through the list, so a lower limit keeps a mix)
   for (let i = 0; i < peds.length; i++) {

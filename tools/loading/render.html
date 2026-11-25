@@ -22,7 +22,7 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(32, W / H, 0.1, 2600);
-const world = buildWorld(scene, {}), sky = buildSky(scene, renderer);
+const world = await buildWorld(scene, {}), sky = buildSky(scene, renderer);
 const worldObjs = scene.children.slice();
 const D = await loadHumanData();
 

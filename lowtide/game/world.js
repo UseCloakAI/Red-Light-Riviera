@@ -16,6 +16,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildRoads, Mask, promenade, PROMENADE_GLSL, SIDEWALK, KERB, at, inPoly } from "./city/roads.js?v=dev";
 import { makeKit, Frame, geometry, ptex, canvas, speckle } from "./city/build.js?v=dev";
 import * as TY from "./city/types.js?v=dev";
+import { flat } from "./ps1.js?v=dev";
 export { lanePoint, linkPath, laneEndPos } from "./city/roads.js?v=dev";
 
 // the land's extent; the south edge is the promenade, which wanders
@@ -165,15 +166,25 @@ function instanced(scene, geo, mat, list, opt = {}) {
 const L = (o) => new THREE.MeshLambertMaterial(o);
 
 /* ---------- the city ---------- */
-export function buildWorld(scene, opts = {}) {
+// a breath between heavy steps, so the loading screen keeps moving
+const breathe = () => new Promise((r) => { let done = false; requestAnimationFrame(() => { done = true; r(); }); setTimeout(() => { if (!done) r(); }, 60); });
+// a polygon into a mask, through a canvas (far quicker than testing every cell)
+function rasterPoly(mask, P, v) {
+  const c = document.createElement("canvas"); c.width = mask.w; c.height = mask.h;
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.beginPath();
+  P.forEach((p, k) => (k ? g.lineTo(p.x - mask.x0, p.z - mask.z0) : g.moveTo(p.x - mask.x0, p.z - mask.z0))); g.closePath(); g.fill();
+  const d = g.getImageData(0, 0, mask.w, mask.h).data; for (let i = 0; i < mask.w * mask.h; i++) if (d[i * 4 + 3] > 127) mask.a[i] = v;
+}
+export async function buildWorld(scene, opts = {}) {
   const R = seeded(20261124), grid = new Grid(16);
   const add = (mesh, cast, recv) => { mesh.castShadow = !!cast; mesh.receiveShadow = !!recv; mesh.matrixAutoUpdate = false; mesh.updateMatrix(); scene.add(mesh); return mesh; };
   const X0 = EDGE.w - 20, Z0 = EDGE.n - 20, X1 = EDGE.e + 20, Z1 = EDGE.s + 10;
   const outline = islandOutline();
   // rasters at 1 m: road and pavement, land, and what's been built on
   const mask = new Mask(X0, Z0, X1, Z1), land = new Mask(X0, Z0, X1, Z1), occ = new Mask(X0, Z0, X1, Z1);
-  land.poly(outline, 1);
+  rasterPoly(land, outline, 1);
   const roads = buildRoads(mask);
+  await breathe();
   const kit = makeKit(R), B = kit.B;
   const map = { outline, roads: roads.edges.map((e) => ({ pts: e.pl.pts, w: e.w, kind: e.kind })), buildings: [], parks: [], lots: [], pools: [], labels: [] };
 
@@ -228,8 +239,8 @@ export function buildWorld(scene, opts = {}) {
   };
   for (const c of roads.corners) fan(c.inner, c.outer, KERB);
   for (const c of roads.caps) fan(c.inner, c.outer, KERB);
-  add(new THREE.Mesh(geometry(RB), L({ map: roadTex, vertexColors: true })), false, true);
-  const walkMat = L({ map: walkTex, vertexColors: true, side: THREE.DoubleSide });
+  add(new THREE.Mesh(geometry(RB), L({ map: roadTex, vertexColors: true, ...flat() })), false, true);
+  const walkMat = L({ map: walkTex, vertexColors: true, side: THREE.DoubleSide, ...flat() });
   add(new THREE.Mesh(geometry(WB), walkMat), false, true);
   // junctions: plain asphalt discs over the ribbon ends
   const discs = [];
@@ -237,11 +248,12 @@ export function buildWorld(scene, opts = {}) {
   const plainRoad = ptex(canvas(16, 16, (g) => { g.fillStyle = "#3d3e47"; g.fillRect(0, 0, 16, 16); for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${R() < .5 ? "0,0,0" : "255,255,255"},${0.12 * R()})`; g.fillRect((R() * 16) | 0, (R() * 16) | 0, 1, 1); } }));
   plainRoad.repeat.set(0.25, 0.25);
   const discGeo = mergeGeometries(discs); { const p = discGeo.attributes.position, uv = discGeo.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, p.getX(k) / 4, p.getZ(k) / 4); }
-  add(new THREE.Mesh(discGeo, L({ map: plainRoad, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 })), false, true);
+  add(new THREE.Mesh(discGeo, L({ map: plainRoad, ...flat(-1) })), false, true);
   // zebra crossings
   const zeb = [];
   for (const z of roads.zebras) for (let k = -z.w / 2 + 0.8; k < z.w / 2 - 0.4; k += 1.2) zeb.push({ x: z.x + Math.cos(z.ang) * k, y: 0.07, z: z.z - Math.sin(z.ang) * k, a: z.ang });
-  instanced(scene, new THREE.PlaneGeometry(0.6, 2.6).rotateX(-Math.PI / 2), L({ color: 0xd8d2c4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), zeb);
+  instanced(scene, new THREE.PlaneGeometry(0.6, 2.6).rotateX(-Math.PI / 2), L({ color: 0xd8d2c4, ...flat(-2) }), zeb);
+  await breathe();
 
   /* ---- district helpers ---- */
   const district = districtOf;
@@ -332,6 +344,7 @@ export function buildWorld(scene, opts = {}) {
   // geometry from the kit: one mesh per material for everything laid down since the last flush
   const flush = () => { for (const [k, Bf] of Object.entries(B)) { const n0 = Bf.done || 0; if (Bf.p.length > n0) { add(new THREE.Mesh(geometry({ p: Bf.p.slice(n0), n: Bf.n.slice(n0), u: Bf.u.slice(n0 / 3 * 2), c: Bf.c.slice(n0) }), kit.M[k]), false, true); Bf.done = Bf.p.length; } } };
   flush();
+  await breathe();
 
   /* ---- behind the frontages: car parks, container yards, trees ---- */
   const trees = [], palms = [], containers = [];
@@ -426,13 +439,14 @@ export function buildWorld(scene, opts = {}) {
   buildLamps(scene, lamps, add, "high");
   for (const [x, z] of lamps) grid.circle(x, z, 0.15, 7);
 
-  /* ---- the ground: one painted texture for the whole island, 2 px a metre ---- */
-  const GW = Math.ceil((X1 - X0) * 2), GH = Math.ceil((Z1 - Z0) * 2);
+  await breathe();
+  /* ---- the ground: one painted texture for the whole island, a pixel a metre ---- */
+  const GS = 1, GW = Math.ceil((X1 - X0) * GS), GH = Math.ceil((Z1 - Z0) * GS);
   const groundC = canvas(GW, GH, (g) => {
     const img = g.createImageData(GW, GH), D = img.data;
     const BASE = { port: [128, 124, 114], downtown: [150, 146, 138], midtown: [134, 128, 116], tideline: [160, 150, 128], bellwether: [92, 122, 62], park: [86, 120, 58], beach: [200, 184, 150], pier: [120, 100, 80] };
     for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
-      const x = X0 + i / 2, z = Z0 + j / 2, d = districtOf(x, z), b = BASE[d] || BASE.midtown, h = ((Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1 + 1) % 1, n = (h - 0.5) * 22;
+      const x = X0 + i / GS, z = Z0 + j / GS, d = districtOf(x, z), b = BASE[d] || BASE.midtown, h = ((Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1 + 1) % 1, n = (h - 0.5) * 12;
       const patch = Math.sin(x * 0.07) * Math.sin(z * 0.09) + Math.sin(x * 0.023 + z * 0.031) > 0.9;   // worn patches
       let c = b;
       if (d === "midtown" && patch) c = [104, 118, 72];
@@ -441,7 +455,7 @@ export function buildWorld(scene, opts = {}) {
       const k = (j * GW + i) * 4; D[k] = c[0] + n; D[k + 1] = c[1] + n; D[k + 2] = c[2] + n; D[k + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    const P = (x, z) => [(x - X0) * 2, (z - Z0) * 2];
+    const P = (x, z) => [(x - X0) * GS, (z - Z0) * GS];
     for (const l of lotsToPaint) {
       const poly = [l.F.p(l.u0, l.v0, 0), l.F.p(l.u1, l.v0, 0), l.F.p(l.u1, l.v1, 0), l.F.p(l.u0, l.v1, 0)].map((p) => P(p[0], p[2]));
       g.beginPath(); poly.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath();
@@ -449,14 +463,15 @@ export function buildWorld(scene, opts = {}) {
       g.fillStyle = "#45464e"; g.fill();
       g.strokeStyle = "#cfc9bd"; g.lineWidth = 1;
       for (let u = l.u0 + 1.4; u < l.u1 - 1; u += 2.8) { const a = P(...[l.F.p(u, l.v0 + 0.6, 0)].map((p) => [p[0], p[2]])[0]), b = P(...[l.F.p(u, l.v0 + 5.5, 0)].map((p) => [p[0], p[2]])[0]); g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); }
-      map.lots.push(poly.map(([x, y]) => ({ x: x / 2 + X0, z: y / 2 + Z0 })));
+      map.lots.push(poly.map(([x, y]) => ({ x: x / GS + X0, z: y / GS + Z0 })));
     }
   });
   const groundT = ptex(groundC, false);
   const shape = new THREE.Shape(outline.map((p) => new THREE.Vector2(p.x, -p.z)));
   const gg = new THREE.ShapeGeometry(shape); gg.rotateX(-Math.PI / 2);
   { const p = gg.attributes.position, uv = gg.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, (p.getX(k) - X0) / (X1 - X0), 1 - (p.getZ(k) - Z0) / (Z1 - Z0)); }
-  add(new THREE.Mesh(gg, L({ map: groundT })), false, true);
+  add(new THREE.Mesh(gg, L({ map: groundT, ...flat(2) })), false, true);   // pushed back: everything flat sits over it
+  await breathe();
 
   /* ---- the coast: a quay along the port, a rock revetment round the rest, a parapet to keep you on land ---- */
   const quay = [], rocks = [];
@@ -484,7 +499,7 @@ export function buildWorld(scene, opts = {}) {
   beachG.translate((X0 + X1) / 2, 0, 300);
   { const bp = beachG.attributes.position, uv = beachG.attributes.uv; for (let k = 0; k < bp.count; k++) { const x = bp.getX(k), z = bp.getZ(k); bp.setY(k, z > promenade(x) ? beachY(x, z) : -0.4); uv.setXY(k, x / 8, z / 8); } }
   beachG.computeVertexNormals();
-  add(new THREE.Mesh(beachG, L({ map: sandC })), false, true);
+  add(new THREE.Mesh(beachG, L({ map: sandC, ...flat(2) })), false, true);
   for (let x = EDGE.w; x < EDGE.e; x += 6) {   // an invisible wall knee-deep past the waterline, with a gap for the pier
     const x1 = Math.min(EDGE.e, x + 6), z = waterline(x + 3) + 5;
     if (x1 > PIER.x0 - 0.3 && x < PIER.x1 + 0.3) { if (x < PIER.x0 - 0.3) grid.box(x, z, PIER.x0 - 0.3, z + 4, 0.5); if (x1 > PIER.x1 + 0.3) grid.box(PIER.x1 + 0.3, z, x1, z + 4, 0.5); continue; }

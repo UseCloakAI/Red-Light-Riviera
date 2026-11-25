@@ -89,7 +89,7 @@ export function buildSky(scene, renderer) {
       float amp=clamp(depth/1.4,.12,1.)*(1.-smoothstep(500.,1600.,distance(w.xz,cameraPosition.xz)));
       w.y=(${SEA.toFixed(2)})+swell(w.xz,uTime)*amp;
       if(land(w.xz))w.y-=4.;      // under the island: out of sight
-      vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,   // the same snap as the sand, so they move together
+      vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,   // flat like the sand: unsnapped, so they never part
     fragmentShader: SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;varying vec3 vW;
     void main(){
       if(land(vW.xz))discard;

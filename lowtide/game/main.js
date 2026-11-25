@@ -32,7 +32,8 @@ async function loadCharacter(params) {
 const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
 export async function start(o) {
-  const step = async (p) => { if (o.progress) o.progress(p); await frame(); };
+  let tp = performance.now(); const TIMING = /[?&]timing/.test(location.search);
+  const step = async (p, what) => { if (TIMING) { console.info("lowtide load", what || p, Math.round(performance.now() - tp), "ms"); tp = performance.now(); } if (o.progress) o.progress(p); await frame(); };
   await step(0.04);
 
   configure(innerWidth / innerHeight);   // before any material exists: the vertex snap goes into every shader
@@ -51,7 +52,7 @@ export async function start(o) {
   const charP = loadCharacter(o.character);   // download while the city builds
   const sky = buildSky(scene, renderer);
   await step(0.25);
-  const world = buildWorld(scene, {});
+  const world = await buildWorld(scene, {});
   await step(0.7);
   const player = new Player(scene, world, await charP);
   const input = new Input(renderer.domElement);
@@ -89,6 +90,8 @@ export async function start(o) {
 
   // PS1: nearest-neighbour textures everywhere; a soft dark blob under each person instead of a real shadow
   crunch(scene);
+  // people: sheen, clearcoat and the like are invisible at 270 lines and cost the biggest shaders; drop them so everyone shares a few small ones
+  scene.traverse((m) => { const mt = m.material; if (mt && mt.isMeshPhysicalMaterial) { mt.sheen = 0; mt.clearcoat = 0; mt.iridescence = 0; mt.transmission = 0; mt.specularIntensity = 0.5; mt.needsUpdate = true; } });
   const blobGeo = new THREE.CircleGeometry(0.42, 10).rotateX(-Math.PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   const blob = (g) => { const m = new THREE.Mesh(blobGeo, blobMat); m.position.y = 0.03; m.renderOrder = 3; g.add(m); };
   if (player.model) blob(player.model);
@@ -97,7 +100,19 @@ export async function start(o) {
   // warm up: compile every shader before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
   const draw = () => { renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); };
-  renderer.compile(scene, camera); draw();
+  await step(0.96, "people");
+  // compile for where we actually draw (the low-res target, no tone mapping), in parallel where the browser can
+  renderer.setRenderTarget(rt);
+  if (renderer.compileAsync) await renderer.compileAsync(scene, camera); else renderer.compile(scene, camera);
+  renderer.setRenderTarget(null); await step(0.97, "shaders");
+  // warm the GPU a few things at a time (texture uploads, any last programs), a frame between each, so the loading screen never freezes
+  { const all = []; scene.traverse((m) => { if ((m.isMesh || m.isLine || m.isPoints || m.isSprite) && m.visible) all.push(m); });
+    all.forEach((m) => (m.visible = false));
+    renderer.setRenderTarget(rt);
+    for (let i = 0; i < all.length; i += 6) { const t0 = performance.now(); for (let k = i; k < Math.min(all.length, i + 6); k++) all[k].visible = true; renderer.render(scene, camera); if (TIMING && performance.now() - t0 > 300) console.info("lowtide load slow batch", Math.round(performance.now() - t0), all.slice(i, i + 6).map((m) => (m.material && m.material.type) + ":" + (m.name || m.parent && m.parent.name)).join(", ")); await frame(); }
+    renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); }
+  await step(0.99, "warm-up");
+  draw();
   await step(1);
 
   let running = false, last = 0, t = 0, raf = 0;
