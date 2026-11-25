@@ -18,7 +18,7 @@ export function speckle(g, w, h, n, a, R) { for (let i = 0; i < n; i++) { g.fill
 
 // a facade tile: 4 bays x 4 floors on 64 x 96 px; walls light so vertex colour tints them
 function facadeTile(R, kind) {
-  const W = 64, H = 96, lit = [];
+  const W = 64, H = 96, lit = [], wins = [];
   const col = canvas(W, H, (g) => {
     g.fillStyle = kind === "office" ? "#7d8a9e" : kind === "brick" ? "#b8b0a8" : "#e8e4dc"; g.fillRect(0, 0, W, H);
     if (kind === "brick") for (let y = 0; y < H; y += 3) { g.fillStyle = "rgba(90,40,30,.18)"; g.fillRect(0, y, W, 1); for (let x = (y / 3 % 2) * 3; x < W; x += 6) g.fillRect(x, y, 1, 3); }
@@ -28,23 +28,78 @@ function facadeTile(R, kind) {
       if (kind === "office") {   // a curtain wall: glass bays with mullions and a spandrel band
         g.fillStyle = ["#2f4766", "#36507a", "#2a3f5c"][(R() * 3) | 0]; g.fillRect(x + 1, y + 2, 14, 19);
         g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(x + 1, y + 2, 14, 2); g.fillStyle = "#4a5568"; g.fillRect(x, y + 21, 16, 3);
-        if (R() < 0.35) lit.push([x + 1, y + 2, 14, 19]);
+        if (R() < 0.35) lit.push([x + 1, y + 2, 14, 19]); wins.push([x + 1, y + 4, 14, 17]);
       } else if (kind === "deco") {   // deco: tall windows with an eyebrow shadow over each
         g.fillStyle = "#26303c"; g.fillRect(x + 4, y + 7, 8, 13);
         g.fillStyle = "rgba(0,0,0,.28)"; g.fillRect(x + 1, y + 4, 14, 2);
         g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(x + 4, y + 7, 8, 1);
-        if (R() < 0.3) lit.push([x + 4, y + 7, 8, 13]);
+        if (R() < 0.3) lit.push([x + 4, y + 7, 8, 13]); wins.push([x + 4, y + 8, 8, 12]);
       } else {   // stucco / brick: windows with sills and frames
         g.fillStyle = "#f2efe8"; g.fillRect(x + 3, y + 6, 10, 14);
         g.fillStyle = "#2a323e"; g.fillRect(x + 4, y + 7, 8, 12);
         g.fillStyle = "rgba(255,255,255,.14)"; g.fillRect(x + 4, y + 7, 8, 1); g.fillStyle = "#8a8378"; g.fillRect(x + 3, y + 20, 10, 2);
-        if (R() < 0.12) { g.fillStyle = ["#8a3b2a", "#2f5d4a", "#c9a14a"][(R() * 3) | 0]; g.fillRect(x + 4, y + 7, 8, 3); }   // a blind half down
+        const blind = R() < 0.12; if (blind) { g.fillStyle = ["#8a3b2a", "#2f5d4a", "#c9a14a"][(R() * 3) | 0]; g.fillRect(x + 4, y + 7, 8, 3); }   // a blind half down
+        wins.push([x + 4, y + (blind ? 10 : 8), 8, blind ? 9 : 11]);
         if (R() < 0.25) lit.push([x + 4, y + 7, 8, 12]);
       }
     }
   });
   const glow = canvas(W, H, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); for (const [x, y, w, h] of lit) { g.fillStyle = R() < 0.75 ? `hsl(${30 + R() * 15},85%,${48 + R() * 14}%)` : `hsl(200,55%,${60 + R() * 10}%)`; g.fillRect(x, y, w, h); g.fillStyle = "rgba(0,0,0,.5)"; g.fillRect(x, y + ((h * (0.3 + R() * 0.5)) | 0), w, 1); } });
-  return { map: ptex(col), emissiveMap: ptex(glow) };
+  return { map: ptex(col), emissiveMap: ptex(glow), win: winMask(W, H, wins), cells: [4, 4], room: [4, 3.5, 4.5] };
+}
+// where a tile's windows are (white): behind them, interiorRooms() draws a room
+function winMask(W, H, rects) { return ptex(canvas(W, H, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.fillStyle = "#fff"; for (const [x, y, w, h] of rects) g.fillRect(x, y, w, h); })); }
+/* the rooms behind the windows, PS1 cheap: no geometry, just the shader. A ray from the eye
+   through each window pane is walked into a box the size of one room (back wall, side walls,
+   floor, ceiling), and that room gets its own wall colour, floor, a piece of furniture against
+   the back, a picture, and its light on or off (the same windows that glow at night) */
+const ROOM_GLSL = `
+  float ih(vec2 p){return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453);}
+  vec3 interiorRoom(vec2 uv, vec3 wp, vec3 wn, float litIn){
+    vec2 cf=uv*uCells; vec2 cell=floor(cf); vec2 f=fract(cf);
+    vec3 N=normalize(wn), U=vec3(0.,1.,0.), T=normalize(cross(U,N));
+    vec3 V=normalize(wp-cameraPosition);
+    vec3 r=vec3(dot(V,T)/uRoom.x, dot(V,U)/uRoom.y, max(dot(V,-N),1e-3)/uRoom.z);
+    vec3 p=vec3(f,0.);
+    float tx=(step(0.,r.x)-p.x)/(abs(r.x)<1e-4?1e-4:r.x), ty=(step(0.,r.y)-p.y)/(abs(r.y)<1e-4?1e-4:r.y), tz=1./r.z;
+    float t=min(min(tx,ty),tz); vec3 h=p+r*t; h=floor(h*16.)/16.;   // chunky, like everything else
+    float id=ih(cell+floor(wp.xz*0.23)*0.71+N.xz*3.7);
+    vec3 wallC=mix(vec3(.36,.29,.22),vec3(.62,.56,.46),ih(vec2(id,1.)));
+    wallC*=mix(vec3(1.),vec3(.62,.78,.92),step(.62,ih(vec2(id,2.))));
+    vec3 col;
+    if(t==tz){
+      col=wallC;
+      float fx=.25+.5*ih(vec2(id,3.)), kind=ih(vec2(id,6.));
+      float base=step(abs(h.x-fx),kind<.5?.24:.12)*step(h.y,kind<.5?.3:.62);       // a sofa, or a cabinet
+      col=mix(col,vec3(.16,.12,.1)+.12*ih(vec2(id,9.)),base*.9);
+      float pic=step(abs(h.x-(1.-fx)),.1)*step(abs(h.y-.62),.08);
+      col=mix(col,vec3(.7,.6,.4)*ih(vec2(id,5.)),pic);
+    } else if(t==tx) col=wallC*.8;
+    else col=h.y<.5?mix(vec3(.24,.16,.1),vec3(.2,.22,.26),step(.5,ih(vec2(id,4.)))):vec3(.6,.58,.54);
+    float lit=max(litIn,step(.82,ih(vec2(id,7.))));
+    vec3 L=mix(vec3(.05,.06,.1),vec3(1.05,.82,.58),lit);
+    col*=L*(1.15-.6*clamp(h.z,0.,1.));
+    if(lit>.5&&t!=tx&&h.y>.99) col+=vec3(.55,.45,.3)*smoothstep(.3,0.,length(h.xz-vec2(.5,.5)));   // the ceiling lamp
+    return mix(col,vec3(.28,.34,.42),.14);   // a little glass
+  }`;
+function interiorRooms(mat, t) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWin = { value: t.win }; sh.uniforms.uCells = { value: new THREE.Vector2(...t.cells) }; sh.uniforms.uRoom = { value: new THREE.Vector3(...t.room) };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vIWP; varying vec3 vIWN;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvIWP=(modelMatrix*vec4(transformed,1.)).xyz; vIWN=normalize(mat3(modelMatrix)*objectNormal);");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uWin; uniform vec2 uCells; uniform vec3 uRoom; varying vec3 vIWP; varying vec3 vIWN;" + ROOM_GLSL)
+      .replace("#include <opaque_fragment>", `#include <opaque_fragment>
+        #ifdef USE_MAP
+        if(texture2D(uWin,vMapUv).r>.5){
+          float litIn=0.;
+          #ifdef USE_EMISSIVEMAP
+          litIn=step(.15,texture2D(emissiveMap,vEmissiveMapUv).r);
+          #endif
+          gl_FragColor.rgb=interiorRoom(vMapUv,vIWP,vIWN,litIn);
+        }
+        #endif`);
+  };
+  mat.customProgramCacheKey = () => "rooms";
 }
 const SIGN_TEXT = [
   ["SEAGRAPE", "MOTOR INN"], ["HOTEL", "MARISOL"], ["THE", "SANDPIPER"], ["CASA", "LUNA"], ["HOTEL", "CORALINE"], ["THE GULF", "ARMS"],
@@ -89,13 +144,13 @@ export function makeKit(R) {
     g.fillStyle = "#e8e4dc"; g.fillRect(0, 0, 64, 24);
     for (let b = 0; b < 4; b++) { const x = b * 16; g.fillStyle = "#3a4656"; g.fillRect(x + 1, 6, 14, 18); g.fillStyle = "rgba(255,255,255,.2)"; g.fillRect(x + 1, 6, 14, 2); g.fillStyle = "#5a4a3a"; if (b % 2) g.fillRect(x + 10, 9, 5, 15); g.fillStyle = "#cfc9be"; g.fillRect(x, 4, 16, 2); }
     speckle(g, 64, 24, 40, 0.1, R);
-  })), emissiveMap: ptex(canvas(64, 24, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 64, 24); for (let b = 0; b < 4; b++) if (R() < 0.6) { g.fillStyle = `hsl(${35 + R() * 20},70%,${45 + R() * 15}%)`; g.fillRect(b * 16 + 1, 8, 14, 16); } })) };
+  })), win: winMask(64, 24, [0, 1, 2, 3].map((b) => [b * 16 + 1, 8, 14, 16])), cells: [4, 1], room: [4, 3.6, 5.5], emissiveMap: ptex(canvas(64, 24, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 64, 24); for (let b = 0; b < 4; b++) if (R() < 0.6) { g.fillStyle = `hsl(${35 + R() * 20},70%,${45 + R() * 15}%)`; g.fillRect(b * 16 + 1, 8, 14, 16); } })) };
   // motel: doors and windows along an open walkway
   T.motel = { map: ptex(canvas(64, 24, (g) => {
     g.fillStyle = "#e8e4dc"; g.fillRect(0, 0, 64, 24);
     for (let b = 0; b < 4; b++) { const x = b * 16; g.fillStyle = "#3f6e8c"; g.fillRect(x + 2, 6, 5, 18); g.fillStyle = "#2a323e"; g.fillRect(x + 9, 8, 6, 7); g.fillStyle = "#f2efe8"; g.fillRect(x + 9, 15, 6, 1); }
     speckle(g, 64, 24, 40, 0.1, R);
-  })), emissiveMap: ptex(canvas(64, 24, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 64, 24); for (let b = 0; b < 4; b++) if (R() < 0.4) { g.fillStyle = "hsl(38,80%,55%)"; g.fillRect(b * 16 + 9, 8, 6, 7); } })) };
+  })), win: winMask(64, 24, [0, 1, 2, 3].map((b) => [b * 16 + 9, 8, 6, 7])), cells: [4, 1], room: [4, 3.5, 4.5], emissiveMap: ptex(canvas(64, 24, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, 64, 24); for (let b = 0; b < 4; b++) if (R() < 0.4) { g.fillStyle = "hsl(38,80%,55%)"; g.fillRect(b * 16 + 9, 8, 6, 7); } })) };
   T.metal = { map: ptex(canvas(64, 64, (g) => { g.fillStyle = "#d8d8d4"; g.fillRect(0, 0, 64, 64); for (let x = 0; x < 64; x += 4) { g.fillStyle = "rgba(0,0,0,.18)"; g.fillRect(x, 0, 1, 64); g.fillStyle = "rgba(255,255,255,.15)"; g.fillRect(x + 2, 0, 1, 64); } speckle(g, 64, 64, 200, 0.12, R); for (let k = 0; k < 6; k++) { g.fillStyle = "rgba(120,60,30,.18)"; g.fillRect((R() * 64) | 0, (R() * 40) | 0, 3, 10 + R() * 14); } })) };
   T.door = { map: ptex(canvas(32, 32, (g) => { g.fillStyle = "#9aa0a6"; g.fillRect(0, 0, 32, 32); for (let y = 0; y < 32; y += 3) { g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(0, y, 32, 1); } g.fillStyle = "#e0b040"; g.fillRect(0, 30, 32, 2); })) };
   T.siding = { map: ptex(canvas(64, 48, (g) => {
@@ -116,6 +171,7 @@ export function makeKit(R) {
     M[k] = new THREE.MeshLambertMaterial({ map: t.map, vertexColors: true, side: ["roof", "tile", "shingle", "awning", "plain", "concrete"].includes(k) ? THREE.DoubleSide : THREE.FrontSide,
       ...(t.emissiveMap ? { emissiveMap: t.emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.95 } : {}) });
   }
+  for (const k of ["stucco", "deco", "office", "brick", "shop", "motel"]) if (T[k].win) interiorRooms(M[k], T[k]);
   M.signs = new THREE.MeshLambertMaterial({ map: signs.map, emissiveMap: signs.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.2, vertexColors: true });
   M.glass = new THREE.MeshLambertMaterial({ color: 0x9fc4dc, emissive: 0x24384a, vertexColors: true });
   M.water = new THREE.MeshLambertMaterial({ color: 0x4aa3b8, emissive: 0x0e3a48 });

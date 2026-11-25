@@ -224,6 +224,11 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .hitmark.head::after{content:"HEADSHOT";position:absolute;left:50%;top:22px;translate:-50% 0;font:extra-condensed 900 18px/1 var(--fd);letter-spacing:.12em;color:#E5484D;text-shadow:0 2px 0 rgba(0,0,0,.6);white-space:nowrap}
 /* the bullet cam: the HUD steps aside and the frame letterboxes */
 .hud.cine>*:not(.subtitle){opacity:0!important}
+/* interiors: the cut through a door, the door prompt's label, no radar indoors */
+.fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .28s linear;z-index:7}
+.fade.on{opacity:1}
+.doorp span{position:absolute;left:0;top:8px;translate:-50% 0;font:700 11px/1 var(--fu);letter-spacing:.14em;text-transform:uppercase;color:#F7F2EA;text-shadow:0 2px 0 rgba(0,0,0,.6);white-space:nowrap}
+.hud.inside .radar,.hud.inside .area{opacity:0}
 .hud::before,.hud::after{content:"";position:absolute;left:0;right:0;height:0;background:#000;z-index:6;pointer-events:none;transition:height .35s cubic-bezier(.16,1,.3,1)}
 .hud::before{top:0}.hud::after{bottom:0}
 .hud.cine::before,.hud.cine::after{height:11vh}

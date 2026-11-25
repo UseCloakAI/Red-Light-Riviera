@@ -284,7 +284,7 @@ export async function buildWorld(scene, opts = {}) {
     const c = F.p((u0 + u1) / 2, (v0 + v1) / 2, 0), ang = Math.atan2(F.t[2], F.t[0]);
     grid.obb(c[0], c[2], (u1 - u0) / 2, (v1 - v0) / 2, ang, h);
   };
-  const lotsToPaint = [], specials = new Set(), cars = [];
+  const lotsToPaint = [], specials = new Set(), cars = [], entrances = [];
 
   // what goes on a frontage, by district; specials (one of each) first where they fit
   function choose(d, e, R) {
@@ -336,6 +336,17 @@ export async function buildWorld(scene, opts = {}) {
     if (r.pool) map.pools.push([F.p(r.pool.u0, r.pool.v0, 0), F.p(r.pool.u1, r.pool.v0, 0), F.p(r.pool.u1, r.pool.v1, 0), F.p(r.pool.u0, r.pool.v1, 0)].map((p) => ({ x: p[0], z: p[2] })));
     if (r.yard) lotsToPaint.push({ F, u0: 0, u1: W, v0: 0, v1: D, yard: true });
     occ.poly(corners4(F, W, D, 1.2), 1);
+    // the way in: a door on the front, and a note of where it is and what's behind it (interiors.js)
+    const SHOPS = ["store", "store", "cafe", "bar", "laundry", "barber"];
+    const DOOR = { deco: ["hotel", W / 2, 0], motel: ["motel", 4.5, D - 11], diner: ["diner", W / 2, 0], shop: [SHOPS[(R() * SHOPS.length) | 0], W / 2, 0], apt: ["apartment", W / 2, 0],
+      tower: ["office", W / 2, 0], ashby: ["office", W / 2, 0], office: ["office", W / 2, 0], garage: ["garage", W / 2, 0], ware: ["warehouse", W / 2, 0], hall: ["warehouse", W / 2, 0],
+      house: ["house", W / 2, 0.5], theatre: ["theatre", W / 2, 0], gas: ["store", W / 2, D - 10] }[c.t];
+    if (DOOR) {
+      const [kind, u, v] = DOOR;
+      F.wall(B.door, u - 0.7, v - 0.04, u + 0.7, v - 0.04, 0, 2.4, null, 1.4, 2.4);
+      const p = F.p(u, v - 1.3, 0);
+      entrances.push({ x: p[0], z: p[2], yaw: Math.atan2(F.n[0], F.n[2]), kind, W, D, seed: (R() * 2147483647) | 0 });
+    }
   }
   // walk every street's frontage, both sides, placing parcels that fit
   const C10 = { x: 10, z: 10 };
@@ -563,7 +574,7 @@ export async function buildWorld(scene, opts = {}) {
   map.parks.push(Array.from({ length: 24 }, (_, k) => ({ x: 10 + Math.cos(k / 24 * 6.283) * 17, z: 10 + Math.sin(k / 24 * 6.283) * 17 })));
   // start on the beach by the pier, facing the sunset
   const sx = PIER.x0 - 14, spawn = { x: sx, z: promenade(sx) + 3, yaw: -0.25 };
-  return { grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
+  return { entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
     props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh } };
 }
 function buildPalms(scene, palms, R, add) {

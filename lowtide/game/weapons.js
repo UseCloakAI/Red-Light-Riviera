@@ -601,7 +601,7 @@ export class Arsenal {
     if (this.peds) {
       const P = this.peds.peds;
       for (let i = 0; i < P.length; i++) {
-        const pd = P[i], g = pd.h.group; if (pd.dead || !g.visible || (i >= this.peds.limit && !pd.cop)) continue;
+        const pd = P[i], g = pd.h.group; if (pd.dead || !g.visible || (i >= this.peds.limit && !pd.cop && !pd.npc)) continue;
         const gp = g.position; if (Math.abs(gp.x - o.x) > best + 1 || Math.abs(gp.z - o.z) > best + 1) continue;
         pd.B = pd.B || findBones(g); if (!pd.B) continue;
         const hc = wpos(pd.B.head, _hc); hc.y += 0.07;
