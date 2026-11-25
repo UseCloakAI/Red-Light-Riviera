@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
 import { P as PITCH } from "./world.js?v=dev";
+import { AMBIENT, BUMP } from "./lines.js?v=dev";
 
 const INSET = 1.5;                       // walk this far in from the lot edge (sidewalk is 3 m)
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.4;
@@ -39,7 +40,9 @@ export async function spawnPeds(scene, world, o = {}) {
   });
   const byIJ = new Map(blocks.map((L) => [L.i + "," + L.j, L]));
   const peds = [], tmp = { x: 0, z: 0, dx: 0, dz: 0 };
-  let limit = count;
+  let limit = count, quiet = 6;            // seconds until anyone may speak again
+  const say = (text) => { quiet = 9 + R() * 8; if (o.onSpeak) o.onSpeak(text); };
+  const lineFor = (district) => { const a = AMBIENT.filter((l) => l.d === district || l.d === "any"); return a[(R() * a.length) | 0].t; };
 
   function place(pd, near) {
     pd.cross = null; pd.side = 0;
@@ -91,6 +94,7 @@ export async function spawnPeds(scene, world, o = {}) {
     get limit() { return limit; },
     update(dt, player) {
       const px = player.pos.x, pz = player.pos.z, pv = player.speed || 0;
+      quiet -= dt;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
         if (idx >= limit) { g.visible = false; return; }
@@ -147,6 +151,9 @@ export async function spawnPeds(scene, world, o = {}) {
           const facing = (toP.x * fx + toP.z * fz) / (d || 1);
           const want = d < 6 && facing > -0.1 ? THREE.MathUtils.clamp(Math.atan2(toP.x * fz - toP.z * fx, toP.x * fx + toP.z * fz), -1.1, 1.1) : 0;
           pd.look += (want - pd.look) * Math.min(1, dt * 3);
+          // now and then, someone close says something
+          if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z))); }
+          if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
           if (Math.abs(pd.look) > 0.01) {
             look.setFromAxisAngle(up, pd.look * 0.55); pd.head.quaternion.premultiply(look);
             look.setFromAxisAngle(up, pd.look * 0.3); pd.neck.quaternion.premultiply(look);
@@ -160,7 +167,7 @@ export async function spawnPeds(scene, world, o = {}) {
         const pd = peds[i], g = pd.h.group.position, dx = p.x - g.x, dz = p.z - g.z, dd = Math.hypot(dx, dz), m = r + 0.3;
         if (dd < m && dd > 1e-4) {
           p.x = g.x + dx / dd * m; p.z = g.z + dz / dd * m;
-          if ((speed || 0) > 5 && pd.stagger <= 0) { pd.stagger = 1.2; pd.side += (dx > 0 ? -0.4 : 0.4); if (o.onBump) o.onBump(pd); }
+          if ((speed || 0) > 5 && pd.stagger <= 0) { pd.stagger = 1.2; pd.side += (dx > 0 ? -0.4 : 0.4); say(BUMP[(R() * BUMP.length) | 0]); if (o.onBump) o.onBump(pd); }
         }
       }
     }
