@@ -1,0 +1,4929 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "Lowtide",
+    "tagline": "Everything washes up eventually.",
+    "studio": "Cloak Studios",
+    "city": "Marlowe Keys",
+    "protagonist": "hollis",
+    "startCash": 4820,
+    "startTime": "23:20",
+    "failScreens": {
+      "mission": {
+        "title": "Job Failed",
+        "options": [
+          "Retry",
+          "Quit"
+        ]
+      },
+      "death": {
+        "title": "Washed Up",
+        "respawn": "saint_brendans"
+      },
+      "arrest": {
+        "title": "Netted",
+        "respawn": "central_station"
+      }
+    },
+    "dialogueWhen": "start | end | cutscene_open | cutscene_end | on:<objectiveId> (objective begins) | done:<objectiveId> (objective completed) | event:<name> (scripted trigger)"
+  },
+  "acts": [
+    {
+      "act": 1,
+      "title": "On the Beach",
+      "summary": "Hollis needs money and takes jobs. The Ottoline's lost cargo is back, and the grounding was no accident."
+    },
+    {
+      "act": 2,
+      "title": "Slack Water",
+      "summary": "Hollis gets close to Ashby from every side. She gets what she wanted and finds it isn't what she needed."
+    },
+    {
+      "act": 3,
+      "title": "The Turn",
+      "summary": "The bay empties, and everyone goes out to see what's on the bottom."
+    }
+  ],
+  "objectiveTypes": {
+    "goto": "Reach a marker on foot or any way.",
+    "drive_to": "Reach a marker in a vehicle (the given one if 'vehicle' is set).",
+    "enter_vehicle": "Get into a vehicle. 'vehicle': 'any' means any car; 'player' means the car the player arrived in.",
+    "talk": "Trigger dialogue with 'talkTo'.",
+    "collect": "Pick up 'item'. 'carry': true means it is held and slows you.",
+    "deliver": "Bring 'item' to the marker. 'options' makes it a branching choice.",
+    "lose_wanted": "Get the wanted level to zero. 'trigger' can set the level first.",
+    "eliminate": "Defeat 'count' of 'targets'.",
+    "defend": "Keep enemies off the marker for 'seconds'.",
+    "survive": "Stay alive (and keep 'protect' alive) for 'seconds'.",
+    "follow": "Stay within 'distance' of 'target'. Being close is fine.",
+    "tail": "Stay within 'distance' of 'target' without getting closer than 'min'.",
+    "escape": "Leave the 'radius' around the marker, or reach the marker if a timer is set.",
+    "wait": "Stay at the marker for 'seconds'.",
+    "photo": "Photograph 'subject'. Always optional, so missions work without the camera."
+  },
+  "missions": [
+    {
+      "id": "salt_in_the_wound",
+      "act": 1,
+      "order": 1,
+      "title": "Salt in the Wound",
+      "giver": "dez",
+      "district": "port_salt",
+      "districts": [
+        "mainland",
+        "causeway",
+        "port_salt"
+      ],
+      "brief": "Meet Dez at the pier before the tide turns. Don't bring heat.",
+      "summary": "Dez pays $1,500 to drive a white van from the Gannet Truck Plaza across the causeway to Pier 9 before the tide turns. A patrol at the toll plaza runs the plate and Hollis loses it. At the pier a polite man in loafers takes the cargo: crates stenciled with the Ottoline's hold numbers, three years after they were lost at sea.",
+      "requires": [],
+      "systems": [
+        "vehicles",
+        "wanted",
+        "timer"
+      ],
+      "weapons": [],
+      "needsVehicles": true,
+      "start": {
+        "time": "23:20",
+        "placeId": "gannet_truck_plaza"
+      },
+      "timer": {
+        "label": "Tide turns",
+        "deadline": "00:18",
+        "seconds": 600,
+        "fail": "tide",
+        "warnings": [
+          {
+            "clock": "23:58",
+            "event": "timer_20"
+          },
+          {
+            "clock": "00:08",
+            "event": "timer_10"
+          },
+          {
+            "clock": "00:16",
+            "event": "timer_2"
+          }
+        ],
+        "note": "The mission clock covers 23:20 to 00:18 over the 600-second timer. The HUD reads about 11:42 PM once the van is picked up."
+      },
+      "triggers": {
+        "causeway": "Player drives onto the Marlowe Causeway.",
+        "spotted": "Player reaches the Causeway Toll Plaza. The parked patrol runs the plate. Wanted 1 and the toast.",
+        "van_damage": "First hard collision in the van. Plays once.",
+        "heat_warning": "Player is within 150 m of Pier 9 while wanted. Entering the drop circle while wanted fails with 'heat'."
+      },
+      "objectives": [
+        {
+          "id": "pickup_van",
+          "type": "enter_vehicle",
+          "text": "Pick up the van.",
+          "place": "Gannet Truck Plaza",
+          "placeId": "gannet_truck_plaza",
+          "district": "mainland",
+          "vehicle": "white_van",
+          "note": "Behind the car wash. Keys on the front tire."
+        },
+        {
+          "id": "lose_patrol",
+          "type": "lose_wanted",
+          "text": "Lose the patrol at the causeway.",
+          "place": "Causeway Toll Plaza",
+          "placeId": "causeway_toll_plaza",
+          "district": "causeway",
+          "vehicle": "white_van",
+          "stars": 1,
+          "trigger": {
+            "onArrive": "causeway_toll_plaza",
+            "setWanted": 1,
+            "event": "spotted",
+            "toast": {
+              "title": "Wanted",
+              "text": "A patrol spotted you near the causeway."
+            }
+          }
+        },
+        {
+          "id": "drop_pier9",
+          "type": "drive_to",
+          "text": "Drop at Pier 9.",
+          "place": "Pier 9",
+          "placeId": "pier_9",
+          "district": "port_salt",
+          "vehicle": "white_van",
+          "requireWanted": 0,
+          "failIfWanted": "heat"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "cutscene_open",
+          "note": "INT. GANNET TRUCK PLAZA, KITCHEN. 11:20 PM. Dish pit, steam, a weather radio on the shelf. Hollis lets the phone buzz twice before she answers. After 'I was.' she hangs the apron on the hook. EXT. behind the car wash: the van, keys on the front tire, and across the black water the island, tower tops still pink, the Port Salt cranes standing in the shallows like herons.",
+          "lines": [
+            {
+              "speaker": "forecast",
+              "text": "Winds northeast, ten to fifteen knots. High water, Marlowe Keys, twelve-eighteen."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I'm at work, Dez."
+            },
+            {
+              "speaker": "dez",
+              "text": "You're at a sink."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It's a job."
+            },
+            {
+              "speaker": "dez",
+              "text": "I've got a better one. High water's twelve-twenty."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Twelve-eighteen."
+            },
+            {
+              "speaker": "dez",
+              "text": "See? That's why I called you."
+            },
+            {
+              "speaker": "dez",
+              "text": "White van behind the car wash. Keys on the front tire. Pier 9, before the tide turns."
+            },
+            {
+              "speaker": "hollis",
+              "text": "What's in it?"
+            },
+            {
+              "speaker": "dez",
+              "text": "Fifteen hundred dollars."
+            },
+            {
+              "speaker": "hollis",
+              "text": "That's not what I asked."
+            },
+            {
+              "speaker": "dez",
+              "text": "It's what I'm answering."
+            },
+            {
+              "speaker": "dez",
+              "text": "And Hol. Don't bring heat."
+            },
+            {
+              "speaker": "arlo",
+              "text": "You're on till two."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I was."
+            }
+          ]
+        },
+        {
+          "when": "done:pickup_van",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Smells like bait."
+            }
+          ]
+        },
+        {
+          "when": "event:causeway",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "There's a patrol at the toll plaza. They park there for the air conditioning."
+            },
+            {
+              "speaker": "hollis",
+              "text": "In a white van."
+            },
+            {
+              "speaker": "dez",
+              "text": "Everybody drives a white van. That's the point of a white van."
+            }
+          ]
+        },
+        {
+          "when": "event:spotted",
+          "lines": [
+            {
+              "speaker": "dispatch",
+              "text": "Causeway unit, running a white van. Plate comes back to a dry cleaner that closed in 2019."
+            },
+            {
+              "speaker": "dez",
+              "text": "Hol. Tell me that's not you on the scanner."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It's a white van, Dez. It's everybody."
+            }
+          ]
+        },
+        {
+          "when": "done:lose_patrol",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Okay. Okay. Pier 9. Lights off for the last bit."
+            }
+          ]
+        },
+        {
+          "when": "event:van_damage",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "What was that?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Curb."
+            }
+          ]
+        },
+        {
+          "when": "event:timer_20",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Twenty minutes, Hol."
+            }
+          ]
+        },
+        {
+          "when": "event:timer_10",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Captain's untying a line. Just the one."
+            }
+          ]
+        },
+        {
+          "when": "event:timer_2",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "He's on the other one."
+            }
+          ]
+        },
+        {
+          "when": "event:heat_warning",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Don't you come down here lit up."
+            }
+          ]
+        },
+        {
+          "when": "cutscene_end",
+          "note": "EXT. PIER 9, about 12:05 AM. The Tern idles at the T. Dez is barefoot on the planks, flip-flops in one hand. The crew unloads the van. Rafi steps off the boat in pressed linen and loafers, hands Dez an envelope, looks at Hollis, steps back aboard. Hollis sees the last crate's stencil: MV OTTOLINE, HOLD 3, 4 OF 11. As the Tern backs off riding low, two crates slide off the stern and float. Card: SALT IN THE WOUND. Complete. +$1,500.",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "You're late. Tide's already turning."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It turns at twelve-eighteen."
+            },
+            {
+              "speaker": "dez",
+              "text": "It's turning in spirit."
+            },
+            {
+              "speaker": "rafi",
+              "text": "Mr. Ruelas."
+            },
+            {
+              "speaker": "rafi",
+              "text": "And the pilot."
+            },
+            {
+              "speaker": "rafi",
+              "text": "Nice night for it."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Dez."
+            },
+            {
+              "speaker": "dez",
+              "text": "Don't."
+            },
+            {
+              "speaker": "hollis",
+              "text": "That's off the Ottoline. Hold 3."
+            },
+            {
+              "speaker": "dez",
+              "text": "That's off a van."
+            },
+            {
+              "speaker": "hollis",
+              "text": "The report says those went in the water three years ago."
+            },
+            {
+              "speaker": "dez",
+              "text": "Then they dried off."
+            },
+            {
+              "speaker": "dez",
+              "text": "Fifteen hundred. Go home, Hol."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I live on a boat in a parking lot."
+            },
+            {
+              "speaker": "dez",
+              "text": "Then go sit in it."
+            },
+            {
+              "speaker": "dez",
+              "text": "That's coming out of somebody's cut."
+            },
+            {
+              "speaker": "hollis",
+              "text": "They'll come up at Tideline. Tower 4."
+            },
+            {
+              "speaker": "dez",
+              "text": "How do you know that?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "The current hooks there."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "heat": "You brought heat.",
+        "tide": "The tide turned. The Tern didn't wait.",
+        "van_destroyed": "You were supposed to bring the van.",
+        "van_abandoned": "You left the van.",
+        "dez_dead": "Dez is gone."
+      },
+      "reward": {
+        "cash": 1500
+      },
+      "variants": {
+        "on_foot": {
+          "note": "Use until vehicles ship. Same brief, same ending beat. The van died on Salt Works Road, a few blocks from Pier 9.",
+          "needsVehicles": false,
+          "systems": [
+            "on_foot",
+            "wanted",
+            "timer"
+          ],
+          "start": {
+            "time": "23:20",
+            "placeId": "salt_works_boatyard"
+          },
+          "objectives": [
+            {
+              "id": "find_van",
+              "type": "goto",
+              "text": "Find the van.",
+              "place": "Salt Works Road",
+              "placeId": "salt_works_road",
+              "district": "port_salt"
+            },
+            {
+              "id": "take_case",
+              "type": "collect",
+              "text": "Take the case.",
+              "place": "Salt Works Road",
+              "placeId": "salt_works_road",
+              "district": "port_salt",
+              "item": "hard_case",
+              "carry": true,
+              "note": "Carrying the case: no sprint."
+            },
+            {
+              "id": "lose_patrol",
+              "type": "lose_wanted",
+              "text": "Lose the patrol.",
+              "place": "The Stacks",
+              "placeId": "the_stacks",
+              "district": "port_salt",
+              "stars": 1,
+              "trigger": {
+                "onStart": true,
+                "setWanted": 1,
+                "event": "spotted",
+                "toast": {
+                  "title": "Wanted",
+                  "text": "A patrol spotted you on Salt Works Road."
+                }
+              }
+            },
+            {
+              "id": "drop_pier9",
+              "type": "deliver",
+              "text": "Drop at Pier 9.",
+              "place": "Pier 9",
+              "placeId": "pier_9",
+              "district": "port_salt",
+              "item": "hard_case",
+              "requireWanted": 0,
+              "failIfWanted": "heat"
+            }
+          ],
+          "dialogue": [
+            {
+              "when": "cutscene_open",
+              "note": "EXT. SALT WORKS BOATYARD. The Ida May on blocks. Hollis on the deck in the dark, phone on the hatch cover.",
+              "lines": [
+                {
+                  "speaker": "forecast",
+                  "text": "Winds northeast, ten to fifteen knots. High water, Marlowe Keys, twelve-eighteen."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "It's late, Dez."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "It's high water at twelve-twenty."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "Twelve-eighteen."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "See? That's why I called you."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Van died on Salt Works Road. The case didn't. Get it to Pier 9 before the tide turns."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "What's in it?"
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Fifteen hundred dollars."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "That's not what I asked."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "It's what I'm answering."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "And Hol. Don't bring heat."
+                }
+              ]
+            },
+            {
+              "when": "done:take_case",
+              "lines": [
+                {
+                  "speaker": "hollis",
+                  "text": "Smells like bait."
+                }
+              ]
+            },
+            {
+              "when": "event:spotted",
+              "lines": [
+                {
+                  "speaker": "dispatch",
+                  "text": "Unit on Salt Works Road. Somebody's taking a case out of a dead van."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Hol. Tell me that's not you on the scanner."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "It's Port Salt, Dez. It's everybody."
+                }
+              ]
+            },
+            {
+              "when": "done:lose_patrol",
+              "lines": [
+                {
+                  "speaker": "dez",
+                  "text": "Okay. Okay. Pier 9. Stay off the lit side."
+                }
+              ]
+            },
+            {
+              "when": "event:heat_warning",
+              "lines": [
+                {
+                  "speaker": "dez",
+                  "text": "Don't you come down here lit up."
+                }
+              ]
+            },
+            {
+              "when": "cutscene_end",
+              "note": "EXT. PIER 9, about 12:05 AM. The Tern idles at the T. Dez is barefoot on the planks, flip-flops in one hand. The crew unloads the van. Rafi steps off the boat in pressed linen and loafers, hands Dez an envelope, looks at Hollis, steps back aboard. Hollis sees the last crate's stencil: MV OTTOLINE, HOLD 3, 4 OF 11. As the Tern backs off riding low, two crates slide off the stern and float. Card: SALT IN THE WOUND. Complete. +$1,500.",
+              "lines": [
+                {
+                  "speaker": "dez",
+                  "text": "You're late. Tide's already turning."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "It turns at twelve-eighteen."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "It's turning in spirit."
+                },
+                {
+                  "speaker": "rafi",
+                  "text": "Mr. Ruelas."
+                },
+                {
+                  "speaker": "rafi",
+                  "text": "And the pilot."
+                },
+                {
+                  "speaker": "rafi",
+                  "text": "Nice night for it."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "Dez."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Don't."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "That's off the Ottoline. Hold 3."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "That's off a dead van."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "The report says those went in the water three years ago."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Then they dried off."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Fifteen hundred. Go home, Hol."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "I live on a boat in a parking lot."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "Then go sit in it."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "That's coming out of somebody's cut."
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "They'll come up at Tideline. Tower 4."
+                },
+                {
+                  "speaker": "dez",
+                  "text": "How do you know that?"
+                },
+                {
+                  "speaker": "hollis",
+                  "text": "The current hooks there."
+                }
+              ]
+            }
+          ],
+          "fail": {
+            "heat": "You brought heat.",
+            "tide": "The tide turned. The Tern didn't wait.",
+            "case_lost": "You dropped the case.",
+            "dez_dead": "Dez is gone."
+          }
+        }
+      }
+    },
+    {
+      "id": "chum",
+      "act": 1,
+      "order": 2,
+      "title": "Chum",
+      "giver": "dez",
+      "district": "tideline",
+      "brief": "Lionel owes Dez for ice. Collect.",
+      "summary": "Dez hands Hollis a pistol 'for showing people' and sends her to collect $3,000 that Lionel Pike owes for ice. Two Lanyards are already in Lionel's office collecting for Bernie, and it turns into a fight in the Seagrape's courtyard. Lionel pays $800 and a story: he carries cash envelopes to Port Salt families for a Downtown company that wants their dock leases.",
+      "requires": [
+        "salt_in_the_wound"
+      ],
+      "systems": [
+        "on_foot",
+        "pedestrians",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol"
+      ],
+      "needsVehicles": false,
+      "start": {
+        "time": "20:10",
+        "placeId": "ruelas_bait_ice"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "talk",
+          "text": "See Dez.",
+          "place": "Ruelas Bait & Ice",
+          "placeId": "ruelas_bait_ice",
+          "district": "tideline",
+          "talkTo": "dez",
+          "gives": "pistol"
+        },
+        {
+          "id": "o2",
+          "type": "goto",
+          "text": "Go to the Seagrape.",
+          "place": "Seagrape Motor Inn",
+          "placeId": "seagrape_motor_inn",
+          "district": "tideline"
+        },
+        {
+          "id": "o3",
+          "type": "talk",
+          "text": "Find Lionel.",
+          "place": "Seagrape Office",
+          "placeId": "seagrape_office",
+          "district": "tideline",
+          "talkTo": "lionel"
+        },
+        {
+          "id": "o4",
+          "type": "eliminate",
+          "text": "Deal with the Lanyards.",
+          "place": "Seagrape Courtyard",
+          "placeId": "seagrape_courtyard",
+          "district": "tideline",
+          "targets": "lanyard",
+          "count": 2,
+          "setWanted": 1
+        },
+        {
+          "id": "o5",
+          "type": "talk",
+          "text": "Collect from Lionel.",
+          "place": "Seagrape Room 12",
+          "placeId": "seagrape_room_12",
+          "district": "tideline",
+          "talkTo": "lionel"
+        },
+        {
+          "id": "o6",
+          "type": "lose_wanted",
+          "text": "Lose Safety.",
+          "place": "Tideline Avenue",
+          "placeId": "tideline_avenue",
+          "district": "tideline",
+          "stars": 2
+        },
+        {
+          "id": "o7",
+          "type": "goto",
+          "text": "Back to Dez.",
+          "place": "Ruelas Bait & Ice",
+          "placeId": "ruelas_bait_ice",
+          "district": "tideline"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Lionel Pike owes me three thousand for ice."
+            },
+            {
+              "speaker": "hollis",
+              "text": "That's a lot of ice."
+            },
+            {
+              "speaker": "dez",
+              "text": "It's a lot of Lionel."
+            },
+            {
+              "speaker": "dez",
+              "text": "Take this."
+            },
+            {
+              "speaker": "hollis",
+              "text": "What's it for?"
+            },
+            {
+              "speaker": "dez",
+              "text": "Showing people."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Showing them what?"
+            },
+            {
+              "speaker": "dez",
+              "text": "That you have it."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "Oh. You're with Dez. Great. Everybody's here."
+            },
+            {
+              "speaker": "lanyard",
+              "text": "Bernie says you're late, Lionel."
+            },
+            {
+              "speaker": "lanyard",
+              "text": "Get in line, lady."
+            }
+          ]
+        },
+        {
+          "when": "done:o4",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "I'll be in Room 12. Nobody goes in Room 12."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "I'll be honest with you, which I don't usually do."
+            },
+            {
+              "speaker": "lionel",
+              "text": "I carry envelopes to Port Salt. Cash. For dock leases."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Whose cash?"
+            },
+            {
+              "speaker": "lionel",
+              "text": "A company with a lot of glass."
+            },
+            {
+              "speaker": "lionel",
+              "text": "Here's eight hundred. Tell Dez the ice was mostly water."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Eight hundred."
+            },
+            {
+              "speaker": "hollis",
+              "text": "And a story."
+            },
+            {
+              "speaker": "dez",
+              "text": "I can't put a story in the register."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "lionel_dead": "Lionel can't pay now.",
+        "dez_dead": "Dez is gone."
+      },
+      "reward": {
+        "cash": 800
+      }
+    },
+    {
+      "id": "flotsam",
+      "act": 1,
+      "order": 3,
+      "title": "Flotsam",
+      "giver": "pruitt",
+      "district": "tideline",
+      "districts": [
+        "palm_square",
+        "tideline"
+      ],
+      "brief": "Boxes on Tideline Beach. Pruitt wants one. Don't tell her how.",
+      "summary": "The crates that slid off the Tern come ashore at Tower 4, right where Hollis said they would. Detective Odette Pruitt of the Wash-Up Desk wants one off the books before the Lanyards' cleanup crew gets there, and the crew gets there early. Hollis carries a crate off the beach through Safety and sets it down next to Pruitt on the third bench.",
+      "requires": [
+        "chum"
+      ],
+      "systems": [
+        "on_foot",
+        "pistol",
+        "wanted",
+        "photo"
+      ],
+      "weapons": [
+        "pistol"
+      ],
+      "needsVehicles": false,
+      "start": {
+        "time": "04:05",
+        "placeId": "third_bench"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "talk",
+          "text": "Meet Pruitt.",
+          "place": "The Third Bench",
+          "placeId": "third_bench",
+          "district": "palm_square",
+          "talkTo": "pruitt"
+        },
+        {
+          "id": "o2",
+          "type": "goto",
+          "text": "Get to Tower 4.",
+          "place": "Lifeguard Tower 4",
+          "placeId": "lifeguard_tower_4",
+          "district": "tideline"
+        },
+        {
+          "id": "o3",
+          "type": "photo",
+          "text": "Photograph the serials.",
+          "place": "Tideline Beach",
+          "placeId": "tideline_beach",
+          "district": "tideline",
+          "optional": true,
+          "subject": "ottoline_crates"
+        },
+        {
+          "id": "o4",
+          "type": "collect",
+          "text": "Take a crate.",
+          "place": "Tideline Beach",
+          "placeId": "tideline_beach",
+          "district": "tideline",
+          "item": "ottoline_crate",
+          "carry": true,
+          "note": "Carrying: no sprint. Drop it to fight, pick it back up."
+        },
+        {
+          "id": "o5",
+          "type": "escape",
+          "text": "Get off the beach.",
+          "place": "Tideline Beach",
+          "placeId": "tideline_beach",
+          "district": "tideline",
+          "radius": 150,
+          "spawns": "lanyard",
+          "setWanted": 2
+        },
+        {
+          "id": "o6",
+          "type": "lose_wanted",
+          "text": "Lose Safety.",
+          "place": "Tideline Avenue",
+          "placeId": "tideline_avenue",
+          "district": "tideline",
+          "stars": 2
+        },
+        {
+          "id": "o7",
+          "type": "deliver",
+          "text": "Bring the crate to Pruitt.",
+          "place": "The Third Bench",
+          "placeId": "third_bench",
+          "district": "palm_square",
+          "item": "ottoline_crate",
+          "requireWanted": 0,
+          "failIfWanted": "heat"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "Odette Pruitt. Marine Recovery."
+            },
+            {
+              "speaker": "hollis",
+              "text": "The Wash-Up Desk."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Nobody calls it that to my face."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Boxes came up on Tideline Beach tonight. Ottoline boxes."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Tower 4. The current hooks there."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "That's what I figured you'd say."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Bring me one. Don't tell me how."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "lanyard",
+              "text": "That's Bernie's box."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It's on the beach. That makes it the beach's."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "Cormorant Mutual paid forty-one million on these. Lost at sea."
+            },
+            {
+              "speaker": "hollis",
+              "text": "They look found."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "I sat in on your inquiry."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I remember. You didn't say anything."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Nobody did."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Finder's fee. Ten percent of what I say it's worth."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "heat": "You brought Safety to a cop.",
+        "crate_lost": "The crate went back in the water.",
+        "pruitt_dead": "Pruitt's gone."
+      },
+      "reward": {
+        "cash": 500,
+        "unlocks": [
+          "wash_up"
+        ]
+      }
+    },
+    {
+      "id": "small_craft_advisory",
+      "act": 1,
+      "order": 4,
+      "title": "Small Craft Advisory",
+      "giver": "bernie",
+      "district": "port_salt",
+      "brief": "Bernie wants a word about her box.",
+      "summary": "Bernie Szabo wants to know who took her box, and is almost pleased it was the pilot. Before she decides what to do about it, a Scrub crew comes over the fence with gas cans to burn Warehouse 6, and Hollis holds the door with the Lanyards. Rattled, Bernie shows her the Pier 8 barge log from the night of the grounding: eleven Ottoline boxes came off a Purcell Salvage barge at 3:40 AM, an hour before the ship hit the Knuckle.",
+      "requires": [
+        "flotsam"
+      ],
+      "systems": [
+        "on_foot",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": false,
+      "start": {
+        "time": "22:30",
+        "placeId": "longshore_hall"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "goto",
+          "text": "Go to Longshore Hall.",
+          "place": "Longshore Hall",
+          "placeId": "longshore_hall",
+          "district": "port_salt"
+        },
+        {
+          "id": "o2",
+          "type": "talk",
+          "text": "Talk to Bernie.",
+          "place": "Longshore Hall",
+          "placeId": "longshore_hall",
+          "district": "port_salt",
+          "talkTo": "bernie",
+          "gives": "shotgun",
+          "givesOptional": true
+        },
+        {
+          "id": "o3",
+          "type": "defend",
+          "text": "Hold Warehouse 6.",
+          "place": "Warehouse 6",
+          "placeId": "warehouse_6",
+          "district": "port_salt",
+          "seconds": 120,
+          "waves": 3,
+          "spawns": "scrub",
+          "allies": "lanyard"
+        },
+        {
+          "id": "o4",
+          "type": "eliminate",
+          "text": "Stop the torch crew.",
+          "place": "Warehouse 6",
+          "placeId": "warehouse_6",
+          "district": "port_salt",
+          "targets": "scrub",
+          "count": 3,
+          "note": "The three carrying gas cans. If one reaches the wall, fail: warehouse_burned."
+        },
+        {
+          "id": "o5",
+          "type": "talk",
+          "text": "See Bernie.",
+          "place": "Pier 8 Barge Berth",
+          "placeId": "pier_8_barge_berth",
+          "district": "port_salt",
+          "talkTo": "bernie",
+          "gives": "barge_log"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "You took one of my boxes off the beach."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It was on the beach. That makes it the beach's."
+            },
+            {
+              "speaker": "bernie",
+              "text": "That's not how the beach works."
+            },
+            {
+              "speaker": "bernie",
+              "text": "You know the water. I could use somebody who knows the water."
+            },
+            {
+              "speaker": "lanyard",
+              "text": "Bernie! Somebody's over the fence at Six!"
+            },
+            {
+              "speaker": "bernie",
+              "text": "Pilot. You shoot?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Lately."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "lanyard",
+              "text": "They brought gas cans!"
+            },
+            {
+              "speaker": "bernie",
+              "text": "Scrub boys. From the mainland. Somebody paid their toll."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "Pier 8 barge log. The night of your ship."
+            },
+            {
+              "speaker": "bernie",
+              "text": "Eleven Ottoline boxes off a Purcell Salvage barge. 3:40 in the morning."
+            },
+            {
+              "speaker": "hollis",
+              "text": "We hit the Knuckle at 4:52."
+            },
+            {
+              "speaker": "bernie",
+              "text": "So they got lost early."
+            },
+            {
+              "speaker": "hollis",
+              "text": "You lifted them."
+            },
+            {
+              "speaker": "bernie",
+              "text": "I lift what comes. I don't read labels."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "warehouse_burned": "Warehouse 6 is a parking lot now.",
+        "bernie_dead": "Bernie's gone."
+      },
+      "reward": {
+        "cash": 1200,
+        "unlocks": [
+          "lanyard_lifts"
+        ]
+      }
+    },
+    {
+      "id": "ice_run",
+      "act": 1,
+      "order": 5,
+      "title": "Ice Run",
+      "giver": "dez",
+      "district": "tideline",
+      "brief": "Four hotels. The ice is melting.",
+      "summary": "The first job with wheels: Dez's ice truck, four Tideline hotels and a load that's melting. Dez rides along and tells Hollis about his brother Manny, who drove her pilot launch the night of the grounding, talked about a retirement plan, and left two weeks later in his skiff without a word.",
+      "requires": [
+        "small_craft_advisory"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "timer"
+      ],
+      "weapons": [],
+      "needsVehicles": true,
+      "start": {
+        "time": "19:40",
+        "placeId": "ruelas_bait_ice"
+      },
+      "timer": {
+        "label": "Ice",
+        "seconds": 420,
+        "fail": "melted",
+        "note": "Collisions take 10 seconds off."
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "enter_vehicle",
+          "text": "Get in the ice truck.",
+          "place": "Ruelas Bait & Ice",
+          "placeId": "ruelas_bait_ice",
+          "district": "tideline",
+          "vehicle": "ice_truck",
+          "passenger": "dez"
+        },
+        {
+          "id": "o2",
+          "type": "drive_to",
+          "text": "Ice to the Coquina.",
+          "place": "Hotel Coquina",
+          "placeId": "hotel_coquina",
+          "district": "tideline",
+          "vehicle": "ice_truck",
+          "stop": true
+        },
+        {
+          "id": "o3",
+          "type": "drive_to",
+          "text": "Ice to the Pelican Arms.",
+          "place": "Pelican Arms",
+          "placeId": "pelican_arms",
+          "district": "tideline",
+          "vehicle": "ice_truck",
+          "stop": true
+        },
+        {
+          "id": "o4",
+          "type": "drive_to",
+          "text": "Ice to the Starfish Court.",
+          "place": "Starfish Court",
+          "placeId": "starfish_court",
+          "district": "tideline",
+          "vehicle": "ice_truck",
+          "stop": true
+        },
+        {
+          "id": "o5",
+          "type": "drive_to",
+          "text": "Ice to the Seagrape.",
+          "place": "Seagrape Motor Inn",
+          "placeId": "seagrape_motor_inn",
+          "district": "tideline",
+          "vehicle": "ice_truck",
+          "stop": true
+        },
+        {
+          "id": "o6",
+          "type": "drive_to",
+          "text": "Bring the truck back.",
+          "place": "Ruelas Bait & Ice",
+          "placeId": "ruelas_bait_ice",
+          "district": "tideline",
+          "vehicle": "ice_truck",
+          "timerOff": true
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Four hotels. Ice melts. That's the job."
+            },
+            {
+              "speaker": "hollis",
+              "text": "You have a guy for this."
+            },
+            {
+              "speaker": "dez",
+              "text": "My guy got a DUI on a bicycle."
+            },
+            {
+              "speaker": "dez",
+              "text": "I'll ride along. Don't hit anything. The ice can tell."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Manny drove your launch that night. You remember?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "He talked about fishing the whole way out."
+            },
+            {
+              "speaker": "dez",
+              "text": "Two weeks later he's gone. Took his skiff. No note."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Week before, he tells me he's got a retirement plan. Twenty-six years old."
+            },
+            {
+              "speaker": "hollis",
+              "text": "You think he ran?"
+            },
+            {
+              "speaker": "dez",
+              "text": "I think he's on the mainland not calling his brother."
+            }
+          ]
+        },
+        {
+          "when": "done:o5",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "Ice. Good. The machine's been making a noise like it knows something."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Leave the Ottoline alone, Hol."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It didn't leave me alone."
+            },
+            {
+              "speaker": "dez",
+              "text": "Wade Purcell won't tell you anything. He tows things. He doesn't talk."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Then I'll get towed."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "melted": "It's water now.",
+        "truck_wrecked": "Dez needed that truck.",
+        "dez_dead": "Dez is gone."
+      },
+      "reward": {
+        "cash": 600,
+        "unlocks": [
+          "ice_route"
+        ]
+      }
+    },
+    {
+      "id": "soft_shoulder",
+      "act": 1,
+      "order": 6,
+      "title": "Soft Shoulder",
+      "giver": "wade",
+      "district": "mainland",
+      "districts": [
+        "causeway",
+        "mainland",
+        "port_salt"
+      ],
+      "brief": "Wade Purcell pulled something out of the water. Ask him what.",
+      "summary": "Hollis drives to Purcell Salvage & Tow to ask Wade about the barge and gets there at the same time as the Scrub, who have been sent to close Wade's mouth for good. She holds the yard, gets Wade into his own wrecker and takes him back across the causeway through a Safety roadblock. Hidden on the Ida May, Wade tells her he picked up eleven boxes on marker buoys an hour before she ever went aboard, paid in cash by a man who wears loafers on a boat, on a contract with Ashby Tidewater's name on it.",
+      "requires": [
+        "ice_run"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "21:15",
+        "placeId": "salt_works_road"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "enter_vehicle",
+          "text": "Get a car.",
+          "place": "Salt Works Road",
+          "placeId": "salt_works_road",
+          "district": "port_salt",
+          "vehicle": "any"
+        },
+        {
+          "id": "o2",
+          "type": "drive_to",
+          "text": "Cross to the mainland.",
+          "place": "Purcell Salvage & Tow",
+          "placeId": "purcell_salvage",
+          "district": "mainland",
+          "via": "marlowe_causeway"
+        },
+        {
+          "id": "o3",
+          "type": "talk",
+          "text": "Find Wade.",
+          "place": "Purcell Salvage & Tow",
+          "placeId": "purcell_salvage",
+          "district": "mainland",
+          "talkTo": "wade"
+        },
+        {
+          "id": "o4",
+          "type": "survive",
+          "text": "Hold the yard.",
+          "place": "Purcell Salvage & Tow",
+          "placeId": "purcell_salvage",
+          "district": "mainland",
+          "seconds": 60,
+          "spawns": "scrub",
+          "protect": "wade"
+        },
+        {
+          "id": "o5",
+          "type": "enter_vehicle",
+          "text": "Get Wade in the wrecker.",
+          "place": "Purcell Salvage & Tow",
+          "placeId": "purcell_salvage",
+          "district": "mainland",
+          "vehicle": "wrecker",
+          "passenger": "wade"
+        },
+        {
+          "id": "o6",
+          "type": "escape",
+          "text": "Lose the Scrub.",
+          "place": "Marlowe Causeway",
+          "placeId": "marlowe_causeway",
+          "district": "causeway",
+          "radius": 400,
+          "pursuers": "scrub"
+        },
+        {
+          "id": "o7",
+          "type": "lose_wanted",
+          "text": "Get through the toll.",
+          "place": "Causeway Toll Plaza",
+          "placeId": "causeway_toll_plaza",
+          "district": "causeway",
+          "stars": 3,
+          "trigger": {
+            "onArrive": "causeway_toll_plaza",
+            "setWanted": 3,
+            "roadblock": true
+          }
+        },
+        {
+          "id": "o8",
+          "type": "drive_to",
+          "text": "Take Wade to the boatyard.",
+          "place": "Salt Works Boatyard",
+          "placeId": "salt_works_boatyard",
+          "district": "port_salt",
+          "vehicle": "wrecker",
+          "requireWanted": 0
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "wade",
+              "text": "You're the pilot."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I was."
+            },
+            {
+              "speaker": "wade",
+              "text": "I don't talk about that night. I tow things."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Somebody's about to talk about it for you."
+            },
+            {
+              "speaker": "wade",
+              "text": "Those are Scrub boys."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "wade",
+              "text": "Wrecker. Keys are in it. They're always in it."
+            }
+          ]
+        },
+        {
+          "when": "on:o7",
+          "lines": [
+            {
+              "speaker": "dispatch",
+              "text": "Causeway units, wrecker inbound at speed. Yes, a tow truck. No, it's not towing anything."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "wade",
+              "text": "Eleven boxes on marker buoys at the outer anchorage. I picked them up an hour before you ever went aboard."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Who paid?"
+            },
+            {
+              "speaker": "wade",
+              "text": "Man who wears loafers on a boat. Cash. The salvage contract said Ashby Tidewater."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Ashby."
+            },
+            {
+              "speaker": "wade",
+              "text": "This boat's on blocks."
+            },
+            {
+              "speaker": "hollis",
+              "text": "So are you, for now."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "wade_dead": "Wade won't be talking.",
+        "wrecker_wrecked": "You wrecked the wrecker."
+      },
+      "reward": {
+        "cash": 1000,
+        "unlocks": [
+          "safehouse_purcell"
+        ]
+      }
+    },
+    {
+      "id": "open_house",
+      "act": 2,
+      "order": 7,
+      "title": "Open House",
+      "giver": "pruitt",
+      "district": "downtown",
+      "districts": [
+        "downtown",
+        "tideline"
+      ],
+      "brief": "Ashby's selling the waterfront tonight. Go look.",
+      "summary": "Ashby Tidewater is selling Port Salt Commons at an open house in the Meridian Tower. Hollis meets June Ashby, hears Calvin Ashby promise the waterfront real shade, and sees the site model: a marina where Pier 9 and Tideline Pier are now. Rafi recognizes her on the way out; she tails his car to the Seagrape and watches Lionel hand him an envelope.",
+      "requires": [
+        "soft_shoulder"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "photo"
+      ],
+      "weapons": [],
+      "needsVehicles": true,
+      "start": {
+        "time": "18:50",
+        "placeId": "halyard_avenue"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Go to the open house.",
+          "place": "Meridian Tower",
+          "placeId": "meridian_tower",
+          "district": "downtown"
+        },
+        {
+          "id": "o2",
+          "type": "talk",
+          "text": "Talk to June Ashby.",
+          "place": "Port Salt Commons Sales Gallery",
+          "placeId": "sales_gallery",
+          "district": "downtown",
+          "talkTo": "june"
+        },
+        {
+          "id": "o3",
+          "type": "wait",
+          "text": "Listen to the speech.",
+          "place": "Port Salt Commons Sales Gallery",
+          "placeId": "sales_gallery",
+          "district": "downtown",
+          "seconds": 45
+        },
+        {
+          "id": "o4",
+          "type": "photo",
+          "text": "Photograph the site model.",
+          "place": "Port Salt Commons Sales Gallery",
+          "placeId": "sales_gallery",
+          "district": "downtown",
+          "optional": true,
+          "subject": "site_model"
+        },
+        {
+          "id": "o5",
+          "type": "enter_vehicle",
+          "text": "Get to your car.",
+          "place": "Meridian Tower Garage",
+          "placeId": "meridian_garage",
+          "district": "downtown",
+          "vehicle": "player"
+        },
+        {
+          "id": "o6",
+          "type": "tail",
+          "text": "Tail Rafi.",
+          "place": "Halyard Avenue",
+          "placeId": "halyard_avenue",
+          "district": "downtown",
+          "target": "rafi_sedan",
+          "distance": {
+            "min": 20,
+            "max": 140
+          },
+          "endsAt": "seagrape_motor_inn"
+        },
+        {
+          "id": "o7",
+          "type": "wait",
+          "text": "Watch the Seagrape.",
+          "place": "Seagrape Motor Inn",
+          "placeId": "seagrape_motor_inn",
+          "district": "tideline",
+          "seconds": 20,
+          "keepHidden": true
+        },
+        {
+          "id": "o8",
+          "type": "photo",
+          "text": "Photograph the handoff.",
+          "place": "Seagrape Motor Inn",
+          "placeId": "seagrape_motor_inn",
+          "district": "tideline",
+          "optional": true,
+          "subject": "rafi_lionel_handoff"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "on:o2",
+          "lines": [
+            {
+              "speaker": "june",
+              "text": "Welcome to Port Salt Commons. Can I get you a water? It's local."
+            },
+            {
+              "speaker": "hollis",
+              "text": "From where?"
+            },
+            {
+              "speaker": "june",
+              "text": "The tap. We're very local."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "ashby",
+              "text": "Port Salt gave this city its name. We're going to give it a future."
+            },
+            {
+              "speaker": "ashby",
+              "text": "Marinas. Parks. A walkable waterfront. Real shade."
+            }
+          ]
+        },
+        {
+          "when": "done:o3",
+          "lines": [
+            {
+              "speaker": "ashby",
+              "text": "Hollis Vane. Our pilot. Rough seas, those were."
+            },
+            {
+              "speaker": "hollis",
+              "text": "The seas were fine."
+            },
+            {
+              "speaker": "ashby",
+              "text": "Well. You'd know."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "That's Pier 9. And Dez's pier."
+            },
+            {
+              "speaker": "june",
+              "text": "Phase Two. Very walkable."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "rafi",
+              "text": "Ms. Vane. You're a long way from the water."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It's an island."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "Your motel man's in it."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Lionel's in everything. He just doesn't know which thing."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "spotted": "Rafi made you.",
+        "lost": "You lost Rafi."
+      },
+      "reward": {
+        "cash": 0,
+        "unlocks": [
+          "courier_assignments"
+        ]
+      }
+    },
+    {
+      "id": "do_not_disturb",
+      "act": 2,
+      "order": 8,
+      "title": "Do Not Disturb",
+      "giver": "lionel",
+      "district": "tideline",
+      "brief": "Lionel has guests. He'd rather not.",
+      "summary": "Rafi has decided the Seagrape talks too much. Lionel calls from Room 12 with Tidewater Security in his lot; Hollis gets his ledger out of the office safe, holds the courtyard, and drives Lionel to hide in the walk-in at Ruelas Bait & Ice.",
+      "requires": [
+        "open_house"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "23:05",
+        "placeId": "tideline_avenue"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Get to the Seagrape.",
+          "place": "Seagrape Motor Inn",
+          "placeId": "seagrape_motor_inn",
+          "district": "tideline"
+        },
+        {
+          "id": "o2",
+          "type": "goto",
+          "text": "Get to Room 12.",
+          "place": "Seagrape Room 12",
+          "placeId": "seagrape_room_12",
+          "district": "tideline"
+        },
+        {
+          "id": "o3",
+          "type": "collect",
+          "text": "Get the ledger.",
+          "place": "Seagrape Office",
+          "placeId": "seagrape_office",
+          "district": "tideline",
+          "item": "ledger"
+        },
+        {
+          "id": "o4",
+          "type": "defend",
+          "text": "Hold the courtyard.",
+          "place": "Seagrape Courtyard",
+          "placeId": "seagrape_courtyard",
+          "district": "tideline",
+          "seconds": 90,
+          "spawns": "security",
+          "protect": "lionel"
+        },
+        {
+          "id": "o5",
+          "type": "enter_vehicle",
+          "text": "Get Lionel in his car.",
+          "place": "Seagrape Motor Inn",
+          "placeId": "seagrape_motor_inn",
+          "district": "tideline",
+          "vehicle": "lionel_sedan",
+          "passenger": "lionel"
+        },
+        {
+          "id": "o6",
+          "type": "lose_wanted",
+          "text": "Lose the heat.",
+          "place": "Tideline Avenue",
+          "placeId": "tideline_avenue",
+          "district": "tideline",
+          "stars": 2
+        },
+        {
+          "id": "o7",
+          "type": "drive_to",
+          "text": "Take Lionel to Dez.",
+          "place": "Ruelas Bait & Ice",
+          "placeId": "ruelas_bait_ice",
+          "district": "tideline",
+          "vehicle": "lionel_sedan",
+          "requireWanted": 0
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "Hi. It's Lionel. Pike. From the Seagrape."
+            },
+            {
+              "speaker": "lionel",
+              "text": "There are men in polo shirts in my lot."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Guests?"
+            },
+            {
+              "speaker": "lionel",
+              "text": "Nobody's been a guest here since 1998."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "There's a ledger in the safe. Everybody's in it. Including me, which I regret."
+            },
+            {
+              "speaker": "lionel",
+              "text": "Combination's my anniversary. Zero six one four."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "They're shooting the ice machine. Why the ice machine?"
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "lionel",
+              "text": "The green one. It's older than my marriage and it's held up better."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "You brought Lionel to my bait shop."
+            },
+            {
+              "speaker": "hollis",
+              "text": "You have a walk-in."
+            },
+            {
+              "speaker": "dez",
+              "text": "It's for fish."
+            },
+            {
+              "speaker": "lionel",
+              "text": "I'm fine with fish."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "lionel_dead": "Lionel checked out.",
+        "ledger_lost": "The ledger's gone."
+      },
+      "reward": {
+        "cash": 1500
+      }
+    },
+    {
+      "id": "house_money",
+      "act": 2,
+      "order": 9,
+      "title": "House Money",
+      "giver": "bernie",
+      "district": "midtown",
+      "districts": [
+        "port_salt",
+        "downtown",
+        "midtown"
+      ],
+      "brief": "Ashby's money comes ashore Friday. Bernie wants it home.",
+      "summary": "Ashby washes his buyout cash through the card tables of the Gilded Gull, and every Friday it comes ashore at Northpoint Marina in an armored van. Hollis tails it into Midtown, Bernie's people stop it in the underpass, and Hollis drives the whole van to Warehouse 6 with three stars on it. Bernie needs someone to clean the money and asks where Lionel is. Hollis tells her.",
+      "requires": [
+        "do_not_disturb"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "21:00",
+        "placeId": "the_ballast"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "talk",
+          "text": "Meet Bernie at the Ballast.",
+          "place": "The Ballast",
+          "placeId": "the_ballast",
+          "district": "port_salt",
+          "talkTo": "bernie"
+        },
+        {
+          "id": "o2",
+          "type": "drive_to",
+          "text": "Get to Northpoint Marina.",
+          "place": "Northpoint Marina",
+          "placeId": "northpoint_marina",
+          "district": "downtown"
+        },
+        {
+          "id": "o3",
+          "type": "tail",
+          "text": "Tail the cash van.",
+          "place": "Halyard Avenue",
+          "placeId": "halyard_avenue",
+          "district": "downtown",
+          "target": "cash_van",
+          "distance": {
+            "min": 25,
+            "max": 150
+          },
+          "endsAt": "midtown_underpass"
+        },
+        {
+          "id": "o4",
+          "type": "eliminate",
+          "text": "Deal with the guards.",
+          "place": "Midtown Underpass",
+          "placeId": "midtown_underpass",
+          "district": "midtown",
+          "targets": "security",
+          "count": 4,
+          "setWanted": 2,
+          "allies": "lanyard"
+        },
+        {
+          "id": "o5",
+          "type": "enter_vehicle",
+          "text": "Take the van.",
+          "place": "Midtown Underpass",
+          "placeId": "midtown_underpass",
+          "district": "midtown",
+          "vehicle": "cash_van",
+          "setWanted": 3
+        },
+        {
+          "id": "o6",
+          "type": "lose_wanted",
+          "text": "Lose Safety.",
+          "place": "Midtown Underpass",
+          "placeId": "midtown_underpass",
+          "district": "midtown",
+          "stars": 3,
+          "vehicle": "cash_van"
+        },
+        {
+          "id": "o7",
+          "type": "drive_to",
+          "text": "Bring it to Warehouse 6.",
+          "place": "Warehouse 6",
+          "placeId": "warehouse_6",
+          "district": "port_salt",
+          "vehicle": "cash_van",
+          "requireWanted": 0
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "Ashby washes his buyout money through the card tables on the Gilded Gull."
+            },
+            {
+              "speaker": "bernie",
+              "text": "Every Friday it comes ashore in an armored van."
+            },
+            {
+              "speaker": "hollis",
+              "text": "And you want to rob it."
+            },
+            {
+              "speaker": "bernie",
+              "text": "I want to bring it home to Port Salt. With interest."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "Stay back. Those guards get paid by the hour. They're in no hurry. Neither are you."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "Underpass. Now."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "Twenty-five for you. Don't spend it on anything I'd notice."
+            },
+            {
+              "speaker": "bernie",
+              "text": "Somebody has to wash the rest. Where's your motel man?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "In Dez's walk-in."
+            },
+            {
+              "speaker": "bernie",
+              "text": "With the fish."
+            },
+            {
+              "speaker": "hollis",
+              "text": "He's fine with fish."
+            }
+          ]
+        },
+        {
+          "when": "event:lien_paid",
+          "note": "EXT. SALT WORKS BOATYARD. The travel lift sets the Ida May in the water for the first time in three years. Hollis stays on the dock.",
+          "lines": [
+            {
+              "speaker": "tobias",
+              "text": "Twenty-two four. Storage, blocks, three years of me looking at it."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Put her in."
+            },
+            {
+              "speaker": "tobias",
+              "text": "Where are you taking her?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Out past the Knuckle."
+            },
+            {
+              "speaker": "tobias",
+              "text": "When?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Soon."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "van_destroyed": "The money's on fire.",
+        "made": "The guards made you.",
+        "bernie_dead": "Bernie's gone."
+      },
+      "reward": {
+        "cash": 25000
+      },
+      "events": [
+        {
+          "when": "end",
+          "type": "pay",
+          "amount": 22400,
+          "to": "Salt Works Boatyard",
+          "label": "Ida May lien",
+          "then": "event:lien_paid",
+          "note": "Scripted. The Ida May goes in the water. Hollis does not leave."
+        }
+      ]
+    },
+    {
+      "id": "public_comment",
+      "act": 2,
+      "order": 10,
+      "title": "Public Comment",
+      "giver": "pruitt",
+      "district": "midtown",
+      "districts": [
+        "midtown",
+        "downtown"
+      ],
+      "brief": "The Commission votes at eight. Get Moss there.",
+      "summary": "The Port Commission votes on Port Salt Commons at eight, and the swing vote, Commissioner Eldon Moss, has had the Scrub parked outside his house all week. Hollis follows Moss's car, stops the Scrub car boxing him in on Calder Street and drives him to the Old Customs House before public comment closes. Moss votes yes.",
+      "requires": [
+        "house_money"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "pistol",
+        "wanted",
+        "timer"
+      ],
+      "weapons": [
+        "pistol"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "19:20",
+        "placeId": "salt_works_boatyard"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Get to Banyan Street.",
+          "place": "Banyan Street",
+          "placeId": "banyan_street",
+          "district": "midtown"
+        },
+        {
+          "id": "o2",
+          "type": "follow",
+          "text": "Follow Moss.",
+          "place": "Banyan Street",
+          "placeId": "banyan_street",
+          "district": "midtown",
+          "target": "moss_car",
+          "distance": {
+            "min": 10,
+            "max": 120
+          }
+        },
+        {
+          "id": "o3",
+          "type": "eliminate",
+          "text": "Stop the Scrub car.",
+          "place": "Calder Street",
+          "placeId": "calder_street",
+          "district": "midtown",
+          "targets": "scrub",
+          "count": 2,
+          "setWanted": 1
+        },
+        {
+          "id": "o4",
+          "type": "enter_vehicle",
+          "text": "Get Moss in your car.",
+          "place": "Calder Street",
+          "placeId": "calder_street",
+          "district": "midtown",
+          "vehicle": "player",
+          "passenger": "moss"
+        },
+        {
+          "id": "o5",
+          "type": "drive_to",
+          "text": "Get Moss to the Customs House.",
+          "place": "The Old Customs House",
+          "placeId": "customs_house",
+          "district": "downtown",
+          "passenger": "moss",
+          "timer": {
+            "label": "Public comment closes",
+            "deadline": "20:00",
+            "seconds": 180,
+            "fail": "late"
+          }
+        },
+        {
+          "id": "o6",
+          "type": "wait",
+          "text": "Wait for the vote.",
+          "place": "The Old Customs House",
+          "placeId": "customs_house",
+          "district": "downtown",
+          "seconds": 30
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Boat's in the water. So go."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Tide's wrong."
+            },
+            {
+              "speaker": "dez",
+              "text": "Tide's been wrong for a week."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Commissioner Moss is the swing vote on the Commons. The Scrub's been parking outside his house."
+            },
+            {
+              "speaker": "hollis",
+              "text": "You're a cop."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "I'm a cop with ninety days left. I can't be seen near a commissioner."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "They're boxing him in."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "moss",
+              "text": "I appreciate this. I really do. Is that blood?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Not mine."
+            },
+            {
+              "speaker": "moss",
+              "text": "Good. Good for you."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "clerk",
+              "text": "Commissioner Moss?"
+            },
+            {
+              "speaker": "moss",
+              "text": "Yes."
+            },
+            {
+              "speaker": "hollis",
+              "text": "He was always a yes."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "He just wanted to be asked nicely."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "moss_dead": "Moss won't be voting.",
+        "late": "Public comment is closed.",
+        "lost": "You lost Moss."
+      },
+      "reward": {
+        "cash": 2000,
+        "note": "Moss pays. It's an envelope he brought for someone else."
+      }
+    },
+    {
+      "id": "fair_weather",
+      "act": 2,
+      "order": 11,
+      "title": "Fair Weather",
+      "giver": "ashby",
+      "district": "downtown",
+      "districts": [
+        "downtown",
+        "port_salt"
+      ],
+      "brief": "Ashby wants a word on his boat.",
+      "summary": "Ashby invites Hollis aboard his yacht, the Fair Weather, and offers her license back in exchange for the Ottoline's missing recorder capsule, which he says Manny Ruelas called him about once, before he left town. As a show of good faith she breaks into Harbor Station, takes the crate she gave Pruitt out of the evidence cage, and hands it to Rafi on Pier 9.",
+      "requires": [
+        "public_comment"
+      ],
+      "systems": [
+        "vehicles",
+        "on_foot",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "20:30",
+        "placeId": "salt_works_boatyard"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Go to Northpoint Marina.",
+          "place": "Northpoint Marina",
+          "placeId": "northpoint_marina",
+          "district": "downtown"
+        },
+        {
+          "id": "o2",
+          "type": "talk",
+          "text": "Board the Fair Weather.",
+          "place": "The Fair Weather",
+          "placeId": "fair_weather",
+          "district": "downtown",
+          "talkTo": "ashby"
+        },
+        {
+          "id": "o3",
+          "type": "drive_to",
+          "text": "Go to Harbor Station.",
+          "place": "Harbor Station",
+          "placeId": "harbor_station",
+          "district": "port_salt"
+        },
+        {
+          "id": "o4",
+          "type": "goto",
+          "text": "Get to the evidence cage.",
+          "place": "Harbor Station Evidence Cage",
+          "placeId": "harbor_station_cage",
+          "district": "port_salt",
+          "onFoot": true,
+          "ifSeen": {
+            "setWanted": 3
+          },
+          "note": "Stealth-light: avoid officers' sight cones. Seen means three stars, not failure."
+        },
+        {
+          "id": "o5",
+          "type": "collect",
+          "text": "Take the crate.",
+          "place": "Harbor Station Evidence Cage",
+          "placeId": "harbor_station_cage",
+          "district": "port_salt",
+          "item": "ottoline_crate",
+          "carry": true
+        },
+        {
+          "id": "o6",
+          "type": "escape",
+          "text": "Get out of Harbor Station.",
+          "place": "Harbor Station",
+          "placeId": "harbor_station",
+          "district": "port_salt",
+          "radius": 120
+        },
+        {
+          "id": "o7",
+          "type": "lose_wanted",
+          "text": "Lose Safety.",
+          "place": "The Stacks",
+          "placeId": "the_stacks",
+          "district": "port_salt",
+          "stars": 3
+        },
+        {
+          "id": "o8",
+          "type": "deliver",
+          "text": "Bring the crate to Rafi.",
+          "place": "Pier 9",
+          "placeId": "pier_9",
+          "district": "port_salt",
+          "item": "ottoline_crate",
+          "to": "rafi",
+          "requireWanted": 0,
+          "failIfWanted": "heat"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "on:o2",
+          "lines": [
+            {
+              "speaker": "ashby",
+              "text": "You like the boat?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "It's very clean."
+            },
+            {
+              "speaker": "ashby",
+              "text": "She's never been past the Knuckle. Can't risk it."
+            },
+            {
+              "speaker": "ashby",
+              "text": "The night of your grounding, the ship's recorder lost its capsule. Little orange box."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I know what a capsule is."
+            },
+            {
+              "speaker": "ashby",
+              "text": "Manny Ruelas called me about it, a week or two after. Wanted money. Then he left town."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Left town."
+            },
+            {
+              "speaker": "ashby",
+              "text": "That's what I heard."
+            },
+            {
+              "speaker": "ashby",
+              "text": "You find that box, and the pilots' board finds its way to reinstating you. I fish with two of them."
+            },
+            {
+              "speaker": "hollis",
+              "text": "And if I say no?"
+            },
+            {
+              "speaker": "ashby",
+              "text": "Then you're a dishwasher with a sailboat. I'm not threatening you. I'm describing you."
+            },
+            {
+              "speaker": "ashby",
+              "text": "Small favor first. Detective Pruitt has a crate of mine. I'd like it back."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Sorry, Odette."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "rafi",
+              "text": "Mr. Ashby will be pleased."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I'm not doing it for him."
+            },
+            {
+              "speaker": "rafi",
+              "text": "Nobody ever is."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "heat": "You brought Safety to Pier 9.",
+        "crate_lost": "The crate's gone."
+      },
+      "reward": {
+        "cash": 5000,
+        "note": "A retainer, Ashby calls it."
+      }
+    },
+    {
+      "id": "undertow",
+      "act": 2,
+      "order": 12,
+      "title": "Undertow",
+      "giver": "dez",
+      "district": "the_flats",
+      "districts": [
+        "tideline",
+        "the_flats"
+      ],
+      "brief": "Manny had a shack on the Stilts. The road's only there at low water.",
+      "summary": "Dez takes Hollis out the Bar Road at low water to Manny's shack on the Stilts, where they find his tide table with the grounding night circled and a position near the Knuckle. Tidewater Security followed them out; they hold the shack and race the flood tide back. At Tideline Pier, Ruelas Bait & Ice is burning, Lionel is dead in the walk-in, the ledger is gone, and a witness is pointing at the pilot.",
+      "requires": [
+        "fair_weather"
+      ],
+      "systems": [
+        "vehicles",
+        "pistol",
+        "wanted",
+        "timer"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "20:10",
+        "placeId": "bar_road_landing"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Drive the Bar Road.",
+          "place": "The Stilts",
+          "placeId": "the_stilts",
+          "district": "the_flats",
+          "via": "bar_road",
+          "passenger": "dez",
+          "timer": {
+            "label": "Low water",
+            "deadline": "21:14",
+            "seconds": 240,
+            "fail": "tide"
+          }
+        },
+        {
+          "id": "o2",
+          "type": "goto",
+          "text": "Get to Manny's shack.",
+          "place": "Manny's Shack",
+          "placeId": "mannys_shack",
+          "district": "the_flats",
+          "onFoot": true
+        },
+        {
+          "id": "o3",
+          "type": "collect",
+          "text": "Search the shack.",
+          "place": "Manny's Shack",
+          "placeId": "mannys_shack",
+          "district": "the_flats",
+          "item": "mannys_tide_table"
+        },
+        {
+          "id": "o4",
+          "type": "survive",
+          "text": "Hold the shack.",
+          "place": "Manny's Shack",
+          "placeId": "mannys_shack",
+          "district": "the_flats",
+          "seconds": 60,
+          "spawns": "security",
+          "protect": "dez"
+        },
+        {
+          "id": "o5",
+          "type": "escape",
+          "text": "Beat the tide back.",
+          "place": "Bar Road Landing",
+          "placeId": "bar_road_landing",
+          "district": "tideline",
+          "via": "bar_road",
+          "timer": {
+            "label": "Flood tide",
+            "seconds": 150,
+            "fail": "tide"
+          }
+        },
+        {
+          "id": "o6",
+          "type": "drive_to",
+          "text": "Get to the bait shop.",
+          "place": "Tideline Pier",
+          "placeId": "tideline_pier",
+          "district": "tideline"
+        },
+        {
+          "id": "o7",
+          "type": "escape",
+          "text": "Get off the pier.",
+          "place": "Tideline Pier",
+          "placeId": "tideline_pier",
+          "district": "tideline",
+          "radius": 200,
+          "setWanted": 4
+        },
+        {
+          "id": "o8",
+          "type": "lose_wanted",
+          "text": "Lose Safety.",
+          "place": "Tideline Avenue",
+          "placeId": "tideline_avenue",
+          "district": "tideline",
+          "stars": 4
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Ashby thinks Manny took the capsule off my ship."
+            },
+            {
+              "speaker": "dez",
+              "text": "Manny had a shack on the Stilts. Road's only there at low water."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Low water's 9:14. We've got an hour either side."
+            },
+            {
+              "speaker": "dez",
+              "text": "You and your hours."
+            }
+          ]
+        },
+        {
+          "when": "done:o3",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "He circled the night we hit. And a position. Two hundred yards off the Knuckle."
+            },
+            {
+              "speaker": "dez",
+              "text": "That's not the mainland."
+            },
+            {
+              "speaker": "hollis",
+              "text": "No."
+            },
+            {
+              "speaker": "hollis",
+              "text": "That's not where he hid it, Dez. That's where they met him."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Boats. Polo shirts."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Water's on the road. Go."
+            }
+          ]
+        },
+        {
+          "when": "on:o6",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "If they followed us out here..."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Lionel."
+            }
+          ]
+        },
+        {
+          "when": "on:o7",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "No. No, no. The shop."
+            },
+            {
+              "speaker": "witness",
+              "text": "That's her. That's the pilot."
+            },
+            {
+              "speaker": "dispatch",
+              "text": "All units, Tideline Pier. Fire and a body. Witnesses are saying the pilot."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "newsreader",
+              "text": "Public Safety is asking for help finding Hollis Vane, a former harbor pilot, after a fire on Tideline Pier."
+            },
+            {
+              "speaker": "newsreader",
+              "text": "In other news, the marine forecast calls for strong north winds through the weekend."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "tide": "The tide came in. It does that.",
+        "dez_dead": "Dez is gone.",
+        "table_lost": "Manny's tide table is gone."
+      },
+      "reward": {
+        "cash": 0
+      }
+    },
+    {
+      "id": "toll",
+      "act": 3,
+      "order": 13,
+      "title": "Toll",
+      "giver": "wade",
+      "district": "causeway",
+      "districts": [
+        "mainland",
+        "causeway",
+        "palm_square"
+      ],
+      "brief": "Get back on the island. Pruitt's on the third bench.",
+      "summary": "Hiding at Wade's, Hollis hears the marine forecast: three days of north wind will push the bay out to the lowest water in forty years, Saturday night. Wade puts her in his wrecker with a car on the hook and sends her through the Safety checkpoint on the causeway. On the third bench in Palm Square, Pruitt and Hollis finally tell each other the truth.",
+      "requires": [
+        "undertow"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "22:40",
+        "placeId": "purcell_salvage"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "enter_vehicle",
+          "text": "Get in the wrecker.",
+          "place": "Purcell Salvage & Tow",
+          "placeId": "purcell_salvage",
+          "district": "mainland",
+          "vehicle": "wrecker_loaded"
+        },
+        {
+          "id": "o2",
+          "type": "drive_to",
+          "text": "Take the causeway.",
+          "place": "Causeway Toll Plaza",
+          "placeId": "causeway_toll_plaza",
+          "district": "causeway",
+          "vehicle": "wrecker_loaded",
+          "note": "Speeding or weapons out near the checkpoint fails the mission."
+        },
+        {
+          "id": "o3",
+          "type": "wait",
+          "text": "Wait at the checkpoint.",
+          "place": "Causeway Toll Plaza",
+          "placeId": "causeway_toll_plaza",
+          "district": "causeway",
+          "seconds": 25,
+          "stayInVehicle": true,
+          "failIfWanted": "checkpoint"
+        },
+        {
+          "id": "o4",
+          "type": "drive_to",
+          "text": "Get to Palm Square.",
+          "place": "The Third Bench",
+          "placeId": "third_bench",
+          "district": "palm_square"
+        },
+        {
+          "id": "o5",
+          "type": "talk",
+          "text": "Talk to Pruitt.",
+          "place": "The Third Bench",
+          "placeId": "third_bench",
+          "district": "palm_square",
+          "talkTo": "pruitt",
+          "onFoot": true
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "forecast",
+              "text": "North winds twenty-five to thirty, three days. Water levels well below predicted. Extreme low water Saturday."
+            },
+            {
+              "speaker": "wade",
+              "text": "Marine forecast's calling a blowout. Bay's going to empty out."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Lowest water in forty years. Saturday, 2:10 in the morning."
+            },
+            {
+              "speaker": "wade",
+              "text": "You looked it up."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I didn't have to."
+            },
+            {
+              "speaker": "wade",
+              "text": "Wrecker's got a car on the hook. Sit low. Look bored."
+            }
+          ]
+        },
+        {
+          "when": "on:o3",
+          "lines": [
+            {
+              "speaker": "officer",
+              "text": "Where you headed?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Tideline. Somebody parked on a hydrant."
+            },
+            {
+              "speaker": "officer",
+              "text": "Somebody always does."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "You took my crate."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Ashby asked."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "And you said yes."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I say yes. It's a problem."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "I wrote the inquiry finding. The Chief handed me the conclusion. I typed it."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Three years."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "I know how long."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "I don't think you did Lionel."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Rafi did Lionel."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "Then bring me something that floats."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Saturday the bottom comes up."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "checkpoint": "Safety looked in the cab.",
+        "wrecker_wrecked": "You wrecked the wrecker."
+      },
+      "reward": {
+        "cash": 0
+      }
+    },
+    {
+      "id": "gated_community",
+      "act": 3,
+      "order": 14,
+      "title": "Gated Community",
+      "giver": "june",
+      "district": "downtown",
+      "districts": [
+        "downtown",
+        "midtown"
+      ],
+      "brief": "June Ashby wants out. She's bringing her father's laptop.",
+      "summary": "June Ashby wants out and says she has proof: her father's laptop, with the original salvage contract and the buoy positions from the night of the grounding. Hollis crosses Bellwether Bridge, gets June and the laptop out of the Ashby house past Tidewater Security, and loses them in Downtown. June says her father and Rafi will be on the flats Saturday at dead low with a salvage crew, and asks whether her own name will be in it.",
+      "requires": [
+        "toll"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "23:30",
+        "placeId": "halyard_avenue"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Get to Bellwether Bridge.",
+          "place": "Bellwether Bridge",
+          "placeId": "bellwether_bridge",
+          "district": "downtown"
+        },
+        {
+          "id": "o2",
+          "type": "goto",
+          "text": "Get into the Ashby house.",
+          "place": "The Ashby House",
+          "placeId": "ashby_house",
+          "district": "downtown",
+          "onFoot": true
+        },
+        {
+          "id": "o3",
+          "type": "eliminate",
+          "text": "Clear the security.",
+          "place": "The Ashby House",
+          "placeId": "ashby_house",
+          "district": "downtown",
+          "targets": "security",
+          "count": 5,
+          "optionalIfUnseen": true
+        },
+        {
+          "id": "o4",
+          "type": "collect",
+          "text": "Get the laptop.",
+          "place": "Ashby's Study",
+          "placeId": "ashby_study",
+          "district": "downtown",
+          "item": "ashby_laptop"
+        },
+        {
+          "id": "o5",
+          "type": "talk",
+          "text": "Find June.",
+          "place": "The Ashby House",
+          "placeId": "ashby_house",
+          "district": "downtown",
+          "talkTo": "june"
+        },
+        {
+          "id": "o6",
+          "type": "enter_vehicle",
+          "text": "Get June to the car.",
+          "place": "The Ashby House",
+          "placeId": "ashby_house",
+          "district": "downtown",
+          "vehicle": "player",
+          "passenger": "june"
+        },
+        {
+          "id": "o7",
+          "type": "escape",
+          "text": "Get off Bellwether Key.",
+          "place": "Bellwether Bridge",
+          "placeId": "bellwether_bridge",
+          "district": "downtown",
+          "radius": 300,
+          "pursuers": "security",
+          "setWanted": 3
+        },
+        {
+          "id": "o8",
+          "type": "lose_wanted",
+          "text": "Lose them.",
+          "place": "Halyard Avenue",
+          "placeId": "halyard_avenue",
+          "district": "downtown",
+          "stars": 3
+        },
+        {
+          "id": "o9",
+          "type": "drive_to",
+          "text": "Take June to Pruitt.",
+          "place": "Breakwater Diner",
+          "placeId": "breakwater_diner",
+          "district": "midtown",
+          "passenger": "june",
+          "requireWanted": 0
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "June Ashby called me. She wants out. She says she has the salvage contract and the buoy positions."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Why call you?"
+            },
+            {
+              "speaker": "pruitt",
+              "text": "I'm the only cop her father doesn't fish with."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "june",
+              "text": "Ms. Vane. I'd offer you a water."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Is it local?"
+            },
+            {
+              "speaker": "june",
+              "text": "Nothing in this house is local."
+            }
+          ]
+        },
+        {
+          "when": "on:o7",
+          "lines": [
+            {
+              "speaker": "june",
+              "text": "He's going out on the flats Saturday. Him and Rafi and a salvage crew."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "june",
+              "text": "When this comes out, is my name in it?"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Depends what's in the box."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "june_dead": "June's out of it now.",
+        "laptop_lost": "The laptop's gone."
+      },
+      "reward": {
+        "cash": 3000
+      }
+    },
+    {
+      "id": "last_shift",
+      "act": 3,
+      "order": 15,
+      "title": "Last Shift",
+      "giver": "bernie",
+      "district": "port_salt",
+      "brief": "They're clearing Longshore Hall tonight.",
+      "summary": "Ashby gave the Commons security contract to Tidewater Security instead of the Lanyards, and tonight his crews come with a bulldozer to clear Longshore Hall. Bernie admits she sold Lionel for a contract that never existed; Hollis stays anyway and holds the hall while the Lanyards get their families and their records out. Bernie gives her the keys to a yard truck that sits high enough for the flats, and tells her where Rafi will be tomorrow night.",
+      "requires": [
+        "gated_community"
+      ],
+      "systems": [
+        "vehicles",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "21:50",
+        "placeId": "salt_works_road"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Go to Longshore Hall.",
+          "place": "Longshore Hall",
+          "placeId": "longshore_hall",
+          "district": "port_salt"
+        },
+        {
+          "id": "o2",
+          "type": "talk",
+          "text": "Talk to Bernie.",
+          "place": "Longshore Hall",
+          "placeId": "longshore_hall",
+          "district": "port_salt",
+          "talkTo": "bernie"
+        },
+        {
+          "id": "o3",
+          "type": "defend",
+          "text": "Hold the hall.",
+          "place": "Longshore Hall",
+          "placeId": "longshore_hall",
+          "district": "port_salt",
+          "seconds": 180,
+          "waves": 4,
+          "spawns": [
+            "security",
+            "scrub"
+          ],
+          "allies": "lanyard"
+        },
+        {
+          "id": "o4",
+          "type": "eliminate",
+          "text": "Stop the demolition crew.",
+          "place": "Gate 3",
+          "placeId": "gate_3",
+          "district": "port_salt",
+          "targets": "security",
+          "count": 4,
+          "note": "Includes the bulldozer driver."
+        },
+        {
+          "id": "o5",
+          "type": "collect",
+          "text": "Take the truck keys.",
+          "place": "Longshore Hall",
+          "placeId": "longshore_hall",
+          "district": "port_salt",
+          "item": "yard_truck_keys"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "on:o2",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "I told Rafi where Lionel was."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I know."
+            },
+            {
+              "speaker": "bernie",
+              "text": "He promised us the Commons. Security, parking, all of it."
+            },
+            {
+              "speaker": "bernie",
+              "text": "Gave it to the polo shirts."
+            },
+            {
+              "speaker": "hollis",
+              "text": "He does that."
+            },
+            {
+              "speaker": "bernie",
+              "text": "I'm not sorry. I'm broke. It looks the same from outside."
+            },
+            {
+              "speaker": "lanyard",
+              "text": "Bernie. Trucks at Gate 3."
+            }
+          ]
+        },
+        {
+          "when": "on:o4",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "They brought a bulldozer. To a union hall. At night."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "bernie",
+              "text": "Yard truck. Sits high. It'll do the flats if you don't stop."
+            },
+            {
+              "speaker": "bernie",
+              "text": "Rafi's at Pier 9 tomorrow night, loading his salvage crew."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Pier 9."
+            },
+            {
+              "speaker": "bernie",
+              "text": "Everything ends up at Pier 9."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "bernie_dead": "Bernie's last shift is over.",
+        "hall_lost": "The hall's gone."
+      },
+      "reward": {
+        "cash": 2000,
+        "unlocks": [
+          "yard_truck"
+        ]
+      }
+    },
+    {
+      "id": "man_overboard",
+      "act": 3,
+      "order": 16,
+      "title": "Man Overboard",
+      "giver": "dez",
+      "district": "port_salt",
+      "districts": [
+        "downtown",
+        "port_salt"
+      ],
+      "brief": "Rafi's at Pier 9. So is the ledger.",
+      "summary": "Dez wants Rafi; Hollis wants the ledger. They tail Rafi from Northpoint Marina to Pier 9, where his salvage crew is loading pumps and lights, and take the pier apart. Cornered at the end, Rafi tells Hollis who gave him Manny's hiding place three years ago; Dez doesn't deny it, and Rafi goes off the end of Pier 9.",
+      "requires": [
+        "last_shift"
+      ],
+      "systems": [
+        "vehicles",
+        "traffic",
+        "pistol",
+        "wanted"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "22:15",
+        "placeId": "halyard_avenue"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "drive_to",
+          "text": "Get to Northpoint Marina.",
+          "place": "Northpoint Marina",
+          "placeId": "northpoint_marina",
+          "district": "downtown",
+          "passenger": "dez"
+        },
+        {
+          "id": "o2",
+          "type": "tail",
+          "text": "Tail Rafi.",
+          "place": "Halyard Avenue",
+          "placeId": "halyard_avenue",
+          "district": "downtown",
+          "target": "rafi_sedan",
+          "distance": {
+            "min": 20,
+            "max": 140
+          },
+          "endsAt": "pier_9"
+        },
+        {
+          "id": "o3",
+          "type": "goto",
+          "text": "Get onto Pier 9.",
+          "place": "Pier 9",
+          "placeId": "pier_9",
+          "district": "port_salt",
+          "onFoot": true
+        },
+        {
+          "id": "o4",
+          "type": "eliminate",
+          "text": "Clear the salvage crew.",
+          "place": "Pier 9",
+          "placeId": "pier_9",
+          "district": "port_salt",
+          "targets": "security",
+          "count": 6,
+          "setWanted": 2,
+          "allies": "dez"
+        },
+        {
+          "id": "o5",
+          "type": "talk",
+          "text": "Corner Rafi.",
+          "place": "End of Pier 9",
+          "placeId": "pier_9_end",
+          "district": "port_salt",
+          "talkTo": "rafi",
+          "cutscene": true
+        },
+        {
+          "id": "o6",
+          "type": "collect",
+          "text": "Get the ledger.",
+          "place": "Pier 9",
+          "placeId": "pier_9",
+          "district": "port_salt",
+          "item": "ledger",
+          "note": "In Rafi's car at the head of the pier."
+        },
+        {
+          "id": "o7",
+          "type": "talk",
+          "text": "Talk to Dez.",
+          "place": "Pier 9",
+          "placeId": "pier_9",
+          "district": "port_salt",
+          "talkTo": "dez"
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "I want him, Hol."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I want the ledger."
+            },
+            {
+              "speaker": "dez",
+              "text": "We can both want things."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "note": "After 'We talked.' Dez fires once. Rafi goes off the end of Pier 9 into the channel. Nobody looks over the rail.",
+          "lines": [
+            {
+              "speaker": "rafi",
+              "text": "Ms. Vane."
+            },
+            {
+              "speaker": "hollis",
+              "text": "It's an island, Rafi. I'm never far."
+            },
+            {
+              "speaker": "rafi",
+              "text": "You want to know who told me where Manny was?"
+            },
+            {
+              "speaker": "rafi",
+              "text": "Ask him."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Dez."
+            },
+            {
+              "speaker": "dez",
+              "text": "They said they'd talk to him. Scare him. That's all."
+            },
+            {
+              "speaker": "rafi",
+              "text": "We talked."
+            },
+            {
+              "speaker": "dez",
+              "text": "He'll wash up."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Tower 4. Tuesday."
+            }
+          ]
+        },
+        {
+          "when": "end",
+          "lines": [
+            {
+              "speaker": "dez",
+              "text": "Twenty thousand. They paid me twenty thousand and I kept the shop."
+            },
+            {
+              "speaker": "dez",
+              "text": "Three years I told myself he ran to the mainland."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Go home, Dez."
+            },
+            {
+              "speaker": "dez",
+              "text": "Shop burned down."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Then go sit in it."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "rafi_escaped": "Rafi's gone.",
+        "dez_dead": "Dez is gone.",
+        "ledger_lost": "The ledger's gone."
+      },
+      "reward": {
+        "cash": 3000,
+        "note": "From the glovebox of Rafi's car."
+      }
+    },
+    {
+      "id": "dead_low",
+      "act": 3,
+      "order": 17,
+      "title": "Dead Low",
+      "giver": "hollis",
+      "district": "the_flats",
+      "districts": [
+        "tideline",
+        "the_flats"
+      ],
+      "brief": "Dead low at 2:10. Everything's coming up.",
+      "summary": "Saturday, 2:10 AM. The bay is gone, and half of Marlowe Keys is out on the flats with flashlights looking at what the water gave back. Hollis drives Bernie's yard truck out to the Knuckle, finds Manny's skiff in the mud and the orange capsule under the bow seat, and holds the wreck against Ashby's salvage crew until the tide turns. Then the water comes back fast, Ashby makes his last offer, and she has to get off the flats and decide who gets the box.",
+      "requires": [
+        "man_overboard"
+      ],
+      "systems": [
+        "vehicles",
+        "on_foot",
+        "pistol",
+        "wanted",
+        "timer"
+      ],
+      "weapons": [
+        "pistol",
+        "shotgun"
+      ],
+      "needsVehicles": true,
+      "start": {
+        "time": "01:30",
+        "placeId": "bar_road_landing"
+      },
+      "objectives": [
+        {
+          "id": "o1",
+          "type": "enter_vehicle",
+          "text": "Get in the yard truck.",
+          "place": "Bar Road Landing",
+          "placeId": "bar_road_landing",
+          "district": "tideline",
+          "vehicle": "yard_truck"
+        },
+        {
+          "id": "o2",
+          "type": "drive_to",
+          "text": "Drive out to the Knuckle.",
+          "place": "The Knuckle",
+          "placeId": "the_knuckle",
+          "district": "the_flats",
+          "vehicle": "yard_truck",
+          "offRoad": true,
+          "note": "Stopping on soft mud bogs the truck for 3 seconds."
+        },
+        {
+          "id": "o3",
+          "type": "goto",
+          "text": "Find Manny's skiff.",
+          "place": "Manny's Skiff",
+          "placeId": "mannys_skiff",
+          "district": "the_flats",
+          "onFoot": true
+        },
+        {
+          "id": "o4",
+          "type": "collect",
+          "text": "Get the capsule.",
+          "place": "Manny's Skiff",
+          "placeId": "mannys_skiff",
+          "district": "the_flats",
+          "item": "vdr_capsule"
+        },
+        {
+          "id": "o5",
+          "type": "survive",
+          "text": "Hold until the tide turns.",
+          "place": "The Knuckle",
+          "placeId": "the_knuckle",
+          "district": "the_flats",
+          "seconds": 150,
+          "waves": 4,
+          "spawns": [
+            "security",
+            "scrub"
+          ]
+        },
+        {
+          "id": "o6",
+          "type": "talk",
+          "text": "Hear Ashby out.",
+          "place": "The Knuckle",
+          "placeId": "the_knuckle",
+          "district": "the_flats",
+          "talkTo": "ashby"
+        },
+        {
+          "id": "o7",
+          "type": "escape",
+          "text": "Beat the tide.",
+          "place": "Bar Road Landing",
+          "placeId": "bar_road_landing",
+          "district": "tideline",
+          "timer": {
+            "label": "Flood tide",
+            "seconds": 180,
+            "fail": "tide"
+          }
+        },
+        {
+          "id": "o8",
+          "type": "deliver",
+          "text": "Choose who gets it.",
+          "place": "Bar Road Landing",
+          "placeId": "bar_road_landing",
+          "district": "tideline",
+          "item": "vdr_capsule",
+          "options": [
+            {
+              "to": "pruitt",
+              "text": "Give it to Pruitt.",
+              "ending": "bring_it_up"
+            },
+            {
+              "to": "ashby",
+              "text": "Give it to Ashby.",
+              "ending": "let_it_sink"
+            }
+          ]
+        }
+      ],
+      "dialogue": [
+        {
+          "when": "start",
+          "lines": [
+            {
+              "speaker": "walker",
+              "text": "There's a car out here. A whole car."
+            },
+            {
+              "speaker": "walker",
+              "text": "That's my uncle's car."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Forty years since anybody saw the bottom."
+            }
+          ]
+        },
+        {
+          "when": "done:o3",
+          "note": "Manny is still in the skiff. Hollis puts her jacket over him before she opens the bow seat.",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "There you are."
+            }
+          ]
+        },
+        {
+          "when": "done:o4",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Under the bow seat. Rafi never looked."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Sorry, Manny."
+            }
+          ]
+        },
+        {
+          "when": "on:o5",
+          "lines": [
+            {
+              "speaker": "ashby",
+              "text": "Ms. Vane! I brought a salvage crew. You brought a truck."
+            }
+          ]
+        },
+        {
+          "when": "done:o5",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "Hollis. I'm at the landing. It's just me."
+            }
+          ]
+        },
+        {
+          "when": "on:o6",
+          "lines": [
+            {
+              "speaker": "ashby",
+              "text": "You've got about six minutes of dry ground. Let's not waste them."
+            },
+            {
+              "speaker": "ashby",
+              "text": "License. Money. Your name back. All I want is the box."
+            },
+            {
+              "speaker": "hollis",
+              "text": "My name's in the box."
+            },
+            {
+              "speaker": "ashby",
+              "text": "So's mine. That's why it's expensive."
+            }
+          ]
+        },
+        {
+          "when": "on:o7",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Water's coming. It always comes back fast."
+            }
+          ]
+        }
+      ],
+      "fail": {
+        "tide": "The tide came back. It always does.",
+        "capsule_lost": "The box went back in the water."
+      },
+      "reward": {
+        "byEnding": {
+          "bring_it_up": {
+            "cash": 0,
+            "unlocks": [
+              "pilot_license"
+            ]
+          },
+          "let_it_sink": {
+            "cash": 100000,
+            "unlocks": [
+              "pilot_license"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "endings": [
+    {
+      "id": "bring_it_up",
+      "title": "Bring It Up",
+      "trigger": {
+        "mission": "dead_low",
+        "deliverTo": "pruitt"
+      },
+      "summary": "Hollis gives the capsule to Pruitt. The recorder plays in Harbor Station. Ashby is arrested on the Bar Road landing with his shoes in the mud. Hollis gets her hearing, and this time she talks. Her license comes back. Dez pleads to his part in Manny's death and gets probation; nobody asks too hard about Rafi. Manny is buried on the mainland, facing the water. June takes over Ashby Tidewater, settles with the city and builds the project anyway, renamed Ruelas Landing.",
+      "epilogue": [
+        {
+          "when": "recorder",
+          "note": "INT. HARBOR STATION, WASH-UP DESK. Dawn. Pruitt plays the capsule on a borrowed reader. Hollis listens to herself.",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Port twenty, Captain.",
+              "source": "recorder"
+            },
+            {
+              "speaker": "brask",
+              "text": "Midships. Hold her.",
+              "source": "recorder"
+            },
+            {
+              "speaker": "hollis",
+              "text": "Captain, you'll put her on the Knuckle.",
+              "source": "recorder"
+            },
+            {
+              "speaker": "brask",
+              "text": "Tell Mr. Ashby it's done.",
+              "source": "recorder"
+            }
+          ]
+        },
+        {
+          "when": "arrest",
+          "note": "EXT. BAR ROAD LANDING. Ashby in cuffs, ankle deep in the mud the tide left.",
+          "lines": [
+            {
+              "speaker": "ashby",
+              "text": "These shoes cost more than your car."
+            },
+            {
+              "speaker": "pruitt",
+              "text": "It's a city car."
+            }
+          ]
+        },
+        {
+          "when": "hearing",
+          "note": "INT. PILOTS' BOARD HEARING. Same room as three years ago. This time she talks.",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "I said port twenty. I said it twice. Then I didn't say anything for three years. That part's on me."
+            }
+          ]
+        },
+        {
+          "when": "final",
+          "note": "EXT. MARLOWE CHANNEL, DUSK. Months later. Hollis climbs a pilot ladder up the side of a container ship at the sea buoy and brings it in past the Knuckle, which is only water again. On Pier 9 a crew is pulling the pilings for Ruelas Landing. Dez is fishing off what's left. He lifts a hand. Card: LOWTIDE. Everything washes up eventually.",
+          "lines": [
+            {
+              "speaker": "helmsman",
+              "text": "Pilot's aboard."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Port ten. Easy."
+            }
+          ]
+        }
+      ],
+      "final": {
+        "speaker": "hollis",
+        "text": "Port ten. Easy."
+      },
+      "card": "Everything washes up eventually."
+    },
+    {
+      "id": "let_it_sink",
+      "title": "Let It Sink",
+      "trigger": {
+        "mission": "dead_low",
+        "deliverTo": "ashby"
+      },
+      "summary": "Hollis gives the capsule to Ashby and tells Pruitt there was nothing out there but Manny. Ashby drops the box off the Fair Weather into the channel. The board reinstates Hollis in a two-minute meeting. Port Salt Commons goes up, Dez leaves for the mainland, Pruitt retires with the case open. A year later, at low tide, a kid finds something orange at Tower 4. When Ashby finally goes down, he names everyone he ever paid, starting with her.",
+      "epilogue": [
+        {
+          "when": "handoff",
+          "note": "EXT. NORTHPOINT MARINA, the next night. Ashby drops the capsule off the stern of the Fair Weather.",
+          "lines": [
+            {
+              "speaker": "hollis",
+              "text": "Don't put it in the channel."
+            },
+            {
+              "speaker": "ashby",
+              "text": "It's a big channel."
+            }
+          ]
+        },
+        {
+          "when": "one_year_later",
+          "note": "EXT. TIDELINE BEACH, TOWER 4. One year later, low tide. A kid pulls something orange out of the wrack line. INT. WASH-UP DESK. A new detective plugs it in.",
+          "lines": [
+            {
+              "speaker": "kid",
+              "text": "There's an orange thing."
+            },
+            {
+              "speaker": "hollis",
+              "text": "Port twenty, Captain.",
+              "source": "recorder"
+            }
+          ]
+        },
+        {
+          "when": "final",
+          "note": "INT. SHIP'S BRIDGE, NIGHT. Hollis is bringing a ship in when her phone buzzes. Pruitt is retired, but she still hears things. Card: LOWTIDE. Everything washes up eventually.",
+          "lines": [
+            {
+              "speaker": "pruitt",
+              "text": "Something came up at Tower 4."
+            },
+            {
+              "speaker": "hollis",
+              "text": "I know."
+            }
+          ]
+        }
+      ],
+      "final": {
+        "speaker": "hollis",
+        "text": "I know."
+      },
+      "card": "Everything washes up eventually."
+    }
+  ],
+  "activities": [
+    {
+      "id": "wash_up",
+      "name": "Wash-Up",
+      "giver": "pruitt",
+      "district": "tideline",
+      "unlock": "flotsam",
+      "until": null,
+      "systems": [
+        "on_foot"
+      ],
+      "summary": "Forty Ottoline crates and other oddities on the beaches and flats. Some can only be reached near low tide. The Wash-Up Desk pays a finder's fee for each.",
+      "reward": "$100 each. All forty: Pruitt's tide table on the HUD."
+    },
+    {
+      "id": "ice_route",
+      "name": "Ice Route",
+      "giver": "dez",
+      "district": "tideline",
+      "unlock": "ice_run",
+      "until": "undertow",
+      "systems": [
+        "vehicles",
+        "timer"
+      ],
+      "summary": "Timed ice deliveries to Tideline hotels in the bait-shop truck. Every bump costs melt. Ends when the shop burns.",
+      "reward": "$150 to $400 a run, tips for a clean truck."
+    },
+    {
+      "id": "courier_assignments",
+      "name": "Courier Jobs",
+      "giver": "none",
+      "district": "midtown",
+      "unlock": "open_house",
+      "until": null,
+      "systems": [
+        "photo"
+      ],
+      "summary": "Photo jobs for the Keys Courier, the city's last paper: four pages, two of them tide tables. A pelican on a Safety cruiser. A commissioner's car in a loading zone. The fountain running.",
+      "reward": "$80 to $300 a photo."
+    },
+    {
+      "id": "lanyard_lifts",
+      "name": "Lifts",
+      "giver": "bernie",
+      "district": "port_salt",
+      "unlock": "small_craft_advisory",
+      "until": "last_shift",
+      "systems": [
+        "on_foot",
+        "wanted"
+      ],
+      "summary": "Night jobs in the Stacks: find the container on Bernie's list, take what's on it, get out without waking port security.",
+      "reward": "$300 to $1,200 a lift."
+    },
+    {
+      "id": "causeway_catwalk",
+      "name": "Catwalk",
+      "giver": "none",
+      "district": "causeway",
+      "unlock": "salt_in_the_wound",
+      "until": null,
+      "systems": [
+        "on_foot"
+      ],
+      "summary": "Night fishing off the causeway with the regulars. Sell the catch to Dez. The anglers trade rumors that point to other jobs.",
+      "reward": "Small cash. Rumors."
+    },
+    {
+      "id": "dominoes",
+      "name": "Dominoes",
+      "giver": "none",
+      "district": "palm_square",
+      "unlock": "flotsam",
+      "until": null,
+      "systems": [
+        "on_foot"
+      ],
+      "summary": "Bet against the old men under the banyan. What they say between hands changes with the story, usually a day before it happens.",
+      "reward": "Win or lose up to $500 a game."
+    },
+    {
+      "id": "night_desk",
+      "name": "Night Desk",
+      "giver": "lionel",
+      "district": "tideline",
+      "unlock": "chum",
+      "until": "undertow",
+      "systems": [
+        "on_foot"
+      ],
+      "summary": "Cover the Seagrape's front desk for Lionel. Check in strange guests, answer the phone, don't open Room 12.",
+      "reward": "$60 a shift and whatever's in the lost and found."
+    },
+    {
+      "id": "dish_pit",
+      "name": "Dish Pit",
+      "giver": "arlo",
+      "district": "mainland",
+      "unlock": "salt_in_the_wound",
+      "until": null,
+      "systems": [
+        "on_foot"
+      ],
+      "summary": "Arlo will take Hollis back at the Gannet Truck Plaza. He takes everyone back. Honest work, pays like it.",
+      "reward": "$9 an hour."
+    }
+  ],
+  "ambient": [
+    {
+      "district": "any",
+      "text": "Tide's out. You can smell the whole city."
+    },
+    {
+      "district": "port_salt",
+      "text": "They're calling it Port Salt Commons. Nobody I know can afford common."
+    },
+    {
+      "district": "tideline",
+      "text": "My cousin found a radar on the beach. He doesn't have a boat. He just has a radar now."
+    },
+    {
+      "district": "tideline",
+      "text": "Don't park on Tideline after ten. Safety tows you, then sells you the tow."
+    },
+    {
+      "district": "palm_square",
+      "text": "That fountain hasn't run since I was in high school."
+    },
+    {
+      "district": "any",
+      "text": "Is it hot, or is it me? It's both, isn't it."
+    },
+    {
+      "district": "causeway",
+      "text": "Causeway's backed up. Somebody's fishing in the left lane."
+    },
+    {
+      "district": "midtown",
+      "text": "Thirty years on this island. Been to the beach twice. Both times by accident."
+    },
+    {
+      "district": "downtown",
+      "text": "Sunset was nice. I watched it on the hotel channel."
+    },
+    {
+      "district": "any",
+      "text": "Low tide tonight. Bring a flashlight and a reason."
+    }
+  ],
+  "radio": [
+    {
+      "stars": 1,
+      "text": "Causeway unit, running a white van. Plate comes back to a dry cleaner that closed in 2019."
+    },
+    {
+      "stars": 1,
+      "text": "Marine Two, Harbor Station. Something floating off Tower 4. Wake up the Wash-Up Desk."
+    },
+    {
+      "stars": 2,
+      "text": "Shots fired on Tideline Avenue. The Seagrape. Again."
+    },
+    {
+      "stars": 2,
+      "text": "Suspect on foot through Palm Square, last seen by the dominoes. The dominoes are not cooperating."
+    },
+    {
+      "stars": 3,
+      "text": "Lost visual in the Stacks. Every container's blue. Requesting a search of the area."
+    },
+    {
+      "stars": 3,
+      "text": "Suspect vehicle is a wrecker. Yes, a tow truck. No, it's not towing anything. Now it is."
+    },
+    {
+      "stars": 4,
+      "text": "Safety Response is rolling. Midtown units, hold your intersections."
+    },
+    {
+      "stars": 5,
+      "text": "All units, the Gannet Draw is going up. Causeway is closed. Nobody leaves the island."
+    }
+  ],
+  "characters": [
+    {
+      "id": "hollis",
+      "name": "Hollis Vane",
+      "role": "Protagonist. Former Marlowe Bar Pilot, now a dishwasher at the Gannet Truck Plaza.",
+      "faction": "none",
+      "look": "Faded work shirt with the pilots' patch picked off, hair tied back with whatever was nearby.",
+      "voice": "Flat, exact, few words. Gives times to the minute.",
+      "want": "$22,400 to get the Ida May off the blocks and sail out past the Knuckle for good.",
+      "need": "To say out loud what happened on the Ottoline, and to stay.",
+      "flaw": "She would rather be blamed than argue. She says yes to whoever asks hardest.",
+      "lines": [
+        "High water's 12:18. After that, nobody's leaving.",
+        "I'm not a criminal. I'm between licenses.",
+        "I didn't put that ship on the Knuckle. I was just the one standing on the bridge.",
+        "It'll come up at Tower 4. The current hooks there.",
+        "I say yes. It's a problem."
+      ]
+    },
+    {
+      "id": "dez",
+      "name": "Desmond 'Dez' Ruelas",
+      "role": "Owner of Ruelas Bait & Ice on Tideline Pier. Small-time fixer. Hollis's oldest friend.",
+      "faction": "independent",
+      "look": "Fishing shirt, reading glasses on a cord, barefoot whenever he can get away with it.",
+      "voice": "Quick and warm. Makes every job sound like a favor he's doing you.",
+      "want": "Keep the shop, keep his people out of jail, and believe his brother ran off to the mainland.",
+      "secret": "Three years ago he told Rafi where Manny was hiding, for $20,000 and a promise they would only talk to him. He used the money to keep the shop.",
+      "lines": [
+        "You're late. Tide's already turning.",
+        "It's for showing people."
+      ]
+    },
+    {
+      "id": "ashby",
+      "name": "Calvin Ashby",
+      "role": "Antagonist. Chairman of Ashby Tidewater and chair of the Port Commission.",
+      "faction": "ashby_tidewater",
+      "look": "Linen suit, real sunburn, a smile he's had professionally maintained.",
+      "voice": "Warm and folksy. Never says a number out loud. Talks about the city like it's a boat he's captaining.",
+      "want": "Port Salt Commons built, and to be remembered as the man who saved the waterfront.",
+      "secret": "He staged the Ottoline grounding: cargo dropped early for the insurance, the channel blocked long enough to break Port Salt and buy it cheap.",
+      "lines": [
+        "I'm not threatening you. I'm describing you.",
+        "Port Salt gave this city its name. We're going to give it a future."
+      ]
+    },
+    {
+      "id": "pruitt",
+      "name": "Detective Odette Pruitt",
+      "role": "Marine Recovery and Found Property, Marlowe Keys Public Safety. Everyone calls it the Wash-Up Desk.",
+      "faction": "public_safety",
+      "look": "Rain jacket in all weather, reading glasses pushed up, a face like a bait shop after closing.",
+      "voice": "Patient and level. Asks the second question first.",
+      "want": "To close one case properly before she retires.",
+      "secret": "She wrote the inquiry finding that blamed Hollis. The Chief handed her the conclusion and she typed it.",
+      "lines": [
+        "Nobody calls it that to my face.",
+        "Bring me something that floats."
+      ]
+    },
+    {
+      "id": "bernie",
+      "name": "Bernadette 'Bernie' Szabo",
+      "role": "Night crane operator, union steward at Longshore Hall, and the boss of the Lanyards.",
+      "faction": "lanyards",
+      "look": "Hi-vis vest over a church blouse, a lighter she never uses.",
+      "voice": "Blunt, union-meeting cadence. Counts things out loud.",
+      "want": "Keep the docks working and her people paid, whoever is paying.",
+      "secret": "She craned the 'lost' Ottoline boxes off a barge an hour before the ship grounded, and has fenced them for Ashby for three years.",
+      "lines": [
+        "I lift what comes. I don't read labels.",
+        "I'm not sorry. I'm broke. It looks the same from outside."
+      ]
+    },
+    {
+      "id": "rafi",
+      "name": "Rafi Castellan",
+      "role": "Ashby Tidewater's Director of Community Relations. The muscle.",
+      "faction": "ashby_tidewater",
+      "look": "Pressed linen, loafers with no socks, even on a boat.",
+      "voice": "Quiet and polite. Uses your title. Never raises his voice because he's never had to.",
+      "want": "Ashby's trust, and a house on Bellwether Key of his own.",
+      "secret": "He killed Manny Ruelas at a meeting off the Knuckle and sank the skiff. He never found the capsule.",
+      "lines": [
+        "Ms. Vane. You're a long way from the water.",
+        "Nobody ever is."
+      ]
+    },
+    {
+      "id": "lionel",
+      "name": "Lionel Pike",
+      "role": "Owner of the Seagrape Motor Inn on Tideline Avenue. Launders Ashby's buyout cash.",
+      "faction": "tideline_hospitality",
+      "look": "Short-sleeved dress shirt, a tie with fish on it, a handkerchief that's given up.",
+      "voice": "Nervous, over-explains, talks like a front desk.",
+      "want": "Keep the Seagrape, which hasn't made money since 1998.",
+      "secret": "The motel's best customer is a shell company. Room 12 has been booked for three years and nobody has ever slept in it.",
+      "lines": [
+        "I'll be honest with you, which I don't usually do.",
+        "Nobody's been a guest here since 1998."
+      ]
+    },
+    {
+      "id": "june",
+      "name": "June Ashby",
+      "role": "Vice president of sales at Ashby Tidewater. Calvin's daughter.",
+      "faction": "ashby_tidewater",
+      "look": "Sales-gallery blazer, sandals in her bag for after.",
+      "voice": "Brochure-perfect until it isn't. Then very direct.",
+      "want": "Out from under her father, with the company.",
+      "secret": "She wrote the insurance claim for the Ottoline cargo. She is turning on her father to take his chair, not to make anything right.",
+      "lines": [
+        "Can I get you a water? It's local.",
+        "When this comes out, is my name in it?"
+      ]
+    },
+    {
+      "id": "wade",
+      "name": "Wade Purcell",
+      "role": "Owner of Purcell Salvage & Tow on the mainland.",
+      "faction": "purcell",
+      "look": "Coveralls tied at the waist, a sunburned neck, a dog that doesn't like him.",
+      "voice": "Slow mainland drawl. One sentence at a time.",
+      "want": "To be left alone and to pay off his barge.",
+      "secret": "He picked up the eleven boxes on marker buoys before the Ottoline reached the pilot, for cash. He kept the receipts.",
+      "lines": [
+        "Keys are in it. They're always in it.",
+        "I don't talk about that night. I tow things."
+      ]
+    },
+    {
+      "id": "manny",
+      "name": "Manny Ruelas",
+      "role": "Dez's younger brother. Ran the pilots' launch. Missing three years.",
+      "faction": "independent"
+    },
+    {
+      "id": "moss",
+      "name": "Commissioner Eldon Moss",
+      "role": "Port Commission swing vote. Always a yes.",
+      "faction": "port_commission"
+    },
+    {
+      "id": "brask",
+      "name": "Captain Teodor Brask",
+      "role": "Master of the Ottoline. Heard only on the recorder.",
+      "faction": "none"
+    },
+    {
+      "id": "tibbs",
+      "name": "Chief Warren Tibbs",
+      "role": "Chief of Marlowe Keys Public Safety. Fishes with Ashby.",
+      "faction": "public_safety"
+    },
+    {
+      "id": "arlo",
+      "name": "Arlo",
+      "role": "Night cook at the Gannet Truck Plaza. Hollis's boss.",
+      "faction": "none"
+    },
+    {
+      "id": "tobias",
+      "name": "Tobias Fenn",
+      "role": "Runs the Salt Works Boatyard. Holds the lien on the Ida May.",
+      "faction": "none"
+    },
+    {
+      "id": "forecast",
+      "name": "Marine Forecast",
+      "role": "The recorded voice on the weather radio.",
+      "faction": "none"
+    },
+    {
+      "id": "dispatch",
+      "name": "Public Safety Dispatch",
+      "role": "Police radio.",
+      "faction": "public_safety"
+    },
+    {
+      "id": "officer",
+      "name": "Safety Officer",
+      "role": "Generic Public Safety officer.",
+      "faction": "public_safety"
+    },
+    {
+      "id": "lanyard",
+      "name": "Lanyard",
+      "role": "Generic Lanyards dockworker.",
+      "faction": "lanyards"
+    },
+    {
+      "id": "scrub",
+      "name": "Scrub Boy",
+      "role": "Generic Scrub crew member.",
+      "faction": "scrub"
+    },
+    {
+      "id": "security",
+      "name": "Tidewater Security",
+      "role": "Generic Ashby Tidewater security guard in a polo shirt.",
+      "faction": "ashby_tidewater"
+    },
+    {
+      "id": "clerk",
+      "name": "Commission Clerk",
+      "role": "Reads the roll at the Port Commission.",
+      "faction": "port_commission"
+    },
+    {
+      "id": "witness",
+      "name": "Witness",
+      "role": "Generic bystander.",
+      "faction": "none"
+    },
+    {
+      "id": "walker",
+      "name": "Flats Walker",
+      "role": "Locals out on the flats at dead low with flashlights.",
+      "faction": "none"
+    },
+    {
+      "id": "newsreader",
+      "name": "Courier Radio",
+      "role": "The late news on the Keys Courier's radio slot.",
+      "faction": "none"
+    },
+    {
+      "id": "kid",
+      "name": "Kid on the Beach",
+      "role": "Finds things.",
+      "faction": "none"
+    },
+    {
+      "id": "helmsman",
+      "name": "Helmsman",
+      "role": "At the wheel of whatever ship Hollis is bringing in.",
+      "faction": "none"
+    }
+  ],
+  "factions": [
+    {
+      "id": "ashby_tidewater",
+      "name": "Ashby Tidewater",
+      "kind": "developer"
+    },
+    {
+      "id": "port_commission",
+      "name": "Marlowe Keys Port Commission",
+      "kind": "government"
+    },
+    {
+      "id": "public_safety",
+      "name": "Marlowe Keys Public Safety",
+      "kind": "police",
+      "street": "Safety"
+    },
+    {
+      "id": "lanyards",
+      "name": "The Lanyards",
+      "kind": "crew"
+    },
+    {
+      "id": "scrub",
+      "name": "The Scrub",
+      "kind": "crew"
+    },
+    {
+      "id": "tideline_hospitality",
+      "name": "Tideline Hospitality Association",
+      "kind": "business"
+    },
+    {
+      "id": "purcell",
+      "name": "Purcell Salvage & Tow",
+      "kind": "business"
+    },
+    {
+      "id": "independent",
+      "name": "Independent",
+      "kind": "none"
+    },
+    {
+      "id": "none",
+      "name": "None",
+      "kind": "none"
+    }
+  ],
+  "districts": [
+    {
+      "id": "downtown",
+      "name": "Downtown",
+      "vibe": "Glass towers that look at the water all day and never get wet.",
+      "ambient": [
+        "Flag halyards slapping on empty poles",
+        "Rooftop air handlers",
+        "Valet whistles",
+        "A fountain that actually runs"
+      ]
+    },
+    {
+      "id": "midtown",
+      "name": "Midtown",
+      "vibe": "Where the people who work Downtown live, and the people who work Tideline sleep.",
+      "ambient": [
+        "Window units dripping on the sidewalk",
+        "Buses kneeling at the curb",
+        "A ballgame on a radio behind a screen door",
+        "Dogs behind chain-link"
+      ]
+    },
+    {
+      "id": "palm_square",
+      "name": "Palm Square",
+      "vibe": "The city's front porch. Half the benches face the founder. Half face away.",
+      "ambient": [
+        "Dry palm fronds rattling",
+        "Dominoes slapped down on concrete",
+        "Sprinklers ticking on at midnight",
+        "An ice-pop cart bell"
+      ]
+    },
+    {
+      "id": "port_salt",
+      "name": "Port Salt",
+      "vibe": "The city's working hands. Salted, cracked and about to be sold.",
+      "ambient": [
+        "Container twistlocks clanking",
+        "Crane reverse alarms",
+        "A ship's horn out in the channel",
+        "Gulls fighting over a bin"
+      ]
+    },
+    {
+      "id": "tideline",
+      "name": "Tideline",
+      "vibe": "Pastel hotels with their best years in the brochure.",
+      "ambient": [
+        "Surf",
+        "Ice machines humming in breezeways",
+        "Pool filters",
+        "Pier boards creaking",
+        "A lounge piano two hotels down"
+      ]
+    },
+    {
+      "id": "causeway",
+      "name": "The Causeway",
+      "vibe": "Four miles of concrete between what the island wants and what it needs.",
+      "ambient": [
+        "Tires on expansion joints",
+        "Wind with nothing to stop it",
+        "The draw bell",
+        "Anglers' radios"
+      ]
+    },
+    {
+      "id": "mainland",
+      "name": "The Mainland",
+      "vibe": "Everything the island doesn't want to look at, at a fair price.",
+      "ambient": [
+        "Diesel idling",
+        "Cicadas",
+        "Highway hiss",
+        "A dog barking at nothing"
+      ]
+    },
+    {
+      "id": "the_flats",
+      "name": "The Salt Flats",
+      "vibe": "Half the day it's water. The other half it's evidence.",
+      "ambient": [
+        "Mud ticking as it drains",
+        "Wading birds",
+        "The channel bell buoy",
+        "Wind over shallow water"
+      ]
+    }
+  ],
+  "places": [
+    {
+      "id": "gannet_truck_plaza",
+      "name": "Gannet Truck Plaza",
+      "district": "mainland",
+      "note": "24-hour truck stop and diner at the mainland foot of the causeway. Hollis washes dishes here for Arlo. There is a car wash out back."
+    },
+    {
+      "id": "purcell_salvage",
+      "name": "Purcell Salvage & Tow",
+      "district": "mainland",
+      "note": "Wade Purcell's tow yard on the barge canal. A safehouse after Soft Shoulder."
+    },
+    {
+      "id": "the_mill",
+      "name": "The Mill",
+      "district": "mainland",
+      "note": "A burned-out lumber mill in the pines. Where the Scrub crew sleeps, when it sleeps."
+    },
+    {
+      "id": "gannet_terminal",
+      "name": "Gannet Deepwater Terminal",
+      "district": "mainland",
+      "note": "The new mainland port, half built. Ashby holds a stake through a company with a different name."
+    },
+    {
+      "id": "marlowe_causeway",
+      "name": "Marlowe Causeway",
+      "district": "causeway",
+      "note": "Four miles of low concrete across Marlowe Bay, from the island's east shore to Gannet Landing."
+    },
+    {
+      "id": "causeway_toll_plaza",
+      "name": "Causeway Toll Plaza",
+      "district": "causeway",
+      "note": "Island end of the causeway. A patrol parks here for the air conditioning."
+    },
+    {
+      "id": "gannet_draw",
+      "name": "Gannet Draw",
+      "district": "causeway",
+      "note": "The drawbridge span near the mainland end. At five stars Safety raises it and the island is closed."
+    },
+    {
+      "id": "causeway_catwalk",
+      "name": "Causeway Catwalk",
+      "district": "causeway",
+      "note": "The fishing catwalk along the south rail. Regulars, buckets, radios."
+    },
+    {
+      "id": "pier_9",
+      "name": "Pier 9",
+      "district": "port_salt",
+      "note": "The last numbered pier: old timber at the south end of Port Salt, where the docks give way to Tideline. Too shallow for container ships. Shrimp boats and people who don't want a receipt."
+    },
+    {
+      "id": "pier_9_end",
+      "name": "End of Pier 9",
+      "district": "port_salt",
+      "note": "The T at the far end of Pier 9, over the channel edge."
+    },
+    {
+      "id": "piers_1_8",
+      "name": "Piers 1 to 8",
+      "district": "port_salt",
+      "note": "Container berths under the gantry cranes locals call the Herons."
+    },
+    {
+      "id": "pier_8_barge_berth",
+      "name": "Pier 8 Barge Berth",
+      "district": "port_salt",
+      "note": "Where barges unload. The night crane is Bernie's."
+    },
+    {
+      "id": "the_stacks",
+      "name": "The Stacks",
+      "district": "port_salt",
+      "note": "The container yard. Every aisle looks the same, which is the point."
+    },
+    {
+      "id": "warehouse_6",
+      "name": "Warehouse 6",
+      "district": "port_salt",
+      "note": "The Lanyards' warehouse. Three years of Ottoline cargo went out its back door."
+    },
+    {
+      "id": "longshore_hall",
+      "name": "Longshore Hall",
+      "district": "port_salt",
+      "note": "The union hall. Folding chairs, a coffee urn, Bernie's office."
+    },
+    {
+      "id": "the_ballast",
+      "name": "The Ballast",
+      "district": "port_salt",
+      "note": "Dockworkers' bar on Salt Works Road. Cash only. Busy at shift change."
+    },
+    {
+      "id": "gate_3",
+      "name": "Gate 3",
+      "district": "port_salt",
+      "note": "The main truck gate into the port."
+    },
+    {
+      "id": "harbor_station",
+      "name": "Harbor Station",
+      "district": "port_salt",
+      "note": "Public Safety's Marine Unit: boat slips, a radio room and the Wash-Up Desk."
+    },
+    {
+      "id": "harbor_station_cage",
+      "name": "Harbor Station Evidence Cage",
+      "district": "port_salt",
+      "note": "A chain-link room in the basement of Harbor Station where found property waits for an owner."
+    },
+    {
+      "id": "salt_works_boatyard",
+      "name": "Salt Works Boatyard",
+      "district": "port_salt",
+      "note": "Boats on blocks behind chain-link. The Ida May has been here three years."
+    },
+    {
+      "id": "salt_works_road",
+      "name": "Salt Works Road",
+      "district": "port_salt",
+      "note": "The road along the old salt ponds down to Pier 9."
+    },
+    {
+      "id": "the_salt_works",
+      "name": "The Salt Works",
+      "district": "port_salt",
+      "note": "The brick salt works and evaporation ponds the district is named for. Closed since before anybody's parents."
+    },
+    {
+      "id": "tideline_avenue",
+      "name": "Tideline Avenue",
+      "district": "tideline",
+      "note": "The beachfront strip of pastel low-rise hotels and palms."
+    },
+    {
+      "id": "seagrape_motor_inn",
+      "name": "Seagrape Motor Inn",
+      "district": "tideline",
+      "note": "Lionel Pike's motel. Pink, two stories. The sign has been off since the bulb went."
+    },
+    {
+      "id": "seagrape_office",
+      "name": "Seagrape Office",
+      "district": "tideline",
+      "note": "Front desk, a bell nobody rings, the safe behind the key board."
+    },
+    {
+      "id": "seagrape_courtyard",
+      "name": "Seagrape Courtyard",
+      "district": "tideline",
+      "note": "A drained pool and the ice machine."
+    },
+    {
+      "id": "seagrape_room_12",
+      "name": "Seagrape Room 12",
+      "district": "tideline",
+      "note": "Booked for three years by a company that never checks in."
+    },
+    {
+      "id": "hotel_coquina",
+      "name": "Hotel Coquina",
+      "district": "tideline",
+      "note": "The best hotel on Tideline Avenue, which isn't saying much. The Hospitality Association meets in its bar."
+    },
+    {
+      "id": "pelican_arms",
+      "name": "Pelican Arms",
+      "district": "tideline",
+      "note": "Mint-green, three floors, a pool that's mostly leaves."
+    },
+    {
+      "id": "starfish_court",
+      "name": "Starfish Court",
+      "district": "tideline",
+      "note": "Bungalows around a parking lot."
+    },
+    {
+      "id": "tideline_beach",
+      "name": "Tideline Beach",
+      "district": "tideline",
+      "note": "The long beach below the hotels. The wrack line is where the city's secrets come back."
+    },
+    {
+      "id": "lifeguard_tower_4",
+      "name": "Lifeguard Tower 4",
+      "district": "tideline",
+      "note": "Where the current hooks into the beach. Things that go in off Port Salt come up here."
+    },
+    {
+      "id": "the_bandshell",
+      "name": "The Bandshell",
+      "district": "tideline",
+      "note": "A concrete bandshell on the sand. Summer concerts, winter pigeons."
+    },
+    {
+      "id": "tideline_pier",
+      "name": "Tideline Pier",
+      "district": "tideline",
+      "note": "The long fishing and amusement pier at the south end of Tideline Avenue."
+    },
+    {
+      "id": "ruelas_bait_ice",
+      "name": "Ruelas Bait & Ice",
+      "district": "tideline",
+      "note": "Dez's shop at the end of Tideline Pier. Bait, ice, a walk-in cooler and a back door onto the water."
+    },
+    {
+      "id": "penny_arcade",
+      "name": "Penny Arcade",
+      "district": "tideline",
+      "note": "Shuttered arcade halfway down Tideline Pier."
+    },
+    {
+      "id": "bar_road_landing",
+      "name": "Bar Road Landing",
+      "district": "tideline",
+      "note": "Tideline's east end, where the Bar Road leaves the beach at low water."
+    },
+    {
+      "id": "third_bench",
+      "name": "The Third Bench",
+      "district": "palm_square",
+      "note": "Third bench from the founder's statue. Pruitt's office, unofficially."
+    },
+    {
+      "id": "marlowe_statue",
+      "name": "Founder's Statue",
+      "district": "palm_square",
+      "note": "Josiah Marlowe in bronze, facing the mainland."
+    },
+    {
+      "id": "palm_fountain",
+      "name": "The Fountain",
+      "district": "palm_square",
+      "note": "Dry since the drought of 2009. There is a plaque about it."
+    },
+    {
+      "id": "domino_tables",
+      "name": "Domino Tables",
+      "district": "palm_square",
+      "note": "Concrete tables under the banyan. The old men here know everything a day early."
+    },
+    {
+      "id": "breakwater_diner",
+      "name": "Breakwater Diner",
+      "district": "midtown",
+      "note": "Open 24 hours. Cops at the counter, nurses in the booths."
+    },
+    {
+      "id": "keys_transit_depot",
+      "name": "Keys Transit Depot",
+      "district": "midtown",
+      "note": "The bus depot."
+    },
+    {
+      "id": "midtown_underpass",
+      "name": "Midtown Underpass",
+      "district": "midtown",
+      "note": "Where the boulevard dips under the old rail embankment. No cameras, no shoulder."
+    },
+    {
+      "id": "saint_brendans",
+      "name": "Saint Brendan's Hospital",
+      "district": "midtown",
+      "note": "Where you wake up after you wash up."
+    },
+    {
+      "id": "central_station",
+      "name": "Public Safety Central Station",
+      "district": "midtown",
+      "note": "Headquarters. Where you end up after you're netted."
+    },
+    {
+      "id": "coral_theater",
+      "name": "Coral Theater",
+      "district": "midtown",
+      "note": "Old movie palace. The marquee has said CLOSED FOR SEASON for eleven years."
+    },
+    {
+      "id": "banyan_street",
+      "name": "Banyan Street",
+      "district": "midtown",
+      "note": "Quiet street of stucco houses. Commissioner Moss lives at the end."
+    },
+    {
+      "id": "calder_street",
+      "name": "Calder Street",
+      "district": "midtown",
+      "note": "Bars, a laundromat, a pawn shop, double parking."
+    },
+    {
+      "id": "meridian_tower",
+      "name": "Meridian Tower",
+      "district": "downtown",
+      "note": "Tallest glass on the island. Ashby Tidewater has the top six floors."
+    },
+    {
+      "id": "sales_gallery",
+      "name": "Port Salt Commons Sales Gallery",
+      "district": "downtown",
+      "note": "Ground floor of the Meridian Tower. A scale model of the waterfront with nobody on it."
+    },
+    {
+      "id": "meridian_garage",
+      "name": "Meridian Tower Garage",
+      "district": "downtown",
+      "note": "Valet on level one. Everybody else below."
+    },
+    {
+      "id": "halyard_avenue",
+      "name": "Halyard Avenue",
+      "district": "downtown",
+      "note": "The main avenue of towers. Locals call it the Glass Mile."
+    },
+    {
+      "id": "customs_house",
+      "name": "The Old Customs House",
+      "district": "downtown",
+      "note": "Coral-stone building between two towers. City Hall and the Port Commission meet here."
+    },
+    {
+      "id": "northpoint_marina",
+      "name": "Northpoint Marina",
+      "district": "downtown",
+      "note": "Yachts, a fuel dock and the Gilded Gull's berth."
+    },
+    {
+      "id": "fair_weather",
+      "name": "The Fair Weather",
+      "district": "downtown",
+      "note": "Calvin Ashby's yacht at Northpoint Marina. It has never been past the Knuckle."
+    },
+    {
+      "id": "bellwether_bridge",
+      "name": "Bellwether Bridge",
+      "district": "downtown",
+      "note": "The private bridge to Bellwether Key. A guard hut and a gate arm."
+    },
+    {
+      "id": "ashby_house",
+      "name": "The Ashby House",
+      "district": "downtown",
+      "note": "White house on Bellwether Key with a dock, a pool and too many cameras."
+    },
+    {
+      "id": "ashby_study",
+      "name": "Ashby's Study",
+      "district": "downtown",
+      "note": "The room with the laptop and the photographs of Calvin with people."
+    },
+    {
+      "id": "bar_road",
+      "name": "The Bar Road",
+      "district": "the_flats",
+      "note": "A shell track across the flats from Tideline to the Stilts. Above water for about two hours either side of low tide."
+    },
+    {
+      "id": "the_stilts",
+      "name": "The Stilts",
+      "district": "the_flats",
+      "note": "Fishing shacks on pilings out on the flats."
+    },
+    {
+      "id": "mannys_shack",
+      "name": "Manny's Shack",
+      "district": "the_flats",
+      "note": "Manny Ruelas's shack on the Stilts. Nobody's been inside for three years."
+    },
+    {
+      "id": "gull_key",
+      "name": "Gull Key",
+      "district": "the_flats",
+      "note": "A small mangrove key at the end of the Stilts. Birds and mosquitoes."
+    },
+    {
+      "id": "the_knuckle",
+      "name": "The Knuckle",
+      "district": "the_flats",
+      "note": "The shoal at the mouth of the Marlowe Channel where the Ottoline grounded."
+    },
+    {
+      "id": "mannys_skiff",
+      "name": "Manny's Skiff",
+      "district": "the_flats",
+      "note": "Two hundred yards northeast of the Knuckle, under sand and water. Until Saturday."
+    },
+    {
+      "id": "marlowe_channel",
+      "name": "Marlowe Channel",
+      "district": "the_flats",
+      "note": "The dredged channel from the sea buoy around the Knuckle into Port Salt."
+    },
+    {
+      "id": "outer_anchorage",
+      "name": "Outer Anchorage",
+      "district": "the_flats",
+      "note": "Where ships wait for a pilot. Where eleven boxes went over the side early."
+    }
+  ]
+}

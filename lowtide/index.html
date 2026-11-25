@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Space+Grotesk:wght@400;500;700&family=Syne:wght@800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/lowtide.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body>
 
@@ -76,7 +77,7 @@
   <nav class="main-menu" aria-label="Main menu">
     <i class="sel-bar"></i>
     <ul>
-      <li data-go="pause"><span>Story Mode</span></li>
+      <li data-go="game"><span>Story Mode</span></li>
       <li><span>Lowtide Online</span></li>
       <li data-go="pause" data-tab="3"><span>Settings</span></li>
       <li><span>Credits</span></li>
@@ -92,7 +93,26 @@
   <i class="bar t"></i><i class="bar b"></i>
 </section>
 
-<!-- 3 · pause menu -->
+<!-- 3 · loading, then the game -->
+<section id="loading" class="scene">
+  <img class="ld-art" src="media/loading.jpg" alt="">
+  <div class="ld-shade"></div>
+  <p class="ld-logo">Lowtide</p>
+  <p class="ld-tip"></p>
+  <div class="ld-bar"><i></i></div>
+</section>
+<section id="game" class="scene">
+  <div id="gl"></div>
+  <div class="hud">
+    <canvas class="radar" width="440" height="440"></canvas>
+    <div class="hud-tr"><div class="stars"></div><div class="cash">$0</div></div>
+    <div class="area"></div>
+    <div class="help"><b>Marlowe Keys</b>Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Hold <kbd>Shift</kbd> to sprint. <kbd>Space</kbd> jumps. <kbd>Esc</kbd> pauses.</div>
+    <button class="clickplay">Click to play</button>
+  </div>
+</section>
+
+<!-- 4 · pause menu -->
 <section id="pause" class="scene">
   <header class="p-top">
     <div class="p-id"><h2>Lowtide</h2><span>Marlowe Keys</span><span>11:42 PM</span><span>$4,820</span></div>
@@ -101,6 +121,7 @@
   <div class="p-body">
     <div class="p-panel" data-panel="0">
       <div class="map">
+        <canvas class="pmap" width="1200" height="760" aria-label="Map of Marlowe Keys"></canvas>
         <svg viewBox="0 0 800 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
           <rect width="800" height="460" fill="#0E3048"/>
           <path d="M120 40 L520 30 L640 120 L610 260 L520 330 L560 420 L300 440 L180 380 L90 260 Z" fill="#E9D6AE"/>

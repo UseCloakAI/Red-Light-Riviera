@@ -14,7 +14,40 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no
 | `assets/` | `cloak-o.svg` (the Cloak orb, from `cloak/blinks`) and `lowtide-mark.svg` (app icon) |
 | `media/` | Pre-rendered: `intro.mp4` (the film), `ocean.mp4` (title loop), `intro.flac`, `loop.flac` |
 
+| `game/` | The game, loaded on demand from Story Mode: `main.js` (renderer, loop, adaptive quality), `world.js` (Marlowe Keys), `sky.js` (dusk sky, sea, light), `player.js` (controller, camera, input), `hud.js` (radar, area names, map) |
+| `vendor/three/` | three.js r180, pinned and served from this folder (MIT, see `LICENSE`) |
+| `assets/characters/` | The player: `michelle.glb` (Mixamo, slimmed to 409 KB) and `anims.json` (idle, walk and run, retargeted onto her rig). See `CREDITS.md` |
+
 QA deep links: `?scene=title`, `?scene=menu` and `?scene=pause`.
+
+## The game (Stage 1: world and player)
+
+Story Mode shows a loading screen, then drops you on Tideline Beach. Click to capture the mouse.
+
+| Control | Action |
+|---|---|
+| Mouse | Look |
+| W A S D | Move |
+| Shift | Sprint |
+| Ctrl or Alt | Walk |
+| Space | Jump |
+| Esc | Pause (the map tab shows where you are) |
+
+Marlowe Keys is generated from a seed, so it's the same city every time. It has a 9 x 8 street grid of 64 m blocks across five districts (Downtown, Midtown, Port Salt, Tideline, Palm Square), plus Tideline Beach and the pier. Buildings are merged per material, and palms, lamps, containers and road markings are instanced, so the whole city draws in about 40 calls and 60k triangles. Street lights are faked with additive light pools, not real lights.
+
+If frames run long, quality steps down by itself: first resolution, then shadows. `window.__lowtide` exposes the player, camera rig and draw stats in the console.
+
+The player is Michelle, a rigged Mixamo character. Her idle, walk and run animations blend by speed, sprint plays the run faster, and footsteps fire on the foot contacts. A dusk environment map baked from the sky lights her, so she isn't a silhouette against the sun. If the model can't load, a procedural stand-in takes over.
+
+To add animations to a character, run the retarget tool. It turns each source bone's world-space rotation from T-pose into the target's local space, so rigs with different bone axes still match:
+
+```bash
+node tools/retarget/run.js tools/retarget/src/Xbot.glb lowtide/assets/characters/michelle.glb idle,walk,run lowtide/assets/characters/anims.json
+```
+
+The source rig isn't committed. Download `Xbot.glb` from the three.js examples into `tools/retarget/src/`.
+
+Coming next: pedestrians (Stage 2), weapons (3), police and wanted levels (4), vehicles (5), the first mission (6).
 
 ## The intro
 
