@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { findBones, Ragdoll } from "./rig.js?v=dev";
 import { lanePoint } from "./world.js?v=dev";
 
-const LINES = ["CMON BRO...", "BRUH", "DEAD", "REALLY?", "NAH", "BE FR", "WHY", "UNLUCKY", "YOU GOOD?", "BRO WHAT", "COME ON MAN", "NOT AGAIN", "GG", "THAT'S CRAZY", "OK THEN"];
+const LINES = ["CMON BRO...", "DEAD", "REALLY?", "FLATLINED", "NOT AGAIN", "WHY", "UNLUCKY", "COME ON MAN", "BRUH", "\u{1F62D}", "\u{1F494}\u{1F494}\u{1F494}"];
 const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
 const BILL = 150;
 
@@ -46,7 +46,7 @@ export class Life {
     if (this.sfx.rattle) setTimeout(() => this.sfx.rattle({ female: true, pitch: 1 }, 0), 500);
     this.line = LINES[(Math.random() * LINES.length) | 0];
     if (this.el) { this.el.querySelector("b").textContent = this.line; this.el.classList.add("on"); }
-    if (this.voice) setTimeout(() => this.voice.narrate(this.line.toLowerCase()), 650);   // the narrator, deadpan
+    if (this.voice && /[a-z]/i.test(this.line)) setTimeout(() => this.voice.narrate(this.line.toLowerCase()), 650);   // the narrator, deadpan (not for the emoji ones)
     if (this.sfx.wasted) this.sfx.wasted();
   }
   // true while the body is on the floor (the game shouldn't drive the player then)
