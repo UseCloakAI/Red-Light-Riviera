@@ -61,6 +61,25 @@ export async function start(o) {
 
   // Stage 3: weapons
   const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
+  // key tips: the basics as you start, the rest the first time they matter
+  const TIPS = {
+    move: "{W} {A} {S} {D} to move. Hold {Shift} to sprint, {Space} to jump.",
+    weapons: "Hold {Tab} for the weapon wheel. {1} {2} {3} pick a weapon too.",
+    pause: "{Esc} pauses the game and shows the map of Marlowe Keys.",
+    wheel: "Point at a weapon, then let go of {Tab}. Time slows while you choose.",
+    "equip:pistol": "Right click or {Q} to aim. Tap to lock the aim on, tap again to lower it. Click or {E} fires.",
+    "equip:shotgun": "The shotgun loads one shell at a time. Fire to stop loading early.",
+    aim: "Raise your gun near someone and the sights find them. The view slows while you're on a target.",
+    empty: "Out of rounds. {R} reloads."
+  };
+  arsenal.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); if (e === "equip:shotgun") hud.tipOnce("equip:pistol", TIPS["equip:pistol"]); };
+  let tipClock = 0;
+  const startTips = (dt) => {
+    const was = tipClock; tipClock += dt;
+    if (was < 1.5 && tipClock >= 1.5) hud.tipOnce("move", TIPS.move);
+    if (was < 14 && tipClock >= 14) hud.tipOnce("weapons", TIPS.weapons);
+    if (was < 40 && tipClock >= 40) hud.tipOnce("pause", TIPS.pause);
+  };
 
   // warm up: compile every shader and fill the shadow map before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
@@ -85,7 +104,7 @@ export async function start(o) {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
-    if (input.locked) arsenal.update(dt, input);
+    if (input.locked) { arsenal.update(dt, input); startTips(dt); }
     const dw = dt * arsenal.timeScale;
     if (input.locked) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
     else player.animate(dw);

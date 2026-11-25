@@ -370,8 +370,6 @@
       show("game"); play(el.game, [{ opacity: 0 }, { opacity: 1 }], 900, cueNow(), E.out);
       LT.amb.start(LT.now(), 0.3);
       clickToPlay(true);
-      var help = $(".help"); play(help, [{ opacity: 0, transform: "translateX(-12px)" }, { opacity: 1, transform: "none" }], 500, cueNow() + 0.8, E.out);
-      play(help, [{ opacity: 1 }, { opacity: 0 }], 600, cueNow() + 14, E.in, "forwards");
     }).catch(function (e) {
       clearInterval(tipT); clearInterval(barT); slideStop(); console.error(e);
       tip.textContent = "Marlowe Keys didn't load. Refresh to try again.";

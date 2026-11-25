@@ -3,6 +3,7 @@
    Shaders run through three's tone mapping and colour-space chunks so they
    match the lit geometry. */
 import * as THREE from "three";
+import { EDGE, SEA, BEACH_GLSL } from "./world.js?v=dev";
 
 const lin = (hex) => new THREE.Color(hex);   // three converts sRGB hex to linear
 export const PALETTE = {
@@ -53,32 +54,94 @@ export function buildSky(scene, renderer) {
   sky.renderOrder = -1; sky.frustumCulled = false;
   scene.add(sky);
 
-  // the sea: wave normals from layered sines, sky reflection with Fresnel, a glitter path to the sun
-  const wu = Object.assign({}, uniforms, { uDeep: { value: PALETTE.deep }, uFogC: { value: scene.fog.color }, uFogD: { value: scene.fog.density } });
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-    uniforms: wu, fog: false,
-    vertexShader: "varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}",
-    fragmentShader: SKY_FN + `uniform vec3 uDeep,uFogC;uniform float uFogD;varying vec3 vW;
+  /* the sea, PS1 style: a camera-centred grid (dense near you, sparse to the horizon) with
+     swells rolling in toward the beach, flat-shaded facets, vertices snapped to a coarse
+     screen grid, colours cut to 15 bits with an ordered dither. It stays off the island,
+     goes clear turquoise over the sand and lets the swash take over at the waterline. */
+  const PS1 = `
+    float bayer(vec2 p){ivec2 q=ivec2(mod(p,4.));int i=q.x+q.y*4;
+      float m[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);return m[i]/16.-.47;}
+    vec3 cut15(vec3 c,vec2 fc){return floor(c*31.+bayer(fc)*.9+.5)/31.;}
+    vec4 snap(vec4 c){c.xy=floor(c.xy/c.w*vec2(200.,113.)+.5)/vec2(200.,113.)*c.w;return c;}
+    float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}`;
+  const SWELL = `float swell(vec2 p,float t){
+      return .15*sin(dot(p,vec2(.018,-.105))+t*1.05)+.07*sin(dot(p,vec2(-.06,-.15))+t*1.6)+.045*sin(dot(p,vec2(.21,-.17))+t*2.5)+.025*sin(dot(p,vec2(-.33,-.26))+t*3.2);}`;
+  const LAND = new THREE.Vector4(EDGE.w, EDGE.n, EDGE.e, EDGE.s);
+  const wu = Object.assign({}, uniforms, { uDeep: { value: PALETTE.deep }, uFogC: { value: scene.fog.color }, uFogD: { value: scene.fog.density }, uLand: { value: LAND } });
+  const seaG = new THREE.PlaneGeometry(2, 2, 150, 150).rotateX(-Math.PI / 2), sp = seaG.attributes.position;
+  const spread = (u) => Math.sign(u) * Math.pow(Math.abs(u), 2.3) * 2600;   // ~0.6 m cells near you, wide ones far out
+  for (let k = 0; k < sp.count; k++) sp.setXYZ(k, spread(sp.getX(k)), 0, spread(sp.getZ(k)));
+  seaG.computeBoundingSphere();
+  const water = new THREE.Mesh(seaG, new THREE.ShaderMaterial({
+    uniforms: wu, fog: false, transparent: true,
+    vertexShader: BEACH_GLSL + PS1 + SWELL + `uniform float uTime;uniform vec4 uLand;varying vec3 vW;
     void main(){
-      vec3 V=normalize(cameraPosition-vW);vec2 p=vW.xz;float t=uTime;
-      float dist=length(cameraPosition-vW),k=1./(1.+dist*.004);
-      float dx=cos(p.x*.21+p.y*.07+t*.9)*.07+cos(p.x*.53-p.y*.31+t*1.4)*.045*k+cos(p.x*1.7+p.y*.9+t*2.3)*.03*k;
-      float dz=cos(p.y*.27-p.x*.05+t*.8)*.07+cos(p.y*.61+p.x*.37+t*1.2)*.045*k+cos(p.y*1.9-p.x*.7+t*2.6)*.03*k;
-      vec3 N=normalize(vec3(-dx,1.,-dz));
+      vec4 w=modelMatrix*vec4(position,1.);
+      float depth=w.z>uLand.w?(${SEA.toFixed(2)})-beachY(w.xz):8.;
+      float amp=clamp(depth/1.4,.12,1.)*(1.-smoothstep(500.,1600.,distance(w.xz,cameraPosition.xz)));
+      w.y=(${SEA.toFixed(2)})+swell(w.xz,uTime)*amp;
+      if(w.x>uLand.x&&w.x<uLand.z&&w.z>uLand.y&&w.z<uLand.w)w.y-=4.;      // under the island: out of sight
+      vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
+    fragmentShader: SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;uniform vec4 uLand;varying vec3 vW;
+    void main(){
+      if(vW.x>uLand.x&&vW.x<uLand.z&&vW.z>uLand.y&&vW.z<uLand.w)discard;
+      vec3 N=normalize(cross(dFdx(vW),dFdy(vW)));if(N.y<0.)N=-N;                  // one normal per facet
+      vec3 V=normalize(cameraPosition-vW);float dist=length(cameraPosition-vW);
       vec3 R=reflect(-V,N);R.y=abs(R.y)+.01;
-      float F=.02+.98*pow(1.-max(dot(N,V),0.),5.);
-      vec3 col=mix(uDeep,skyCol(normalize(R),false),F);
-      float s=max(dot(R,uSunDir),0.);
-      col+=uSun*(pow(s,500.)*8.+pow(s,60.)*.5);
-      float f=1.-exp(-uFogD*uFogD*dist*dist);
-      col=mix(col,uFogC,f*.85);
-      gl_FragColor=vec4(col,1.);
+      float F=.04+.96*pow(1.-max(dot(N,V),0.),5.);
+      // the water's own colour by depth: sand showing through, then teal, then the deep; the sky reflects on top
+      float depth=vW.z>uLand.w?vW.y-beachY(vW.xz):9.;
+      vec3 body=mix(mix(vec3(.42,.3,.2),vec3(.06,.24,.26),smoothstep(0.,.7,depth)),uDeep,smoothstep(.9,4.5,depth));
+      vec3 col=mix(body,skyCol(normalize(R),false),F);
+      float s=max(dot(R,uSunDir),0.);col+=uSun*(step(.99,s)*step(hash(floor(vW.xz*1.5)+floor(uTime*5.)),.45)*2.2+pow(s,40.)*.35);   // the sun path breaks into glitter
+      // crests catch foam, in chunky half-metre blocks
+      vec2 q=floor(vW.xz*2.)/2.;float crest=smoothstep(.2,.28,vW.y-(${SEA.toFixed(2)}));
+      col=mix(col,vec3(.93,.9,.86),step(hash(q+floor(uTime*2.)),crest*.35));
+      float a=smoothstep(0.,.08,depth);   // fades to nothing at the waterline; the swash takes over
+      float f=1.-exp(-uFogD*uFogD*dist*dist);col=mix(col,uFogC,f*.85);
+      gl_FragColor=vec4(col,a);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
+      gl_FragColor.rgb=cut15(gl_FragColor.rgb,gl_FragCoord.xy);
     }`
   }));
-  water.position.y = -0.6; water.receiveShadow = false;
+  water.receiveShadow = false; water.frustumCulled = false; water.renderOrder = 1;
   scene.add(water);
+
+  /* the swash: each wave runs up the sand with a foam edge, slides back, and leaves it
+     dark and wet for a moment. Sets of waves vary along the beach. Drawn in quarter-metre
+     blocks so it reads as pixels, like the rest of the sea. */
+  const swG = new THREE.PlaneGeometry(EDGE.e - EDGE.w + 60, 60, Math.ceil((EDGE.e - EDGE.w + 60) / 3), 80).rotateX(-Math.PI / 2);
+  swG.translate((EDGE.w + EDGE.e) / 2, 0, EDGE.s + 12 + 30);
+  const swash = new THREE.Mesh(swG, new THREE.ShaderMaterial({
+    uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false,
+    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
+    fragmentShader: BEACH_GLSL + PS1 + `uniform float uTime;uniform vec3 uFogC,uLow;uniform float uFogD;varying vec3 vW;
+    void main(){
+      vec2 q=floor(vW.xz*4.)/4.+.125;float h=beachY(q);
+      float ph=uTime/7.+.35*sin(q.x*.013+.5)+.2*sin(q.x*.041+2.);float set=floor(ph),p=fract(ph);
+      float run=p<.3?1.-pow(1.-p/.3,2.):1.-smoothstep(0.,1.,(p-.3)/.7);              // rushes up, slides back
+      float amp=.11+.05*sin(q.x*.027+set*2.1)+.03*sin(set*5.3);
+      float L=(${SEA.toFixed(2)})-.01+run*amp,d=L-h,peak=(${SEA.toFixed(2)})-.01+amp;
+      vec3 col;float a;
+      if(d>0.){
+        float edge=1.-smoothstep(0.,p<.3?.03:.012,d);                                   // the foam front
+        float bub=step(hash(q+set*7.),.3*smoothstep(.07,0.,d));                          // fizz behind it
+        float foam=max(edge,bub);
+        col=mix(mix(vec3(.16,.4,.42),uLow,.35),vec3(.95,.92,.86),foam);
+        a=mix(.45,.95,foam)*(p<.3?1.:1.-.6*smoothstep(.6,1.,p));
+      }else if(h<peak&&p>.3){col=vec3(.28,.2,.14);a=.38*(1.-(p-.3)/.7);}                // wet sand left behind
+      else discard;
+      float dist=length(cameraPosition-vW),f=1.-exp(-uFogD*uFogD*dist*dist);col=mix(col,uFogC,f*.85);
+      if(a<.02)discard;
+      gl_FragColor=vec4(col,a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      gl_FragColor.rgb=cut15(gl_FragColor.rgb,gl_FragCoord.xy);
+    }`
+  }));
+  swash.renderOrder = 2; swash.frustumCulled = false;
+  scene.add(swash);
 
   // image-based light from this same sky, baked once: only PBR materials (characters) use it,
   // so they pick up the dusk fill instead of reading as silhouettes against the sun
@@ -104,7 +167,7 @@ export function buildSky(scene, renderer) {
     update(t, focus, camPos) {
       uniforms.uTime.value = t;
       sky.position.copy(camPos);
-      water.position.x = Math.round(camPos.x / 50) * 50; water.position.z = Math.round(camPos.z / 50) * 50;
+      water.position.x = Math.round(camPos.x / 8) * 8; water.position.z = Math.round(camPos.z / 8) * 8;
       sun.target.position.copy(focus);
       sun.position.copy(focus).addScaledVector(LIGHT_DIR, 120);
     }
