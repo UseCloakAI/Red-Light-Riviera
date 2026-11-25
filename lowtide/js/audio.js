@@ -457,6 +457,47 @@
       var c = noise("white", t, 0.25), ch = F("highpass", 1200), cg = G(0); perc(cg, t, 0.0005, 0.9, 0.12); chain(c, ch, cg, sh);
       for (var i = 0; i < 9; i++) { var at = t + 0.4 + rnd() * 1.6, k = noise("white", at, 0.05), kb = F("bandpass", 1200 + rnd() * 3000, 3), kg = G(0); perc(kg, at, 0.001, 0.12 * v, 0.04); chain(k, kb, kg, B.sfx); }
     },
+    /* voices without words: a buzzing source (two detuned saws, a vibrato that
+       wanders, a little roughness) through three vowel formants, with breath.
+       v: { pitch (Hz), female } ; dist in metres */
+    voice: function (o) {
+      if (!ctx) return; var t = now(), d = o.dist || 0, att = 1 / (1 + d / 12); if (att < 0.04) return;
+      var dur = o.dur, f0 = o.f0, bus = G(o.gain * att), lp = F("lowpass", 9000 / (1 + d / 30), 0.5), pan = P(o.pan || 0); chain(bus, lp, pan, B.sfx); send(pan, street(), 0.15 + Math.min(0.4, d / 50));
+      var src = G(1), a = O("sawtooth", f0, t), b = O("sawtooth", f0 * 1.012, t), vib = O("sine", 5.5 + rnd() * 2.5, t), vg = G(f0 * o.vib), rough = O("square", 30 + rnd() * 35, t), rg = G(o.rough), am = G(1);
+      chain(vib, vg); vg.connect(a.frequency); vg.connect(b.frequency); chain(rough, rg, am.gain);
+      a.connect(src); b.connect(src); chain(src, am);
+      // pitch contour
+      o.contour.forEach(function (k) { a.frequency.linearRampToValueAtTime(f0 * k[1], t + dur * k[0]); b.frequency.linearRampToValueAtTime(f0 * k[1] * 1.012, t + dur * k[0]); });
+      // the vowel: three formants in parallel
+      o.formants.forEach(function (f, i) { var bp = F("bandpass", f * (o.female ? 1.15 : 1), 7 + i * 3), fg = G([1, 0.6, 0.25][i]); chain(am, bp, fg, bus); });
+      var br = noise("pink", t, dur + 0.1), bh = F("bandpass", 2200, 0.8), bg = G(o.breath); chain(br, bh, bg, bus);
+      var env = [bus.gain]; env.forEach(function (gp) { var peak = gp.value; gp.setValueAtTime(0, t); gp.linearRampToValueAtTime(peak, t + o.attack); gp.setValueAtTime(peak, t + dur * 0.7); gp.exponentialRampToValueAtTime(0.0008, t + dur); });
+      [a, b, vib, rough].forEach(function (x) { x.start(t); x.stop(t + dur + 0.05); });
+    },
+    // a blood-curdling scream: high, rising, cracking, held, then falling away
+    scream: function (who, dist, pan) {
+      var f = who && who.female, base = (f ? 560 : 330) * (who && who.pitch || 1) * (0.9 + rnd() * 0.25), dur = 0.9 + rnd() * 0.9;
+      sfx.voice({ f0: base, female: f, dur: dur, dist: dist, pan: pan, gain: 0.32, attack: 0.04, vib: 0.035, rough: 0.35, breath: 0.08,
+        formants: rnd() < 0.5 ? [850, 1250, 2900] : [620, 1700, 2700],
+        contour: [[0.1, 1.25], [0.35, 1.45 + rnd() * 0.2], [0.5, 1.3], [0.75, 1.38], [1, 0.75]] });
+    },
+    // a hit: a short grunt of pain
+    grunt: function (who, dist, pan) {
+      var f = who && who.female, base = (f ? 300 : 150) * (who && who.pitch || 1) * (0.9 + rnd() * 0.2);
+      sfx.voice({ f0: base, female: f, dur: 0.22 + rnd() * 0.12, dist: dist, pan: pan, gain: 0.3, attack: 0.008, vib: 0.01, rough: 0.6, breath: 0.15,
+        formants: [580, 1100, 2500], contour: [[0.3, 1.15], [1, 0.8]] });
+    },
+    // the last of it: a wet, choking rattle under a groan that sinks away
+    rattle: function (who, dist) {
+      if (!ctx) return; var t = now() + 0.15, d = dist || 0, att = 1 / (1 + d / 10); if (att < 0.05) return;
+      var bus = G(0.5 * att); bus.connect(B.sfx);
+      var n = noise("brown", t, 2.2), bp = F("bandpass", 420, 5), gg = G(0), lfo = O("square", 9 + rnd() * 6, t), lg = G(0.5);
+      chain(n, bp, gg, bus); chain(lfo, lg, gg.gain); gg.gain.setValueAtTime(0.5, t); gg.gain.linearRampToValueAtTime(0.0, t + 2.1); lfo.start(t); lfo.stop(t + 2.2);
+      bp.frequency.linearRampToValueAtTime(260, t + 2);
+      var f = (who && who.female ? 190 : 105) * (who && who.pitch || 1), o = O("sawtooth", f, t), ol = F("lowpass", 600, 2), og = G(0);
+      o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 1.8); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.22, t + 0.2); og.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
+      chain(o, ol, og, bus); o.start(t); o.stop(t + 2);
+    },
     // dying: a low thud and a long falling tone
     wasted: function () {
       if (!ctx) return; var t = now(), o = O("sawtooth", 220, t), lp = F("lowpass", 900, 1), g = G(0);

@@ -49,9 +49,9 @@ function facadeTile(R, kind) {
 const SIGN_TEXT = [
   ["SEAGRAPE", "MOTOR INN"], ["HOTEL", "MARISOL"], ["THE", "SANDPIPER"], ["CASA", "LUNA"], ["HOTEL", "CORALINE"], ["THE GULF", "ARMS"],
   ["NITE OWL", "DINER"], ["KEYS", "LIQUOR"], ["LAVANDERIA", ""], ["PHARMACY", ""], ["TACOS", "EL FARO"], ["SALT & PEPPER", "DELI"],
-  ["PAWN", "& LOAN"], ["CHECKS", "CASHED"], ["SURF", "SHOP"], ["TIDE TABLE", "CAFE"], ["LONGSHORE", "HALL"], ["ASHBY", "TIDEWATER"],
+  ["PAWN", "& LOAN"], ["CHECKS", "CASHED"], ["SURF", "SHOP"], ["SEABREEZE", "CAFE"], ["LONGSHORE", "HALL"], ["ASHBY", "TIDEWATER"],
   ["MARLOWE", "SAVINGS"], ["PALM SQUARE", "THEATRE"], ["RUELAS BAIT", "& ICE"], ["BODEGA", ""], ["HARDWARE", ""], ["BARBER", ""],
-  ["PORT SALT COMMONS", "LIVE WHERE THE CITY BEGAN"], ["SODA", "COLD 75c"], ["GAS", "OPEN 24"], ["MOTEL", "VACANCY"], ["BAR", "OPEN"], ["CHURCH", "OF THE TIDE"],
+  ["PORT SALT COMMONS", "LIVE WHERE THE CITY BEGAN"], ["SODA", "COLD 75c"], ["GAS", "OPEN 24"], ["MOTEL", "VACANCY"], ["BAR", "OPEN"], ["CHURCH", "OF ST. JUDE"],
   ["PIER 9", ""], ["DONUTS", ""]
 ];
 // signs: 32 panels in a 4 x 8 atlas, each 128 x 32, drawn as painted boards or neon
