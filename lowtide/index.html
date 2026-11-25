@@ -137,34 +137,43 @@
   </div>
 </section>
 
-<!-- 4 · pause menu -->
+<!-- 4 · pause menu (js/intro.js drives it; the live parts come from the game) -->
 <section id="pause" class="scene">
   <header class="p-top">
-    <div class="p-id"><h2>Lowtide</h2><span>Marlowe Keys</span><span>11:42 PM</span><span>$4,820</span></div>
-    <nav class="p-tabs"><button>Map</button><button>Brief</button><button>Stats</button><button>Settings</button><button>Gallery</button><i class="p-ink"></i></nav>
+    <div class="p-id"><h2>Lowtide</h2><span class="p-area">Marlowe Keys</span><span class="p-clock">7:12 PM</span><span class="p-cash">$4,820</span></div>
+    <nav class="p-tabs"><button>Map</button><button>Brief</button><button>Stats</button><button>Settings</button><button>Game</button><i class="p-ink"></i></nav>
   </header>
   <div class="p-body">
     <div class="p-panel" data-panel="0">
       <div class="map">
-        <canvas class="pmap" width="1200" height="760" aria-label="Map of Marlowe Keys"></canvas>
+        <canvas class="pmap" width="1200" height="760" aria-label="Map of Marlowe Keys. Click a street to set a fast travel point."></canvas>
         <svg viewBox="0 0 800 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
           <rect width="800" height="460" fill="#0E3048"/>
           <path d="M120 40 L520 30 L640 120 L610 260 L520 330 L560 420 L300 440 L180 380 L90 260 Z" fill="#E9D6AE"/>
           <path d="M600 330 L700 300 L740 360 L680 410 Z M690 140 L760 120 L770 190 L720 200Z" fill="#E9D6AE"/>
           <path d="M140 150 L590 160 M250 50 L280 430 M400 40 L420 430 M110 280 L560 300" stroke="#fff" stroke-width="6" opacity=".7"/>
-          <path d="M150 220 Q360 200 600 240" stroke="#FF6B4A" stroke-width="5" fill="none" stroke-dasharray="10 8"/>
-          <circle cx="410" cy="225" r="10" fill="#19C3B1" stroke="#0A0A0A" stroke-width="3"/>
-          <circle cx="600" cy="240" r="9" fill="#FFD36E" stroke="#0A0A0A" stroke-width="3"/>
           <text x="300" y="120" fill="#0A0A0A" font-family="Archivo" font-stretch="62%" font-weight="800" font-size="22" opacity=".55">MARLOWE KEYS</text>
-          <text x="220" y="400" fill="#0A0A0A" font-family="Archivo" font-stretch="62%" font-weight="800" font-size="18" opacity=".55">PORT SALT</text>
         </svg>
-        <ul class="legend"><li><i style="background:#19C3B1"></i>You</li><li><i style="background:#FFD36E"></i>Objective</li><li><i style="background:#FF6B4A"></i>Route</li></ul>
+        <aside class="ft">
+          <span class="eyebrow">Fast travel</span>
+          <h4 class="ft-where">Pick a spot</h4>
+          <p class="ft-note">Click a street or open ground on the map. Never inside a building.</p>
+          <button class="ft-go" disabled>Travel <kbd>Enter</kbd></button>
+          <p class="ft-cool"></p>
+          <ul class="legend"><li><i style="background:#19C3B1"></i>You</li><li><i style="background:#FFD36E"></i>Destination</li><li><i style="background:#E5484D"></i>Marlowe General</li></ul>
+          <p class="ft-keys"><kbd>Click</kbd> Set point<br><kbd>Wheel</kbd> Zoom<br><kbd>Drag</kbd> Pan<br><kbd>M</kbd> Close map</p>
+        </aside>
+        <p class="ft-start">Start Story Mode to use the map.</p>
       </div>
     </div>
-    <div class="p-panel" data-panel="1"><div class="brief"><span class="eyebrow">Current job</span><h3>Salt in the Wound</h3><p>Meet Dez at the pier before the tide turns. Don't bring heat.</p><ol><li class="done">Pick up the van</li><li>Lose the patrol at the causeway</li><li>Drop at Pier 9</li></ol></div></div>
-    <div class="p-panel" data-panel="2"><div class="stats"><div><b>12</b><span>Missions</span></div><div><b>38%</b><span>Complete</span></div><div><b>214</b><span>Miles driven</span></div><div><b>★★★</b><span>Highest wanted</span></div></div></div>
-    <div class="p-panel" data-panel="3"><ul class="settings"><li>Audio<span>Music 70, SFX 90</span></li><li>Display<span>Native, VSync on</span></li><li>Controls<span>Keyboard and mouse</span></li><li>Camera<span>Third person, FOV 70</span></li><li>Subtitles<span>On</span></li></ul></div>
-    <div class="p-panel" data-panel="4"><div class="gallery"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="p-panel" data-panel="1"><div class="brief"><span class="eyebrow">Brief</span><h3>What you heard</h3><ol class="log"></ol></div></div>
+    <div class="p-panel" data-panel="2"><div class="stats"></div></div>
+    <div class="p-panel" data-panel="3"><ul class="settings"></ul><p class="s-hint"><kbd>↑</kbd><kbd>↓</kbd> Choose <kbd>←</kbd><kbd>→</kbd> Change <kbd>Enter</kbd> Toggle</p></div>
+    <div class="p-panel" data-panel="4"><div class="gamepanel"><ul class="g-acts"></ul><div class="controls"><span class="eyebrow">Controls</span><dl>
+      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move</dd><dt><kbd>Shift</kbd></dt><dd>Sprint</dd><dt><kbd>Space</kbd></dt><dd>Jump / handbrake</dd>
+      <dt><kbd>E</kbd></dt><dd>Get in or out of a car</dd><dt><kbd>Right mouse</kbd></dt><dd>Aim</dd><dt><kbd>Left mouse</kbd></dt><dd>Fire</dd>
+      <dt><kbd>Tab</kbd></dt><dd>Weapon wheel</dd><dt><kbd>R</kbd></dt><dd>Reload</dd><dt><kbd>M</kbd></dt><dd>Map and fast travel</dd><dt><kbd>Esc</kbd></dt><dd>Pause</dd>
+    </dl></div></div></div>
   </div>
   <footer class="hud-foot"><span class="by"><img src="assets/cloak-o.svg" alt="">Cloak Studios</span><span class="keys"><kbd>Q</kbd><kbd>E</kbd> Tabs <kbd>Esc</kbd> Back</span></footer>
 </section>
@@ -172,6 +181,7 @@
 <div id="iris" aria-hidden="true"></div>
 <div id="flash" aria-hidden="true"></div>
 
+<script src="js/settings.js?v=dev"></script>
 <script src="js/cues.js?v=dev"></script>
 <script src="js/audio.js?v=dev"></script>
 <script src="js/scene.js?v=dev"></script>

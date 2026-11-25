@@ -143,17 +143,44 @@ export class Hud {
     g.fillStyle = "rgba(10,10,10,.75)"; g.beginPath(); g.arc(nx, ny, 11, 0, Math.PI * 2); g.fill();
     g.fillStyle = "#F7F2EA"; g.font = "800 13px Archivo, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("N", nx, ny + 1);
   }
-  // full map for the pause screen
-  drawFull(ctx, w, h, player) {
-    const m = this.map.canvas, s = Math.min(w / m.width, h / m.height);
+  /* full map for the pause screen. opt: { zoom (1 = whole island), cx, cz (centre, world m; null = middle),
+     hover {x,z}, pick (a fast-travel check: ok, x, z), hospital {x,z} }. Returns how to read it back. */
+  drawFull(ctx, w, h, player, opt = {}) {
+    const m = this.map.canvas, base = Math.min(w / m.width, h / m.height) * S, z = Math.max(1, opt.zoom || 1), sc = base * z;
+    const mw = m.width / S, mh = m.height / S, mx = this.map.x0 + mw / 2, mz = this.map.z0 + mh / 2;
+    // keep the island on screen: the centre can't wander further than the zoom allows
+    const hw = w / 2 / sc, hh = h / 2 / sc, lim = (v, c, half, span) => (half * 2 >= span ? c : Math.max(c - span / 2 + half, Math.min(c + span / 2 - half, v)));
+    const cx = lim(opt.cx == null ? mx : opt.cx, mx, hw, mw), cz = lim(opt.cz == null ? mz : opt.cz, mz, hh, mh);
+    const X = (x) => w / 2 + (x - cx) * sc, Y = (zz) => h / 2 + (zz - cz) * sc;
     ctx.fillStyle = "#0E2436"; ctx.fillRect(0, 0, w, h);
-    const ox = (w - m.width * s) / 2, oy = (h - m.height * s) / 2;
-    ctx.drawImage(m, ox, oy, m.width * s, m.height * s);
-    const px = ox + (player.pos.x - this.map.x0) * S * s, py = oy + (player.pos.z - this.map.z0) * S * s;
-    ctx.fillStyle = "#19C3B1"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "rgba(247,242,234,.7)"; ctx.font = "800 20px Archivo, sans-serif"; ctx.textAlign = "center";
-    const label = (t, x, z) => ctx.fillText(t.toUpperCase(), ox + (x - this.map.x0) * S * s, oy + (z - this.map.z0) * S * s);
-    for (const [t, x, z] of this.world.map.labels) label(t, x, z);
+    ctx.imageSmoothingEnabled = z < 2.5;
+    ctx.drawImage(m, X(this.map.x0), Y(this.map.z0), m.width / S * sc, m.height / S * sc);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(247,242,234,.62)"; ctx.font = `800 ${Math.round(16 + z * 3)}px Archivo, sans-serif`;
+    for (const [t, x, zz] of this.world.map.labels) ctx.fillText(t.toUpperCase(), X(x), Y(zz));
+    if (opt.hospital) {   // Marlowe General
+      const hx = X(opt.hospital.x), hy = Y(opt.hospital.z);
+      ctx.fillStyle = "#E5484D"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.fillRect(hx - 10, hy - 10, 20, 20); ctx.strokeRect(hx - 10, hy - 10, 20, 20);
+      ctx.fillStyle = "#fff"; ctx.font = "900 15px Archivo, sans-serif"; ctx.fillText("H", hx, hy + 1);
+    }
+    const px = X(player.pos.x), py = Y(player.pos.z), p = opt.pick;
+    if (p) {
+      const tx = X(p.x), ty = Y(p.z);
+      if (p.ok) {
+        ctx.setLineDash([10, 8]); ctx.strokeStyle = "rgba(255,211,110,.85)"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = "#FFD36E"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(tx, ty, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(tx, ty - 10); ctx.lineTo(tx, ty - 30); ctx.stroke();
+      } else {
+        ctx.strokeStyle = "#E5484D"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(tx - 10, ty - 10); ctx.lineTo(tx + 10, ty + 10); ctx.moveTo(tx + 10, ty - 10); ctx.lineTo(tx - 10, ty + 10); ctx.stroke();
+      }
+    }
+    // you: an arrow the way you face
+    ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI - player.yaw);
+    ctx.fillStyle = "#19C3B1"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(10, 10); ctx.lineTo(0, 5); ctx.lineTo(-10, 10); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    if (opt.hover) {   // the cursor's crosshair
+      const hx = X(opt.hover.x), hy = Y(opt.hover.z);
+      ctx.strokeStyle = "rgba(247,242,234,.55)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.moveTo(0, hy); ctx.lineTo(w, hy); ctx.stroke();
+    }
+    return { cx, cz, scale: sc, base, toWorld: (qx, qy) => ({ x: cx + (qx - w / 2) / sc, z: cz + (qy - h / 2) / sc }) };
   }
 }
