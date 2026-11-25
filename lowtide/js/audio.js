@@ -32,8 +32,9 @@
     g.gain.exponentialRampToValueAtTime(peak, t + a);
     g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
   }
+  var slowRate = 1, beatT = 0;
   function noise(kind, t, dur, loop) {
-    var s = ctx.createBufferSource(); s.buffer = NZ[kind]; s.loop = !!loop;
+    var s = ctx.createBufferSource(); s.buffer = NZ[kind]; s.loop = !!loop; if (slowRate !== 1 && !loop) s.playbackRate.value = slowRate;
     if (loop) s.start(t, rnd() * 4); else s.start(t, rnd() * 2, dur);
     return s;
   }
@@ -104,7 +105,9 @@
     glue.threshold.value = -20; glue.knee.value = 12; glue.ratio.value = 2.2; glue.attack.value = 0.025; glue.release.value = 0.3;
     tape.curve = sat(1.3); tape.oversample = "4x";
     lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.12;
-    chain(out, hp, glue, tape, trim, lim, ctx.destination);
+    B.slowLP = F("lowpass", 20000, 0.9);   // the bullet cam pulls everything down through this
+    chain(out, B.slowLP, hp, glue, tape, trim, lim, ctx.destination);
+    B.cine = G(1); B.cine.connect(hp);       // the bullet cam's own sounds stay clear of that
 
     hall = verb(3.6, 2.4, 0.03, 4600, 0.5, out);
     plate = verb(1.3, 3.0, 0.006, 8000, 0.45, out);
@@ -525,7 +528,7 @@
       var n = data.length, x = new Float32Array(n), px = data[0], py = 0, fade = Math.min(n >> 2, Math.round(rate * 0.012));
       for (var i = 0; i < n; i++) { py = data[i] - px + 0.995 * py; px = data[i]; x[i] = py; }
       for (var j = 0; j < fade; j++) { var w = j / fade; x[j] *= w; x[n - 1 - j] *= w; }
-      var buf = ctx.createBuffer(1, n, rate), src = ctx.createBufferSource(); buf.copyToChannel(x, 0); src.buffer = buf;
+      var buf = ctx.createBuffer(1, n, rate), src = ctx.createBufferSource(); buf.copyToChannel(x, 0); src.buffer = buf; src.playbackRate.value = slowRate;
       var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0);
       if (opt && opt.scream) {   // a scream: driven into distortion, a fast shake on it, the throat's rasp brought up
         var pre = G(3.2), sh = ctx.createWaveShaper(), trem = G(1), tl = O("sine", 8 + rnd() * 5, t), tg = G(0.38), pk = F("peaking", 2900, 1.1);
@@ -574,6 +577,34 @@
       var n = noise("white", t, 0.08), hp = F("highpass", 600), g = G(0); perc(g, t, 0.0005, 0.7, 0.05); chain(n, hp, g, bus);
       var o = O("sine", 180, t), og = G(0); o.frequency.exponentialRampToValueAtTime(60, t + 0.08); perc(og, t, 0.001, 0.5, 0.08); chain(o, og, bus); o.start(t); o.stop(t + 0.15);
       var h = noise("pink", t + 0.03, 0.9), hb = F("bandpass", 2400, 0.8), hg = G(0); hg.gain.setValueAtTime(0.0001, t + 0.03); hg.gain.exponentialRampToValueAtTime(0.18, t + 0.08); hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); chain(h, hb, hg, bus);
+    },
+    /* the bullet cam: slow motion for the ears. New sounds play slowed (lower, longer), the
+       whole mix is pulled down through a low-pass, the sea and wind slow, and a heartbeat
+       comes up underneath */
+    slowmo: function (on) {
+      if (!ctx) return; var t = now();
+      slowRate = on ? 0.4 : 1;
+      B.slowLP.frequency.cancelScheduledValues(t); B.slowLP.frequency.setTargetAtTime(on ? 850 : 20000, t, on ? 0.06 : 0.3);
+      if (W.nodes) W.nodes.forEach(function (n) { if (n.playbackRate) n.playbackRate.setTargetAtTime(on ? 0.45 : 1, t, 0.1); });
+      clearInterval(beatT);
+      if (on) { var beat = function () { var t2 = now(); [0, 0.22].forEach(function (d, i) { var o = O("sine", 58, t2 + d), g = G(0); o.frequency.exponentialRampToValueAtTime(34, t2 + d + 0.18); perc(g, t2 + d, 0.01, i ? 0.35 : 0.55, 0.22); chain(o, g, B.cine); o.start(t2 + d); o.stop(t2 + d + 0.3); }); }; beat(); beatT = setInterval(beat, 1050); }
+    },
+    // the shot, stretched: a long sub drop and a smeared crack, ringing off the street; the round's whoosh panned past
+    cineShot: function (T, side) {
+      if (!ctx) return; var t = now(), bus = G(0.9); bus.connect(B.cine); send(bus, hall, 0.7);
+      var o = O("sine", 95, t), og = G(0); o.frequency.exponentialRampToValueAtTime(24, t + 1.9); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(1, t + 0.03); og.gain.exponentialRampToValueAtTime(0.001, t + 2.2); chain(o, og, bus); o.start(t); o.stop(t + 2.3);
+      var n = ctx.createBufferSource(); n.buffer = NZ.white; n.playbackRate.value = 0.35; var nl = F("lowpass", 2400, 0.7), ng = G(0); nl.frequency.exponentialRampToValueAtTime(160, t + 2); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.7, t + 0.02); ng.gain.exponentialRampToValueAtTime(0.001, t + 2.4); chain(n, nl, ng, bus); n.start(t, rnd(), 2.5);
+      var w = ctx.createBufferSource(); w.buffer = NZ.pink; w.loop = true; var wb = F("bandpass", 260, 5), wg = G(0), wp = P(-(side || 1) * 0.8), wt = O("sine", 16, t), wtg = G(0.4);
+      wb.frequency.exponentialRampToValueAtTime(1500, t + T); wp.pan.linearRampToValueAtTime((side || 1) * 0.8, t + T);
+      wg.gain.setValueAtTime(0, t); wg.gain.linearRampToValueAtTime(0.5, t + T * 0.85); wg.gain.linearRampToValueAtTime(0, t + T + 0.35);
+      chain(wt, wtg, wg.gain); chain(w, wb, wg, wp, B.cine); send(wp, hall, 0.3); w.start(t); w.stop(t + T + 0.5); wt.start(t); wt.stop(t + T + 0.5);
+    },
+    // and where it lands: a deep, slow, wet crunch
+    cineImpact: function () {
+      if (!ctx) return; var t = now(), bus = G(1); bus.connect(B.cine); send(bus, hall, 0.5);
+      var o = O("sine", 75, t), og = G(0); o.frequency.exponentialRampToValueAtTime(26, t + 1.3); perc(og, t, 0.005, 1.0, 1.3); chain(o, og, bus); o.start(t); o.stop(t + 1.5);
+      var n = ctx.createBufferSource(); n.buffer = NZ.brown; n.playbackRate.value = 0.5; var nl = F("lowpass", 700, 1), ng = G(0); perc(ng, t, 0.005, 0.9, 1.0); chain(n, nl, ng, bus); n.start(t, rnd(), 1.2);
+      var c = ctx.createBufferSource(); c.buffer = NZ.white; c.playbackRate.value = 0.4; var cb = F("bandpass", 1300, 2.5), cg = G(0); perc(cg, t, 0.003, 0.5, 0.35); chain(c, cb, cg, bus); c.start(t, rnd(), 0.5);
     },
     // melee: the air a fist or a bat moves
     swing: function (kind, dist) {
