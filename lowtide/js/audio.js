@@ -448,6 +448,22 @@
       bp.frequency.exponentialRampToValueAtTime(open ? 1800 : 600, t + 0.25); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.06); g.gain.linearRampToValueAtTime(0, t + 0.28); chain(n, bp, g, B.ui);
     },
     tick: function () { ui.move(); },
+    // a car horn: two detuned squares, quieter with distance
+    horn: function (dist) {
+      if (!ctx) return; var t = now(), v = 0.07 / (1 + (dist || 0) / 15), lp = F("lowpass", 1800, 1), g = G(0);
+      [415, 349].forEach(function (f) { var o = O("square", f, t); chain(o, lp); o.start(t); o.stop(t + 0.5); });
+      chain(lp, g, B.sfx); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.02); g.gain.setValueAtTime(v, t + 0.42); g.gain.linearRampToValueAtTime(0, t + 0.48);
+    },
+    // breaking glass: a shower of bright ticks
+    glass: function (v) {
+      if (!ctx) return; var t = now(); v = v || 0.6;
+      for (var i = 0; i < 14; i++) { var at = t + rnd() * 0.35, n = noise("white", at, 0.03), hp = F("bandpass", 4000 + rnd() * 5000, 6), g = G(0); perc(g, at, 0.0005, 0.12 * v * (1 - i / 16), 0.02 + rnd() * 0.04); chain(n, hp, g, B.sfx); }
+    },
+    // a burst hydrant: a steady hiss, set by strength and distance
+    hiss: function () {
+      if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 2600, 0.6), g = G(0); chain(n, bp, g, B.sfx);
+      return { set: function (s, d) { g.gain.setTargetAtTime(0.06 * s / (1 + d / 10), now(), 0.1); }, stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.3); n.stop(t2 + 1.5); } };
+    },
     // a car door: the latch and the thud
     door: function () {
       if (!ctx) return; var t = now();

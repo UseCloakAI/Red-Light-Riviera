@@ -12,6 +12,7 @@ import { Hud } from "./hud.js?v=dev";
 import { spawnPeds } from "./peds.js?v=dev";
 import { Arsenal } from "./weapons.js?v=dev";
 import { Vehicles } from "./vehicles.js?v=dev";
+import { Traffic } from "./traffic.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
@@ -70,7 +71,8 @@ export async function start(o) {
   // Stage 3: weapons
   const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
   // Stage 5, early: the parked cars drive
-  const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt") });
+  const traffic = new Traffic(scene, world, { count: 16, sfx: o.sfx });
+  const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
   // key tips: the basics as you start, the rest the first time they matter
   const TIPS = {
     move: "{W} {A} {S} {D} to move. Hold {Shift} to sprint, {Space} to jump.",
@@ -129,9 +131,9 @@ export async function start(o) {
     const avg = perf.sum / 90; perf.n = 0; perf.sum = 0;
     if (avg < 0.022 || perf.stage > 2) return;
     perf.stage++;
-    if (perf.stage === 1) { if (peds) peds.limit = 14; }
-    else if (perf.stage === 2) { if (peds) peds.limit = 10; }
-    else { if (peds) peds.limit = 8; }
+    if (perf.stage === 1) { if (peds) peds.limit = 14; traffic.limit = 12; }
+    else if (perf.stage === 2) { if (peds) peds.limit = 10; traffic.limit = 9; }
+    else { if (peds) peds.limit = 8; traffic.limit = 7; }
     console.info("Lowtide quality step", perf.stage, "avg frame", (avg * 1000).toFixed(1), "ms");
   }
   function loop(now) {
@@ -142,10 +144,11 @@ export async function start(o) {
     // a car first (it may take E for the door), then the gun, unless you're driving
     const dw = dt * arsenal.timeScale;
     let inCar = false;
+    traffic.update(dw, player, vehicles, peds);
     if (input.locked) { const used = vehicles.update(dw, input); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
-    if (inCar) { player.aimYaw = null; rig.aim = 0; }
+    if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
-    if (input.locked && !inCar) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); }
+    if (input.locked && !inCar) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar) player.animate(dw);
     if (peds) peds.update(dw, player);
     rig.update(dt, input, player);
@@ -165,7 +168,7 @@ export async function start(o) {
     lock() { input.lock(); },
     drawMap(ctx, w, h) { hud.drawFull(ctx, w, h, player); },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
-    rig, world, arsenal, vehicles, get peds() { return peds; }
+    rig, world, arsenal, vehicles, traffic, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };
