@@ -2,77 +2,113 @@
    game/human.js (random heritage, age, build, face, hair, clothes) built on the
    ~1,600-vertex body proxy.
 
-   They walk the sidewalk loops around the blocks and cross at the zebra
-   crossings to the next block, stop now and then, glance at the player as
-   they pass. Some stand about instead: pairs in conversation (nodding, shaking
-   their heads, taking turns) and people waiting by the buildings, who break up
-   after a while and walk on. Walkers
-   flee or duck when something goes wrong nearby (alarm), take hits and go
-   down as ragdolls (bodies clear once out of sight), sidestep a player running at them, and stagger if barged. They
-   are recycled out of sight as the player moves. Animation only runs near
+   They walk the pavements: each street has a lane down the middle of each
+   pavement (world.lanes, from city/roads.js), curving with the road. At the end
+   of a lane they turn the corner on a smooth curve onto the next street, or cross
+   on the zebra and carry on from the other side, or loop round a dead end. They
+   stop now and then and glance at the player as they pass. Some stand about
+   instead: pairs in conversation (nodding, shaking their heads, taking turns) and
+   people waiting by the buildings, who break up after a while and walk on.
+   They flee or duck when something goes wrong nearby (alarm), choosing the way
+   that takes them away from it; take hits and go down as ragdolls (bodies clear
+   once out of sight); sidestep a player running at them, and stagger if barged.
+   They are recycled out of sight as the player moves. Animation only runs near
    the camera, and the crowd shrinks if the machine is struggling. */
 import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
-import { P as PITCH } from "./world.js?v=dev";
+import { lanePoint, linkPath, laneEndPos } from "./world.js?v=dev";
 import { AMBIENT, BUMP, PANIC } from "./lines.js?v=dev";
 import { findBones, Ragdoll } from "./rig.js?v=dev";
 
-const INSET = 1.5;                       // walk this far in from the lot edge (sidewalk is 3 m)
-const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.4;
+const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.35;
 const PAIRS = 0.14, SOLO = 0.08;          // share of the crowd standing about, in pairs and alone
 const GESTURES = ["agree", "headShake"];
 
-function perimeter(L) { return 2 * ((L.x1 - L.x0) + (L.z1 - L.z0)); }
-// position and heading at distance s around the loop
-function along(L, s, out) {
-  const w = L.x1 - L.x0, h = L.z1 - L.z0, P = 2 * (w + h);
-  s = ((s % P) + P) % P;
-  if (s < w) { out.x = L.x0 + s; out.z = L.z0; out.dx = 1; out.dz = 0; }
-  else if (s < w + h) { out.x = L.x1; out.z = L.z0 + (s - w); out.dx = 0; out.dz = 1; }
-  else if (s < 2 * w + h) { out.x = L.x1 - (s - w - h); out.z = L.z1; out.dx = -1; out.dz = 0; }
-  else { out.x = L.x0; out.z = L.z1 - (s - 2 * w - h); out.dx = 0; out.dz = -1; }
+// a walk: a polyline with its running lengths; from/to are lane ends (where it starts and arrives)
+function cumul(pts) { const c = [0]; for (let i = 1; i < pts.length; i++) c.push(c[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z)); return c; }
+function walk(pts, from, to, onLane) { if (pts.length < 2) pts = [pts[0], { x: pts[0].x + 0.01, z: pts[0].z }]; const cum = cumul(pts); return { pts, cum, L: cum[cum.length - 1], from, to, onLane }; }
+function pointOn(w, s, out) {
+  const { pts, cum } = w; s = Math.max(0, Math.min(w.L, s));
+  let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+  const a = pts[i - 1], b = pts[i], seg = cum[i] - cum[i - 1] || 1, k = (s - cum[i - 1]) / seg;
+  out.x = a.x + (b.x - a.x) * k; out.z = a.z + (b.z - a.z) * k; out.dx = (b.x - a.x) / seg; out.dz = (b.z - a.z) / seg;
   return out;
 }
-// loop distances of the four corners, in order: (x0,z0) (x1,z0) (x1,z1) (x0,z1)
-function corners(L) { const w = L.x1 - L.x0, h = L.z1 - L.z0; return [0, w, w + h, 2 * w + h]; }
-function cornerPoint(L, k) { return [[L.x0, L.z0], [L.x1, L.z0], [L.x1, L.z1], [L.x0, L.z1]][k]; }
-function cornerIndex(L, x, z) { const ax = Math.abs(x - L.x1) < 0.01, az = Math.abs(z - L.z1) < 0.01; return az ? (ax ? 2 : 3) : (ax ? 1 : 0); }
-
+// a lane walked from one of its ends to the other (or from s toward an end)
+function laneWalk(le, s0) {
+  const l = le.lane, toEnd = l.ends[1 - le.end];
+  let pts = l.pts.slice();
+  if (s0 !== undefined) {   // part-way along: from s0 to the far end
+    const p = lanePoint(l, s0); let i = 1; while (i < l.cum.length - 1 && l.cum[i] < s0) i++;
+    pts = le.end === 0 ? [{ x: p.x, z: p.z }].concat(l.pts.slice(i)) : [{ x: p.x, z: p.z }].concat(l.pts.slice(0, i).reverse());
+    return walk(pts, null, toEnd, l);
+  }
+  if (le.end === 1) pts.reverse();
+  return walk(pts, le, toEnd, l);
+}
 export async function spawnPeds(scene, world, o = {}) {
   const D = await loadHumanData(), count = o.count || 18, R = Math.random;
-  const blocks = world.map.blocks.map(([x0, z0, x1, z1]) => {
-    const L = { x0: x0 + INSET, z0: z0 + INSET, x1: x1 - INSET, z1: z1 - INSET };
-    L.i = Math.round((x0 + x1) / 2 / PITCH); L.j = Math.round((z0 + z1) / 2 / PITCH);
-    return L;
-  });
-  const byIJ = new Map(blocks.map((L) => [L.i + "," + L.j, L]));
+  const lanes = world.lanes.filter((l) => l.L > 4);
   const peds = [], tmp = { x: 0, z: 0, dx: 0, dz: 0 };
   let limit = count, quiet = 6;            // seconds until anyone may speak again
   const say = (text) => { quiet = 9 + R() * 8; if (o.onSpeak) o.onSpeak(text); };
   const lineFor = (district) => { const a = AMBIENT.filter((l) => l.d === district || l.d === "any"); return a[(R() * a.length) | 0].t; };
 
-  function place(pd, near) {
-    pd.cross = null; pd.side = 0;
-    for (let tries = 0; tries < 40; tries++) {
-      const L = blocks[(R() * blocks.length) | 0], s = R() * perimeter(L); along(L, s, tmp);
-      const d = Math.hypot(tmp.x - near.x, tmp.z - near.z);
-      if (d >= (pd.first ? 6 : SPAWN_MIN) && d <= SPAWN_MAX) { pd.L = L; pd.s = s; return; }
+  // somewhere on a pavement, at a fair distance from `near` (close is fine for the first crowd)
+  function spot(pd, near) {
+    for (let tries = 0; tries < 60; tries++) {
+      const l = lanes[(R() * lanes.length) | 0], s = R() * l.L, p = lanePoint(l, s), d = Math.hypot(p.x - near.x, p.z - near.z);
+      if (d >= (pd.first ? 6 : SPAWN_MIN) && d <= SPAWN_MAX) return { l, s, p };
     }
-    pd.L = blocks[0]; pd.s = 0;
+    const l = lanes[0]; return { l, s: 0, p: lanePoint(l, 0) };
+  }
+  function place(pd, near) {
+    pd.side = 0; const { l, s } = spot(pd, near);
+    pd.w = laneWalk(l.ends[R() < 0.5 ? 0 : 1], s); pd.s = 0;
+  }
+  // at the end of a walk, at lane end le: round the corner, over the road, or (having crossed) back along this side
+  function next(pd, le, crossed) {
+    if (!le) { place(pd, pd.h.group.position); return; }
+    const options = [];
+    if (!crossed && le.node.deg > 2) options.push(["cross", le.cross]);
+    options.push(["corner", le.corner]);
+    if (crossed) options.push(["lane", le]);
+    let pick;
+    if (pd.fear) {   // frightened: whichever way ends furthest from the danger
+      let best = -1; for (const o of options) { const e = o[0] === "lane" ? laneEndPos(o[1].lane.ends[1 - o[1].end]) : laneEndPos(o[1]); const d = Math.hypot(e.x - pd.fear.x, e.z - pd.fear.z); if (d > best) { best = d; pick = o; } }
+    } else if (crossed) pick = options[R() < 0.5 ? 0 : 1];                                   // round the corner, or back along this side
+    else pick = options[0][0] === "cross" && R() < CROSS_CHANCE ? options[0] : options[options.length - 1];
+    const [kind, to] = pick;
+    if (kind === "lane") { pd.w = laneWalk(le); pd.s = 0; return; }
+    const lp = linkPath(le, to, kind);
+    pd.w = walk(lp.pts, le, to, null); pd.w.kind = kind; pd.s = 0;
+  }
+  function arrived(pd) {
+    const w = pd.w;
+    if (w.onLane) next(pd, w.to, false);                       // end of a pavement: decide at the junction
+    else if (w.kind === "cross") next(pd, w.to, true);         // over the road: carry on from this side
+    else { pd.w = laneWalk(w.to); pd.s = 0; }                 // round the corner: down the new street
+  }
+  // turn round where they are (frightened the other way)
+  function reverse(pd) {
+    const w = pd.w, pts = w.pts.slice().reverse(), r = walk(pts, w.to, w.from, w.onLane);
+    r.kind = w.kind; pd.s = Math.max(0, w.L - pd.s); pd.w = r;
+    if (!r.to && w.onLane) {   // started mid-lane: aim at the lane end behind them
+      const l = w.onLane, a = laneEndPos(l.ends[0]), b = laneEndPos(l.ends[1]), e = pts[pts.length - 1];
+      r.to = Math.hypot(a.x - e.x, a.z - e.z) < Math.hypot(b.x - e.x, b.z - e.z) ? l.ends[0] : l.ends[1];
+    }
   }
   // a spot by the buildings for someone (and maybe a friend) to stand and talk
   function placeStand(pd, near) {
-    place(pd, near);
-    const L = pd.L; along(L, pd.s, tmp);
-    const ix = -tmp.dz, iz = tmp.dx, cx = tmp.x + ix * 0.75, cz = tmp.z + iz * 0.75;   // inward, toward the buildings
-    const out = Math.atan2(-ix, -iz), t = 25 + R() * 70, m = pd.st && pd.st.mate;
-    if (!m) { pd.st = { x: cx, z: cz, yaw: out + (R() - 0.5) * 1.2, t, lead: true, mate: null, s: pd.s }; return; }
+    const { l, s, p } = spot(pd, near);
+    const cx = p.x + p.ox * 0.95, cz = p.z + p.oz * 0.95;   // toward the buildings
+    const out = Math.atan2(-p.ox, -p.oz), t = 25 + R() * 70, m = pd.st && pd.st.mate;
+    if (!m) { pd.st = { x: cx, z: cz, yaw: out + (R() - 0.5) * 1.2, t, lead: true, mate: null, l, s }; return; }
     // two people half facing each other, opened a little toward the street
-    const ax = cx - tmp.dx * 0.55, az = cz - tmp.dz * 0.55, bx = cx + tmp.dx * 0.55, bz = cz + tmp.dz * 0.55;
+    const ax = cx - p.tx * 0.55, az = cz - p.tz * 0.55, bx = cx + p.tx * 0.55, bz = cz + p.tz * 0.55;
     const yawA = Math.atan2(bx - ax, bz - az), yawB = yawA + Math.PI, open = 0.35;
-    pd.st = { x: ax, z: az, yaw: yawA - open * Math.sign(Math.sin(yawA - out)), t, lead: true, mate: m, s: pd.s - 0.55 };
-    m.st = { x: bx, z: bz, yaw: yawB - open * Math.sign(Math.sin(yawB - out)), t, lead: false, mate: pd, s: pd.s + 0.55 };
-    m.L = L; m.s = pd.s;
+    pd.st = { x: ax, z: az, yaw: yawA - open * Math.sign(Math.sin(yawA - out)), t, lead: true, mate: m, l, s: Math.max(0, s - 0.55) };
+    m.st = { x: bx, z: bz, yaw: yawB - open * Math.sign(Math.sin(yawB - out)), t, lead: false, mate: pd, l, s: Math.min(l.L, s + 0.55) };
   }
   // back into the crowd as a fresh face somewhere out of sight
   function revive(pd, near) {
@@ -82,30 +118,19 @@ export async function spawnPeds(scene, world, o = {}) {
   function die(pd, hit) {
     if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
     pd.B = pd.B || findBones(pd.h.group);
-    pd.dead = true; pd.fear = null; pd.cross = null;
+    pd.dead = true; pd.fear = null;
     if (!pd.B) { pd.h.group.visible = false; return; }
     pd.h.group.updateMatrixWorld(true);
     pd.rag = new Ragdoll(pd.B, world, new THREE.Vector3(pd.vx, 0, pd.vz), hit);
   }
-  // done talking: walk on from where they stood
+  // done talking: walk on from where they stood, easing back onto the lane
   function breakUp(pd) {
-    // pick up from the spot on the loop, still 0.75 m toward the buildings; side eases back to the line
     for (const q of [pd, pd.st.mate]) {
       if (!q || !q.st) continue;
-      q.s = q.st.s; q.dir = R() < 0.5 ? 1 : -1; q.side = 0.75 * q.dir; q.pause = R() * 1.5; q.cross = null; q.st = null;
+      const st = q.st; q.w = laneWalk(st.l.ends[R() < 0.5 ? 0 : 1], st.s); q.s = 0;
+      pointOn(q.w, 0, tmp); q.side = (st.x - tmp.x) * -tmp.dz + (st.z - tmp.z) * tmp.dx;   // start where they stood
+      q.pause = R() * 1.5; q.st = null;
     }
-  }
-  // at a corner: maybe cross the road to the block beside or below/above
-  function maybeCross(pd, k) {
-    if (R() > CROSS_CHANCE) return false;
-    const L = pd.L, [cx, cz] = cornerPoint(L, k), sx = k === 1 || k === 2 ? 1 : -1, sz = k >= 2 ? 1 : -1;
-    const opts = [];
-    const A = byIJ.get((L.i + sx) + "," + L.j); if (A) opts.push([sx < 0 ? A.x1 : A.x0, cz, A]);
-    const B = byIJ.get(L.i + "," + (L.j + sz)); if (B) opts.push([cx, sz < 0 ? B.z1 : B.z0, B]);
-    if (!opts.length) return false;
-    const [tx, tz, N] = opts[(R() * opts.length) | 0];
-    pd.cross = { x0: cx, z0: cz, x1: tx, z1: tz, t: 0, len: Math.hypot(tx - cx, tz - cz), N };
-    return true;
   }
 
   async function make(near) {
@@ -115,8 +140,8 @@ export async function spawnPeds(scene, world, o = {}) {
     const mixer = new THREE.AnimationMixer(h.group), act = {};
     for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
-    const pd = { h, mixer, act, head, neck, dir: R() < 0.5 ? 1 : -1, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
-      side: 0, look: 0, stagger: 0, cross: null, st: null, gW: 0, gT: 0, gest: null };
+    const pd = { h, mixer, act, head, neck, w: null, s: 0, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
+      side: 0, look: 0, stagger: 0, st: null, gW: 0, gT: 0, gest: null };
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
     act.walk.time = R() * act.walk.getClip().duration;
@@ -197,15 +222,8 @@ export async function spawnPeds(scene, world, o = {}) {
         if (st) {
           if (st.mate && peds.indexOf(st.mate) >= limit) { breakUp(pd); return; }   // their friend was culled: walk on
           x = st.x; z = st.z; hx = Math.sin(st.yaw); hz = Math.cos(st.yaw);
-        } else if (pd.cross) {
-          // on the zebra: straight across at a slightly brisker pace
-          const c = pd.cross; if (pd.pause <= 0) c.t += ((pd.fear ? pd.run : pd.speed * 1.1) * dt) / c.len;
-          if (c.t >= 1) {
-            pd.L = c.N; const k = cornerIndex(c.N, c.x1, c.z1); pd.s = corners(c.N)[k] + pd.dir * 0.01; pd.cross = null;
-            along(pd.L, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx * pd.dir; hz = tmp.dz * pd.dir;
-          } else { x = c.x0 + (c.x1 - c.x0) * c.t; z = c.z0 + (c.z1 - c.z0) * c.t; hx = (c.x1 - c.x0) / c.len; hz = (c.z1 - c.z0) / c.len; }
         } else {
-          along(pd.L, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx * pd.dir; hz = tmp.dz * pd.dir;
+          pointOn(pd.w, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx; hz = tmp.dz;
         }
         let d = Math.hypot(x - px, z - pz);
         if (st) {
@@ -217,7 +235,7 @@ export async function spawnPeds(scene, world, o = {}) {
           if (!pd.st) return;                                        // the lead just walked off with us
           return standing(pd, g, x, z, d, px, pz, dt);
         }
-        if (d > FAR) { place(pd, player.pos); along(pd.L, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx * pd.dir; hz = tmp.dz * pd.dir; d = Math.hypot(x - px, z - pz); }
+        if (d > FAR) { place(pd, player.pos); pointOn(pd.w, 0, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx; hz = tmp.dz; d = Math.hypot(x - px, z - pz); }
 
         // the player a step ahead: wait; the player running at us: sidestep instead
         const rx = -hz, rz = hx;                                       // our right-hand side
@@ -230,19 +248,13 @@ export async function spawnPeds(scene, world, o = {}) {
         if (pd.pause > 0) pd.pause -= dt;
         else if (pd.fear) { /* running: no stopping */ }
         else if (inPath && pv <= 3 && ahead < 1.6) pd.pause = 0.5 + R() * 0.7;
-        else if (!pd.cross && R() < dt * 0.015) pd.pause = 2 + R() * 4;            // stop and stand for a moment
+        else if (pd.w.onLane && R() < dt * 0.015) pd.pause = 2 + R() * 4;          // stop and stand for a moment (not in the road)
         if (pd.stagger > 0) { pd.stagger -= dt; pd.pause = Math.max(pd.pause, 0.2); }
         const moving = pd.pause <= 0;
 
-        if (moving && !pd.cross) {
-          // passing a corner: maybe head across the road
-          const before = pd.s, P = perimeter(pd.L);
-          pd.s += pd.dir * (pd.fear ? pd.run : pd.speed) * dt;
-          const cs = corners(pd.L), b0 = ((before % P) + P) % P, b1 = ((pd.s % P) + P) % P;
-          for (let k = 0; k < 4; k++) {
-            const c = cs[k], hit = pd.dir > 0 ? (b0 < c && b1 >= c) || (b0 > b1 && c === 0) : (b0 > c && b1 <= c) || (b1 > b0 && c === 0);
-            if (hit && maybeCross(pd, k)) break;
-          }
+        if (moving) {   // along the walk; at its end, on to the next
+          pd.s += (pd.fear ? pd.run : pd.speed * (pd.w.kind === "cross" ? 1.15 : 1)) * dt;
+          if (pd.s >= pd.w.L) { const over = pd.s - pd.w.L; arrived(pd); pd.s = Math.min(over, pd.w.L); }
         }
         const gy = world.heightAt(x + rx * pd.side, z + rz * pd.side), nx = x + rx * pd.side, nz = z + rz * pd.side;
         if (dt > 0) { pd.vx = (nx - g.position.x) / dt; pd.vz = (nz - g.position.z) / dt; if (Math.hypot(pd.vx, pd.vz) > 8) pd.vx = pd.vz = 0; }
@@ -290,7 +302,7 @@ export async function spawnPeds(scene, world, o = {}) {
         pd.fear = { x, z, t: 9 + R() * 8 }; pd.pause = fresh ? 0.15 + R() * 0.5 : 0;   // a beat to register it
         if (fresh && d < 9 && R() < 0.4) pd.cower = 2 + R() * 3;
         // run whichever way along the block takes them away from it
-        if (!pd.cross) { along(pd.L, pd.s + 2, tmp); const a = Math.hypot(tmp.x - x, tmp.z - z); along(pd.L, pd.s - 2, tmp); pd.dir = a >= Math.hypot(tmp.x - x, tmp.z - z) ? 1 : -1; }
+        if (pd.w) { pointOn(pd.w, pd.s + 2, tmp); const a = Math.hypot(tmp.x - x, tmp.z - z); pointOn(pd.w, Math.max(0, pd.s - 2), tmp); if (a < Math.hypot(tmp.x - x, tmp.z - z)) reverse(pd); }
         if (d < nd) { nd = d; nearest = pd; }
       }
       if (shout && nearest && nd < 25) { quiet = 0; say(PANIC[(R() * PANIC.length) | 0]); quiet = 3 + R() * 3; }

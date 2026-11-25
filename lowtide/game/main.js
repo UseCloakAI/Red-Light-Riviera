@@ -1,7 +1,9 @@
 /* Lowtide, in game. Loaded on demand from the main menu (Story Mode).
    Builds the renderer, Marlowe Keys, the sky and sea, the player and HUD,
-   then runs the loop. Quality adapts: if frames run long it lowers the
-   resolution, then turns shadows off, so low-end machines stay playable. */
+   then runs the loop. The picture is PS1 (ps1.js): rendered at 270 lines,
+   every vertex snapped to that grid, nearest-neighbour textures, blob shadows,
+   then scaled up with hard pixels and a 15-bit dither. If frames still run
+   long, the crowd thins. */
 import * as THREE from "three";
 import { buildWorld } from "./world.js?v=dev";
 import { buildSky } from "./sky.js?v=dev";
@@ -11,6 +13,7 @@ import { spawnPeds } from "./peds.js?v=dev";
 import { Arsenal } from "./weapons.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
+import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
 
 // the player: the character from the creator (MakeHuman, game/human.js); the Mixamo model is the fallback
 async function loadCharacter(params) {
@@ -32,14 +35,17 @@ export async function start(o) {
   const step = async (p) => { if (o.progress) o.progress(p); await frame(); };
   await step(0.04);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-  let ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-  renderer.setPixelRatio(ratio); renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  configure(innerWidth / innerHeight);   // before any material exists: the vertex snap goes into every shader
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+  const ratio = 1;
+  renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   o.mount.appendChild(renderer.domElement);
+  const rt = new THREE.WebGLRenderTarget(PS1.w, PS1.h, { type: THREE.HalfFloatType, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, depthBuffer: true });
+  const blit = makeBlit(); blit.mat.uniforms.tSrc.value = rt.texture;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 2600);
+  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.3, 2600);
   await step(0.12);
 
   const charP = loadCharacter(o.character);   // download while the city builds
@@ -81,9 +87,17 @@ export async function start(o) {
     if (was < 40 && tipClock >= 40) hud.tipOnce("pause", TIPS.pause);
   };
 
-  // warm up: compile every shader and fill the shadow map before the first real frame
+  // PS1: nearest-neighbour textures everywhere; a soft dark blob under each person instead of a real shadow
+  crunch(scene);
+  const blobGeo = new THREE.CircleGeometry(0.42, 10).rotateX(-Math.PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const blob = (g) => { const m = new THREE.Mesh(blobGeo, blobMat); m.position.y = 0.03; m.renderOrder = 3; g.add(m); };
+  if (player.model) blob(player.model);
+  if (peds) for (const pd of peds.peds) blob(pd.h.group);
+
+  // warm up: compile every shader before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
-  renderer.compile(scene, camera); renderer.render(scene, camera);
+  const draw = () => { renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); };
+  renderer.compile(scene, camera); draw();
   await step(1);
 
   let running = false, last = 0, t = 0, raf = 0;
@@ -94,9 +108,9 @@ export async function start(o) {
     const avg = perf.sum / 90; perf.n = 0; perf.sum = 0;
     if (avg < 0.022 || perf.stage > 2) return;
     perf.stage++;
-    if (perf.stage === 1) { ratio = Math.max(0.75, ratio * 0.75); renderer.setPixelRatio(ratio); }
-    else if (perf.stage === 2) { if (peds) peds.limit = 10; renderer.shadowMap.enabled = false; scene.traverse((m) => { if (m.material) m.material.needsUpdate = true; }); }
-    else { ratio = Math.max(0.6, ratio * 0.8); renderer.setPixelRatio(ratio); }
+    if (perf.stage === 1) { if (peds) peds.limit = 14; }
+    else if (perf.stage === 2) { if (peds) peds.limit = 10; }
+    else { if (peds) peds.limit = 8; }
     console.info("Lowtide quality step", perf.stage, "avg frame", (avg * 1000).toFixed(1), "ms");
   }
   function loop(now) {
@@ -112,7 +126,7 @@ export async function start(o) {
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
-    renderer.render(scene, camera);
+    draw();
     adapt(dt);
   }
   addEventListener("resize", () => {

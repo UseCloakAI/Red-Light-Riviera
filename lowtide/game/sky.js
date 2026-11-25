@@ -3,7 +3,8 @@
    Shaders run through three's tone mapping and colour-space chunks so they
    match the lit geometry. */
 import * as THREE from "three";
-import { EDGE, SEA, BEACH_GLSL } from "./world.js?v=dev";
+import { EDGE, SEA, BEACH_GLSL, islandOutline } from "./world.js?v=dev";
+import { snapGLSL } from "./ps1.js?v=dev";
 
 const lin = (hex) => new THREE.Color(hex);   // three converts sRGB hex to linear
 export const PALETTE = {
@@ -62,35 +63,42 @@ export function buildSky(scene, renderer) {
     float bayer(vec2 p){ivec2 q=ivec2(mod(p,4.));int i=q.x+q.y*4;
       float m[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);return m[i]/16.-.47;}
     vec3 cut15(vec3 c,vec2 fc){return floor(c*31.+bayer(fc)*.9+.5)/31.;}
-    vec4 snap(vec4 c){c.xy=floor(c.xy/c.w*vec2(200.,113.)+.5)/vec2(200.,113.)*c.w;return c;}
+    ${snapGLSL()}
+    uniform sampler2D uMask;uniform vec4 uMaskBox;
+    bool land(vec2 p){vec2 q=(p-uMaskBox.xy)/uMaskBox.zw;return q.x>0.&&q.y>0.&&q.x<1.&&q.y<1.&&texture2D(uMask,vec2(q.x,1.-q.y)).r>.5;}
     float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}`;
   const SWELL = `float swell(vec2 p,float t){
       return .15*sin(dot(p,vec2(.018,-.105))+t*1.05)+.07*sin(dot(p,vec2(-.06,-.15))+t*1.6)+.045*sin(dot(p,vec2(.21,-.17))+t*2.5)+.025*sin(dot(p,vec2(-.33,-.26))+t*3.2);}`;
-  const LAND = new THREE.Vector4(EDGE.w, EDGE.n, EDGE.e, EDGE.s);
-  const wu = Object.assign({}, uniforms, { uDeep: { value: PALETTE.deep }, uFogC: { value: scene.fog.color }, uFogD: { value: scene.fog.density }, uLand: { value: LAND } });
+  // the island as a mask, so the sea stays off the land whatever shape the coast is
+  const MB = new THREE.Vector4(EDGE.w - 40, EDGE.n - 40, EDGE.e - EDGE.w + 80, EDGE.s - EDGE.n + 80);
+  const mc = document.createElement("canvas"); mc.width = mc.height = 512;
+  { const g = mc.getContext("2d"), P = islandOutline(); g.fillStyle = "#000"; g.fillRect(0, 0, 512, 512); g.fillStyle = "#fff"; g.beginPath();
+    P.forEach((p, k) => { const x = (p.x - MB.x) / MB.z * 512, y = (p.z - MB.y) / MB.w * 512; k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill(); }
+  const maskT = new THREE.CanvasTexture(mc); maskT.flipY = true;
+  const wu = Object.assign({}, uniforms, { uDeep: { value: PALETTE.deep }, uFogC: { value: scene.fog.color }, uFogD: { value: scene.fog.density }, uMask: { value: maskT }, uMaskBox: { value: MB } });
   const seaG = new THREE.PlaneGeometry(2, 2, 150, 150).rotateX(-Math.PI / 2), sp = seaG.attributes.position;
   const spread = (u) => Math.sign(u) * Math.pow(Math.abs(u), 2.3) * 2600;   // ~0.6 m cells near you, wide ones far out
   for (let k = 0; k < sp.count; k++) sp.setXYZ(k, spread(sp.getX(k)), 0, spread(sp.getZ(k)));
   seaG.computeBoundingSphere();
   const water = new THREE.Mesh(seaG, new THREE.ShaderMaterial({
     uniforms: wu, fog: false, transparent: true,
-    vertexShader: BEACH_GLSL + PS1 + SWELL + `uniform float uTime;uniform vec4 uLand;varying vec3 vW;
+    vertexShader: BEACH_GLSL + PS1 + SWELL + `uniform float uTime;varying vec3 vW;
     void main(){
       vec4 w=modelMatrix*vec4(position,1.);
-      float depth=w.z>uLand.w?(${SEA.toFixed(2)})-beachY(w.xz):8.;
+      float depth=w.z>promenade(w.x)?(${SEA.toFixed(2)})-beachY(w.xz):8.;
       float amp=clamp(depth/1.4,.12,1.)*(1.-smoothstep(500.,1600.,distance(w.xz,cameraPosition.xz)));
       w.y=(${SEA.toFixed(2)})+swell(w.xz,uTime)*amp;
-      if(w.x>uLand.x&&w.x<uLand.z&&w.z>uLand.y&&w.z<uLand.w)w.y-=4.;      // under the island: out of sight
-      vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,   // no PS1 snap here: on a beach this flat it shoves the waterline about and the sand pokes through
-    fragmentShader: SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;uniform vec4 uLand;varying vec3 vW;
+      if(land(w.xz))w.y-=4.;      // under the island: out of sight
+      vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,   // the same snap as the sand, so they move together
+    fragmentShader: SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;varying vec3 vW;
     void main(){
-      if(vW.x>uLand.x&&vW.x<uLand.z&&vW.z>uLand.y&&vW.z<uLand.w)discard;
+      if(land(vW.xz))discard;
       vec3 N=normalize(cross(dFdx(vW),dFdy(vW)));if(N.y<0.)N=-N;                  // one normal per facet
       vec3 V=normalize(cameraPosition-vW);float dist=length(cameraPosition-vW);
       vec3 R=reflect(-V,N);R.y=abs(R.y)+.01;
       float F=.04+.96*pow(1.-max(dot(N,V),0.),5.);
       // the water's own colour by depth: sand showing through, then teal, then the deep; the sky reflects on top
-      float depth=vW.z>uLand.w?vW.y-beachY(vW.xz):9.;
+      float depth=vW.z>promenade(vW.x)?vW.y-beachY(vW.xz):9.;
       vec3 body=mix(mix(vec3(.42,.3,.2),vec3(.06,.24,.26),smoothstep(0.,.7,depth)),uDeep,smoothstep(.9,4.5,depth));
       vec3 col=mix(body,skyCol(normalize(R),false),F);
       float s=max(dot(R,uSunDir),0.);col+=uSun*(step(.99,s)*step(hash(floor(vW.xz*1.5)+floor(uTime*5.)),.45)*2.2+pow(s,40.)*.35);   // the sun path breaks into glitter
@@ -102,7 +110,6 @@ export function buildSky(scene, renderer) {
       gl_FragColor=vec4(col,a);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-      gl_FragColor.rgb=cut15(gl_FragColor.rgb,gl_FragCoord.xy);
     }`
   }));
   water.receiveShadow = false; water.frustumCulled = false; water.renderOrder = 1;
@@ -112,12 +119,13 @@ export function buildSky(scene, renderer) {
      dark and wet for a moment. Sets of waves vary along the beach. Drawn in quarter-metre
      blocks so it reads as pixels, like the rest of the sea. */
   const swG = new THREE.PlaneGeometry(EDGE.e - EDGE.w + 60, 60, Math.ceil((EDGE.e - EDGE.w + 60) / 3), 80).rotateX(-Math.PI / 2);
-  swG.translate((EDGE.w + EDGE.e) / 2, 0, EDGE.s + 12 + 30);
+  swG.translate((EDGE.w + EDGE.e) / 2, 0, 258);
   const swash = new THREE.Mesh(swG, new THREE.ShaderMaterial({
     uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
-    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
     fragmentShader: BEACH_GLSL + PS1 + `uniform float uTime;uniform vec3 uFogC,uLow;uniform float uFogD;varying vec3 vW;
     void main(){
+      if(vW.z<promenade(vW.x)+4.)discard;
       vec2 q=floor(vW.xz*4.)/4.+.125;float h=beachY(q);
       float ph=uTime/7.+.35*sin(q.x*.013+.5)+.2*sin(q.x*.041+2.);float set=floor(ph),p=fract(ph);
       float run=p<.3?1.-pow(1.-p/.3,2.):1.-smoothstep(0.,1.,(p-.3)/.7);              // rushes up, slides back
@@ -137,7 +145,6 @@ export function buildSky(scene, renderer) {
       gl_FragColor=vec4(col,a);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-      gl_FragColor.rgb=cut15(gl_FragColor.rgb,gl_FragCoord.xy);
     }`
   }));
   swash.renderOrder = 2; swash.frustumCulled = false;

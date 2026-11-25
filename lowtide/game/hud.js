@@ -1,7 +1,7 @@
 /* HUD: a rotating radar drawn from the world's own layout, area names as you
    cross into a district, a help box, cash and wanted stars. Plain canvas and
    DOM, so it costs next to nothing. */
-import { DISTRICT_NAMES, waterline } from "./world.js?v=dev";
+import { DISTRICT_NAMES, waterline, promenade } from "./world.js?v=dev";
 
 const S = 1.5;   // map pixels per metre
 
@@ -9,16 +9,26 @@ export function drawMap(world) {
   const { EDGE, PIER, map } = world, pad = 60;
   const x0 = EDGE.w - pad, z0 = EDGE.n - pad, x1 = EDGE.e + pad, z1 = PIER.z1 + 30;
   const c = document.createElement("canvas"); c.width = Math.ceil((x1 - x0) * S); c.height = Math.ceil((z1 - z0) * S);
-  const g = c.getContext("2d"), X = (x) => (x - x0) * S, Z = (z) => (z - z0) * S, rect = (a, b, cc, d) => g.fillRect(X(a), Z(b), (cc - a) * S, (d - b) * S);
+  const g = c.getContext("2d"), X = (x) => (x - x0) * S, Z = (z) => (z - z0) * S;
+  const poly = (P, fill) => { g.beginPath(); P.forEach((p, k) => (k ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z)))); g.closePath(); g.fillStyle = fill; g.fill(); };
   g.fillStyle = "#0E2436"; g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = "#8C7A58"; g.beginPath(); g.moveTo(X(EDGE.w - 30), Z(EDGE.s));          // beach, out to the real waterline
+  // the beach, out to the real waterline; the island
+  g.fillStyle = "#8C7A58"; g.beginPath(); g.moveTo(X(EDGE.w - 30), Z(promenade(EDGE.w - 30)));
   for (let x = EDGE.w - 30; x <= EDGE.e + 30; x += 4) g.lineTo(X(x), Z(waterline(x)));
-  g.lineTo(X(EDGE.e + 30), Z(EDGE.s)); g.closePath(); g.fill();
-  g.fillStyle = "#5E6A80"; rect(EDGE.w, EDGE.n, EDGE.e, EDGE.s);                          // roads
-  for (const [a, b, cc, d] of map.blocks) { g.fillStyle = "#1B2433"; rect(a, b, cc, d); }
-  for (const [a, b, cc, d] of map.parks) { g.fillStyle = "#2B4C34"; rect(a, b, cc, d); }
-  for (const [a, b, cc, d] of map.buildings) { g.fillStyle = "#26324A"; rect(a, b, cc, d); }
-  g.fillStyle = "#7A6248"; rect(PIER.x0, PIER.z0, PIER.x1, PIER.z1);                     // pier
+  for (let x = EDGE.e + 30; x >= EDGE.w - 30; x -= 4) g.lineTo(X(x), Z(promenade(x)));
+  g.closePath(); g.fill();
+  poly(map.outline, "#1B2433");
+  for (const P of map.parks) poly(P, "#2B4C34");
+  for (const P of map.lots) poly(P, "#20283a");
+  // streets: pavement, then road, so junctions read
+  g.lineCap = "round"; g.lineJoin = "round";
+  for (const [col, extra] of [["#3c4658", 6], ["#5E6A80", 0]]) for (const r of map.roads) {
+    g.strokeStyle = col; g.lineWidth = (r.w + extra) * S; g.beginPath();
+    r.pts.forEach((p, k) => (k ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z)))); g.stroke();
+  }
+  for (const b of map.buildings) poly(b.pts, b.h > 40 ? "#33405c" : "#26324A");
+  for (const P of map.pools) poly(P, "#3f8fb0");
+  g.fillStyle = "#7A6248"; g.fillRect(X(PIER.x0), Z(PIER.z0), (PIER.x1 - PIER.x0) * S, (PIER.z1 - PIER.z0) * S);   // pier
   return { canvas: c, x0, z0 };
 }
 
@@ -144,6 +154,6 @@ export class Hud {
     ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "rgba(247,242,234,.7)"; ctx.font = "800 20px Archivo, sans-serif"; ctx.textAlign = "center";
     const label = (t, x, z) => ctx.fillText(t.toUpperCase(), ox + (x - this.map.x0) * S * s, oy + (z - this.map.z0) * S * s);
-    label("Downtown", 0, -200); label("Port Salt", -224, -40); label("Midtown", 120, 40); label("Tideline", -60, 250); label("Palm Square", 0, 0);
+    for (const [t, x, z] of this.world.map.labels) label(t, x, z);
   }
 }
