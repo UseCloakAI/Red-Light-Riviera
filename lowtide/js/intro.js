@@ -429,21 +429,29 @@
   }
 
   /* ---- pause ---- */
+  var pauseT = 0;
   function openPause(t) {
+    if (state === "pause") { setTab(t); return; }
+    if (base === "game" && GAME && GAME.traveling) return;
     state = "pause"; show("pause"); LT.ui.select(); LT.pause(true);
     el.pause.classList.toggle("ingame", base === "game");
-    if (base === "game") { GAME.pause(); var pm = $(".pmap"); GAME.drawMap(pm.getContext("2d"), pm.width, pm.height); }
+    if (base === "game") GAME.pause();
+    if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
     var s0 = cueNow();
     play(el.pause, [{ opacity: 0 }, { opacity: 1 }], 280, s0, E.out);
     play(el.ptop, [{ opacity: 0, transform: "translateY(-16px)" }, { opacity: 1, transform: "none" }], 520, s0 + 0.04, E.out);
     play(el.pbody, [{ opacity: 0, transform: "translateY(22px)" }, { opacity: 1, transform: "none" }], 580, s0 + 0.12, E.out);
-    tab = t; setTab(t, true, true);
+    MV.pick = null; MV.hover = null; MV.zoom = 1; MV.cx = MV.cz = null;
+    tab = t; refresh(); setTab(t, true, true);
+    clearInterval(pauseT); pauseT = setInterval(function () { if (state === "pause") { header(); if (tab === 0) ftInfo(); } }, 500);
   }
-  function closePause() {
+  // after: what happens once the menu is gone (default: back to the game, click to play)
+  function closePause(after) {
     var toGame = base === "game";
-    state = toGame ? "game" : "menu"; LT.ui.back(); LT.pause(false);
+    clearInterval(pauseT);
+    state = toGame ? "game" : "menu"; if (!after) LT.ui.back(); LT.pause(false);
     var a = play(el.pause, [{ opacity: 1 }, { opacity: 0 }], 200, cueNow(), E.in, "forwards");
-    a.finished.then(function () { show(base); if (toGame) { GAME.resume(); clickToPlay(true); } }).catch(function () {});
+    a.finished.then(function () { show(base); if (toGame) { if (after) after(); else { GAME.resume(); clickToPlay(true); } } }).catch(function () {});
   }
   function setTab(i, quiet, instant) {
     var dir = i === tab ? 0 : (i > tab ? 1 : -1);
@@ -456,6 +464,148 @@
     if (instant) { void el.ink.offsetWidth; el.ink.style.transition = ""; }
     if (dir) play(panels[tab], [{ opacity: 0, transform: "translateX(" + dir * 28 + "px)" }, { opacity: 1, transform: "none" }], 360, cueNow(), E.out, "none");
     if (!quiet) LT.ui.tab();
+    refresh();
+  }
+  function ingame() { return base === "game" && GAME; }
+  function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function header() {
+    if (!ingame()) return; var h = GAME.header();
+    $(".p-area").textContent = h.area; $(".p-clock").textContent = h.clock; $(".p-cash").textContent = h.cash;
+  }
+  function refresh() {
+    header();
+    if (tab === 0) mapDraw();
+    else if (tab === 1) renderBrief();
+    else if (tab === 2) renderStats();
+    else if (tab === 3) renderSettings();
+    else if (tab === 4) renderGame();
+  }
+
+  /* map + fast travel: click to set a point (it snaps to the nearest street if you pick a roof), wheel to zoom, drag to pan */
+  var MV = { zoom: 1, cx: null, cz: null, pick: null, hover: null, T: null }, drag = null, pmap = $(".pmap");
+  var ft = { where: $(".ft-where"), note: $(".ft-note"), go: $(".ft-go"), cool: $(".ft-cool") };
+  function mapDraw() { if (!ingame()) return; MV.T = GAME.drawMap(pmap.getContext("2d"), pmap.width, pmap.height, MV); ftInfo(); }
+  function ftInfo() {
+    if (!ingame()) return;
+    var p = MV.pick, why = GAME.travelBlock();
+    ft.where.textContent = p ? (p.ok ? p.name : "Can't land there") : "Pick a spot";
+    ft.note.textContent = p ? (p.ok ? (p.snapped ? "The nearest street to your pick" : p.kind) + ", " + Math.round(p.dist) + " m from you." : p.reason) : "Click a street or open ground on the map. Never inside a building.";
+    ft.go.disabled = !(p && p.ok) || !!why;
+    ft.cool.textContent = why || "Fast travel ready"; ft.cool.classList.toggle("wait", !!why);
+  }
+  function evPos(e) { var r = pmap.getBoundingClientRect(); return [(e.clientX - r.left) * pmap.width / r.width, (e.clientY - r.top) * pmap.height / r.height]; }
+  pmap.addEventListener("mousedown", function (e) { if (!MV.T) return; var p = evPos(e); drag = { x: p[0], y: p[1], cx: MV.T.cx, cz: MV.T.cz, moved: false }; });
+  addEventListener("mousemove", function (e) {
+    if (state !== "pause" || tab !== 0 || !MV.T) return;
+    var p = evPos(e);
+    if (drag) {
+      if (Math.abs(p[0] - drag.x) + Math.abs(p[1] - drag.y) > 6) { drag.moved = true; pmap.classList.add("drag"); }
+      if (drag.moved) { MV.cx = drag.cx - (p[0] - drag.x) / MV.T.scale; MV.cz = drag.cz - (p[1] - drag.y) / MV.T.scale; }
+    }
+    MV.hover = e.target === pmap ? MV.T.toWorld(p[0], p[1]) : null; mapDraw();
+  });
+  addEventListener("mouseup", function (e) {
+    if (!drag) return; var d = drag; drag = null; pmap.classList.remove("drag");
+    if (d.moved || e.target !== pmap || state !== "pause" || !ingame()) return;
+    var p = evPos(e), w = MV.T.toWorld(p[0], p[1]);
+    MV.pick = GAME.travelCheck(w.x, w.z); if (MV.pick.ok) LT.ui.move(); else LT.sfx.dry && LT.sfx.dry(); mapDraw();
+  });
+  pmap.addEventListener("dblclick", function () { travelGo(); });
+  pmap.addEventListener("wheel", function (e) {
+    if (!MV.T) return; e.preventDefault();
+    var p = evPos(e), w = MV.T.toWorld(p[0], p[1]), z = Math.max(1, Math.min(6, MV.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2))), sc = MV.T.base * z;
+    MV.cx = w.x - (p[0] - pmap.width / 2) / sc; MV.cz = w.z - (p[1] - pmap.height / 2) / sc; MV.zoom = z; mapDraw();
+  }, { passive: false });
+  ft.go.addEventListener("click", function () { travelGo(); });
+  function travelGo() {
+    if (!ingame() || ft.go.disabled) { LT.ui.back(); return; }
+    var spot = MV.pick; MV.pick = null; LT.ui.select();
+    closePause(function () { if (!GAME.fastTravel(spot, function () { clickToPlay(true); })) { GAME.resume(); clickToPlay(true); } });
+  }
+
+  /* brief: everything said around you and every tip, newest first */
+  function renderBrief() {
+    var ol = $(".brief .log"), L = ingame() ? GAME.brief() : [];
+    ol.innerHTML = L.length ? L.map(function (b) { return '<li class="' + b.kind + '"><time>' + esc(b.at) + "</time><span>" + esc(b.text) + "</span></li>"; }).join("")
+      : '<li class="empty">' + (ingame() ? "Nothing yet. What people say and the tips you get land here." : "Start Story Mode and what people say lands here.") + "</li>";
+  }
+  function renderStats() {
+    var box = $(".stats"), L = ingame() ? GAME.stats() : [];
+    box.innerHTML = L.length ? L.map(function (r) { return "<div><b>" + esc(r[1]) + "</b><span>" + esc(r[0]) + "</span></div>"; }).join("") : '<div class="wide"><span>Start Story Mode to keep stats.</span></div>';
+  }
+
+  /* settings: everything here is live and saved */
+  var SROWS = [
+    { k: "master", label: "Master volume", min: 0, max: 100, step: 10, bar: true },
+    { k: "music", label: "Music", min: 0, max: 100, step: 10, bar: true },
+    { k: "sfx", label: "Sound effects", min: 0, max: 100, step: 10, bar: true },
+    { k: "voices", label: "Voices", min: 0, max: 100, step: 10, bar: true },
+    { k: "sens", label: "Mouse sensitivity", min: 20, max: 300, step: 10, fmt: function (v) { return (v / 100).toFixed(1) + "x"; } },
+    { k: "invert", label: "Invert look", bool: true },
+    { k: "fov", label: "Field of view", min: 55, max: 95, step: 5, fmt: function (v) { return v + "°"; } },
+    { k: "shake", label: "Camera shake", bool: true },
+    { k: "subtitles", label: "Subtitles", bool: true },
+    { k: "pixels", label: "Resolution", choice: [[200, "Crunchy, 200 lines"], [270, "Classic, 270 lines"], [360, "Sharp, 360 lines"], [480, "Clean, 480 lines"]], note: "Takes effect the next time the island loads" },
+    { act: "tips", label: "Show tips again" },
+    { act: "reset", label: "Restore defaults" }
+  ], ssel = 0;
+  function sval(r) {
+    var v = LT_SET.get(r.k);
+    if (r.bool) return v ? "On" : "Off";
+    if (r.choice) { for (var i = 0; i < r.choice.length; i++) if (r.choice[i][0] === v) return r.choice[i][1]; return String(v); }
+    if (r.bar) return '<span class="bar"><i style="width:' + v + '%"></i></span> ' + v;
+    return r.fmt ? r.fmt(v) : String(v);
+  }
+  function renderSettings() {
+    var ul = $(".settings");
+    ul.innerHTML = SROWS.map(function (r, i) {
+      var right = r.act ? "" : '<span class="sv"><button data-d="-1" aria-label="Less">‹</button><em>' + sval(r) + '</em><button data-d="1" aria-label="More">›</button></span>';
+      return '<li data-i="' + i + '" class="' + (i === ssel ? "sel" : "") + (r.act ? " act" : "") + '"><div>' + r.label + (r.note ? "<small>" + r.note + "</small>" : "") + "</div>" + right + "</li>";
+    }).join("");
+    var cur = ul.querySelector("li.sel"); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+  }
+  function sChange(i, d) {
+    var r = SROWS[i]; if (!r) return;
+    if (r.act === "tips") { try { localStorage.removeItem("lowtide_tips"); } catch (e) { /* */ } LT.ui.select(); r.label = "Tips will show again"; renderSettings(); return; }
+    if (r.act === "reset") { LT_SET.reset(); LT.ui.select(); renderSettings(); return; }
+    var v = LT_SET.get(r.k);
+    if (r.bool) v = !v;
+    else if (r.choice) { var k = 0; r.choice.forEach(function (c, j) { if (c[0] === v) k = j; }); v = r.choice[(k + (d || 1) + r.choice.length) % r.choice.length][0]; }
+    else v = Math.max(r.min, Math.min(r.max, v + (d || 1) * r.step));
+    LT_SET.set(r.k, v); LT.ui.move(); renderSettings();
+  }
+  $(".settings").addEventListener("click", function (e) {
+    var li = e.target.closest("li"); if (!li) return; ssel = +li.dataset.i;
+    var b = e.target.closest("button"); var r = SROWS[ssel];
+    if (b) sChange(ssel, +b.dataset.d); else if (r.bool || r.act || r.choice) sChange(ssel, 1); else renderSettings();
+  });
+  function settingsKey(k) {
+    if (k === "ArrowDown" || k === "s" || k === "S") { ssel = (ssel + 1) % SROWS.length; LT.ui.move(); renderSettings(); }
+    else if (k === "ArrowUp" || k === "w" || k === "W") { ssel = (ssel - 1 + SROWS.length) % SROWS.length; LT.ui.move(); renderSettings(); }
+    else if (k === "ArrowRight" || k === "d" || k === "D") sChange(ssel, 1);
+    else if (k === "ArrowLeft" || k === "a" || k === "A") sChange(ssel, -1);
+    else if (k === "Enter" || k === " ") sChange(ssel, 1);
+  }
+
+  /* game: resume, the map, back to the title */
+  var gsel = 0;
+  function gacts() {
+    return ingame() ? [
+      { label: "Resume", sub: "Back to Marlowe Keys", go: function () { closePause(); } },
+      { label: "Map and fast travel", sub: GAME.travelBlock() || "Ready", go: function () { setTab(0); } },
+      { label: "Quit to title", sub: "Unsaved progress on the island is lost", go: function () { location.href = location.pathname + "?scene=menu"; } }
+    ] : [{ label: "Back", sub: "To the main menu", go: function () { closePause(); } }];
+  }
+  function renderGame() {
+    var A = gacts(); gsel = Math.min(gsel, A.length - 1);
+    $(".g-acts").innerHTML = A.map(function (a, i) { return '<li data-i="' + i + '" class="' + (i === gsel ? "sel" : "") + '">' + a.label + "<small>" + esc(a.sub) + "</small></li>"; }).join("");
+  }
+  $(".g-acts").addEventListener("click", function (e) { var li = e.target.closest("li"); if (!li) return; gsel = +li.dataset.i; LT.ui.select(); gacts()[gsel].go(); });
+  function gameKey(k) {
+    var A = gacts();
+    if (k === "ArrowDown" || k === "s" || k === "S") { gsel = (gsel + 1) % A.length; LT.ui.move(); renderGame(); }
+    else if (k === "ArrowUp" || k === "w" || k === "W") { gsel = (gsel - 1 + A.length) % A.length; LT.ui.move(); renderGame(); }
+    else if (k === "Enter" || k === " ") { LT.ui.select(); A[gsel].go(); }
   }
 
   /* ---- input ---- */
@@ -469,12 +619,22 @@
       else if (k === "Enter" || k === " ") choose();
       return;
     }
-    if (state === "game") { if (k === "Escape") openPause(0); return; }
+    if (state === "game") {
+      if (k === "Escape") openPause(0);
+      else if ((k === "m" || k === "M") && !e.repeat && GAME && !GAME.traveling) openPause(0);   // the map
+      return;
+    }
     if (state === "creator" || state === "loading-game") return;
     if (state === "pause") {
-      if (k === "e" || k === "E" || k === "ArrowRight") setTab(tab + 1);
-      else if (k === "q" || k === "Q" || k === "ArrowLeft") setTab(tab - 1);
+      if (k === "e" || k === "E") setTab(tab + 1);
+      else if (k === "q" || k === "Q") setTab(tab - 1);
       else if (k === "Escape" || k === "Backspace") closePause();
+      else if (tab === 3) { e.preventDefault(); settingsKey(k); }
+      else if (tab === 4 && k !== "ArrowRight" && k !== "ArrowLeft") { e.preventDefault(); gameKey(k); }
+      else if (tab === 0 && k === "Enter") travelGo();
+      else if (tab === 0 && (k === "m" || k === "M") && !e.repeat) closePause();
+      else if (k === "ArrowRight") setTab(tab + 1);
+      else if (k === "ArrowLeft") setTab(tab - 1);
     }
   });
   el.gate.addEventListener("click", begin);

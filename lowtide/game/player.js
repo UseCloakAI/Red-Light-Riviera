@@ -171,12 +171,13 @@ export class CamRig {
   constructor(camera, world, yaw) {
     this.cam = camera; this.w = world; this.yaw = yaw + Math.PI; this.pitch = 0.16; this.dist = 4.3;
     this.pivot = new THREE.Vector3(); this.cur = null; this.fov = 70; this.shake = 0; this.aim = 0; this.recoil = 0; this.slow = 1; this.car = null; this.idle = 0;
+    this.sens = 1; this.invert = false; this.baseFov = 70; this.shakeMul = 1;   // from the settings
   }
   update(dt, input, player) {
-    const [dx, dy] = input.take(), sens = 0.0022 * (1 - this.aim * 0.35) * this.slow;
+    const [dx, dy] = input.take(), sens = 0.0022 * this.sens * (1 - this.aim * 0.35) * this.slow;
     // recoil kicks the view up; the player pulls it back down
     const kick = this.recoil * Math.min(1, dt * 30); this.recoil -= kick;
-    this.yaw -= dx * sens; this.pitch = THREE.MathUtils.clamp(this.pitch + dy * sens - kick, -0.45 - this.aim * 0.4, 1.15);
+    this.yaw -= dx * sens; this.pitch = THREE.MathUtils.clamp(this.pitch + dy * sens * (this.invert ? -1 : 1) - kick, -0.45 - this.aim * 0.4, 1.15);
     // in a car: sit higher and further back, and swing round behind it once the mouse is left alone
     this.idle = dx || dy ? 0 : this.idle + dt;
     if (this.car) {
@@ -198,9 +199,9 @@ export class CamRig {
     pos.y = Math.max(pos.y, this.w.heightAt(pos.x, pos.z) + 0.3);
     if (!this.cur) this.cur = pos.clone(); else this.cur.lerp(pos, t < 1 ? 1 : 1 - Math.exp(-dt * 25));
     this.cam.position.copy(this.cur);
-    if (this.shake > 0) this.cam.position.add(new THREE.Vector3((Math.random() - 0.5) * this.shake * 0.3, (Math.random() - 0.5) * this.shake * 0.3, 0));
+    if (this.shake > 0 && this.shakeMul > 0) { const k = this.shake * this.shakeMul * 0.3; this.cam.position.add(new THREE.Vector3((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, 0)); }
     this.cam.lookAt(look);
-    const fov = this.car ? 70 + Math.min(10, Math.abs(this.car.speed) * 0.35) : THREE.MathUtils.lerp(player.sprinting ? 76 : 70, 52, this.aim);
+    const F0 = this.baseFov, fov = this.car ? F0 + Math.min(10, Math.abs(this.car.speed) * 0.35) : THREE.MathUtils.lerp(player.sprinting ? F0 + 6 : F0, F0 - 18, this.aim);
     this.fov += (fov - this.fov) * Math.min(1, dt * (this.aim > 0.05 ? 10 : 4));
     if (Math.abs(this.cam.fov - this.fov) > 0.01) { this.cam.fov = this.fov; this.cam.updateProjectionMatrix(); }
   }

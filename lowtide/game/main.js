@@ -5,7 +5,7 @@
    then scaled up with hard pixels and a 15-bit dither. If frames still run
    long, the crowd thins. */
 import * as THREE from "three";
-import { buildWorld } from "./world.js?v=dev";
+import { buildWorld, DISTRICT_NAMES } from "./world.js?v=dev";
 import { buildSky } from "./sky.js?v=dev";
 import { Player, CamRig, Input } from "./player.js?v=dev";
 import { Hud } from "./hud.js?v=dev";
@@ -13,7 +13,8 @@ import { spawnPeds } from "./peds.js?v=dev";
 import { Arsenal } from "./weapons.js?v=dev";
 import { Vehicles } from "./vehicles.js?v=dev";
 import { Traffic } from "./traffic.js?v=dev";
-import { Life } from "./life.js?v=dev";
+import { Life, HOSPITAL } from "./life.js?v=dev";
+import { Travel } from "./travel.js?v=dev";
 import { Gore } from "./gore.js?v=dev";
 import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -41,6 +42,8 @@ export async function start(o) {
   const step = async (p, what) => { if (TIMING) { console.info("lowtide load", what || p, Math.round(performance.now() - tp), "ms"); tp = performance.now(); } if (o.progress) o.progress(p); await frame(); };
   await step(0.04);
 
+  const SET = window.LT_SET || { get: () => undefined, on: () => {} };
+  if ([200, 270, 360, 480].includes(SET.get("pixels"))) PS1.h = SET.get("pixels");   // the picture's line count (settings; read once)
   configure(innerWidth / innerHeight);   // before any material exists: the vertex snap goes into every shader
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", logarithmicDepthBuffer: true })   // log depth: the flat layers a few cm apart never fight, near or far;
   const ratio = 1;
@@ -96,11 +99,39 @@ export async function start(o) {
       if (c) { vehicles.impactCar(c, x, z, dx / L, dz / L, 4); vehicles.hurt(c, 9); break; }
     }
   };
+  /* ---- what the pause menu shows: stats, the brief (everything said and shown), the clock ---- */
+  const stats = { played: 0, foot: 0, drive: 0, shots: 0, downed: 0, deaths: 0, bills: 0, wrecks: 0, lamps: 0, hydrants: 0, trips: 0, hijacks: 0 };
+  const wrap = (obj, name, fn) => { if (!obj || !obj[name]) return; const f = obj[name].bind(obj); obj[name] = (...a) => { const r = f(...a); fn(...a); return r; }; };
+  const shot0 = arsenal.onShot; arsenal.onShot = (pos, hit) => { stats.shots++; shot0(pos, hit); };
+  wrap(vehicles, "explode", () => stats.wrecks++);
+  wrap(vehicles, "breakLamp", () => stats.lamps++);
+  wrap(vehicles, "breakHydrant", () => stats.hydrants++);
+  wrap(vehicles, "enter", (c) => { if (c && c.ai !== undefined) stats.hijacks++; });
+  wrap(life, "die", () => stats.deaths++);
+  wrap(life, "respawn", () => { stats.bills += 150; });
+  if (peds && peds.damage) { const d0 = peds.damage.bind(peds); peds.damage = (pd, hit) => { const was = pd.dead; const r = d0(pd, hit); if (!was && pd.dead) stats.downed++; return r; }; }
+  let clockMin = 19 * 60 + 12;   // dusk on Marlowe Keys; a game minute every two seconds
+  const clockStr = () => { const m = Math.floor(clockMin) % 1440, h = Math.floor(m / 60), mm = m % 60; return ((h + 11) % 12 + 1) + ":" + String(mm).padStart(2, "0") + (h < 12 ? " AM" : " PM"); };
+  const brief = [];
+  const note = (kind, text) => { brief.unshift({ kind, text: text.replace(/\{([^}]+)\}/g, "[$1]"), at: clockStr() }); if (brief.length > 40) brief.pop(); };
+  let subsOn = true;
+  const sub0 = hud.subtitle.bind(hud); hud.subtitle = (t) => { note("said", t); if (subsOn) sub0(t); };
+  const tip0 = hud.tip.bind(hud); hud.tip = (t, ms) => { note("tip", t); tip0(t, ms); };
+  SET.on((k, v, S) => {
+    rig.sens = (S.sens || 100) / 100; rig.invert = !!S.invert; rig.baseFov = S.fov || 70; rig.shakeMul = S.shake === false ? 0 : 1; subsOn = S.subtitles !== false;
+    if (!subsOn && hud.subEl) hud.subEl.classList.remove("on");
+  });
+  // fast travel: haze thins with altitude so the island reads from the sky
+  const fogMats = []; scene.traverse((m) => { if (m.material && m.material.uniforms && m.material.uniforms.uFogD) fogMats.push(m.material.uniforms.uFogD); });
+  const FOG0 = scene.fog.density;
+  const setFog = (k) => { const d = FOG0 * (1 - 0.72 * k); scene.fog.density = d; for (const u of fogMats) u.value = d; };
+  const travel = new Travel({ world, player, rig, camera, blit, sfx: o.sfx || {}, hud, vehicles, life, setFog, onArrive: (sp) => { stats.trips++; hud.area = null; } });
+
   // key tips: the basics as you start, the rest the first time they matter
   const TIPS = {
     move: "{W} {A} {S} {D} to move. Hold {Shift} to sprint, {Space} to jump.",
     weapons: "Hold {Tab} for the weapon wheel. {1} {2} {3} pick a weapon too.",
-    pause: "{Esc} pauses the game and shows the map of Marlowe Keys.",
+    pause: "{Esc} pauses. {M} opens the map: pick a street there to fast travel.",
     wheel: "Point at a weapon, then let go of {Tab}. Time slows while you choose.",
     "equip:pistol": "Right click or {Q} to aim. Tap to lock the aim on, tap again to lower it. Click or {E} fires.",
     "equip:shotgun": "The shotgun loads one shell at a time. Fire to stop loading early.",
@@ -165,8 +196,16 @@ export async function start(o) {
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
     // a car first (it may take E for the door), then the gun, unless you're driving
+    clockMin += dt / 2; stats.played += dt;
+    if (travel.active) {   // the sky camera has the picture; the island keeps living under it
+      traffic.update(dt, player, vehicles, peds); gore.update(dt); vehicles.update(dt, { hit: () => false, down: () => false, keys: new Set() });
+      player.animate(dt); if (peds) peds.update(dt, player);
+      if (travel.update(dt)) { sky.update(t, player.pos, camera.position); draw(); return; }
+      input.take(); rig.update(dt, input, player);   // landed: the follow camera takes over from here
+    }
     const dw = dt * arsenal.timeScale * life.timeScale;
     let inCar = false;
+    const px0 = player.pos.x, pz0 = player.pos.z;
     traffic.update(dw, player, vehicles, peds);
     life.update(dt, input, dw); gore.update(dw);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
@@ -180,6 +219,7 @@ export async function start(o) {
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
+    { const m = Math.hypot(player.pos.x - px0, player.pos.z - pz0); if (m < 20) stats[inCar ? "drive" : "foot"] += m; }
     draw();
     adapt(dt);
   }
@@ -192,7 +232,20 @@ export async function start(o) {
     resume() { if (running) return; running = true; last = 0; input.active = true; raf = requestAnimationFrame(loop); },
     pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); },
     lock() { input.lock(); },
-    drawMap(ctx, w, h) { hud.drawFull(ctx, w, h, player); },
+    drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL }, opt)); },
+    // fast travel: check a map pick, why not now, go (done() once you've landed)
+    travelCheck(x, z) { return travel.check(x, z); },
+    travelBlock() { return travel.blocked(); },
+    get traveling() { return travel.active; },
+    fastTravel(spot, done) { const ok = travel.start(spot, done); if (ok) { input.keys.clear(); api.resume(); } return ok; },
+    header() { return { area: DISTRICT_NAMES[world.districtAt(player.pos.x, player.pos.z)] || "Marlowe Keys", clock: clockStr(), cash: "$" + hud.cash.toLocaleString("en-US") }; },
+    brief() { return brief; },
+    stats() {
+      const mi = (m) => (m / 1609.34).toFixed(1) + " mi", tm = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return h ? h + "h " + m + "m" : m + "m " + Math.floor(s % 60) + "s"; };
+      return [["Time on the island", tm(stats.played)], ["On foot", mi(stats.foot)], ["Driven", mi(stats.drive)], ["Fast trips", stats.trips],
+        ["Shots fired", stats.shots], ["People downed", stats.downed], ["Cars wrecked", stats.wrecks], ["Cars taken", stats.hijacks],
+        ["Lamp posts flattened", stats.lamps], ["Hydrants burst", stats.hydrants], ["Times flatlined", stats.deaths], ["Hospital bills", "$" + stats.bills.toLocaleString("en-US")]];
+    },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
     rig, world, arsenal, vehicles, traffic, life, get peds() { return peds; }
   };

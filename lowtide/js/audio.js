@@ -113,10 +113,11 @@
     B.seq = G(1); B.seq.connect(B.sfx);          // intro cues live here so a skip can cut them
     B.ui = G(0.75); B.ui.connect(out); send(B.ui, plate, 0.16);
     B.amb = G(0);
-    B.song = G(0); B.song.connect(out);           // the loading-screen song
+    B.mtrim = G(0.7); B.mtrim.connect(out);      // music level (settings)
+    B.song = G(0); B.song.connect(B.mtrim);       // the loading-screen song
     // voices: their own bus (rumble cut, presence lift, a firm compressor) so people read over the street;
     // while anyone speaks or screams, the beds under them (sea, wind, engines, hiss) duck out of the way
-    B.under = G(1); B.under.connect(out); B.amb.connect(B.under);
+    B.under = G(1); B.btrim = G(1); chain(B.under, B.btrim, out); B.amb.connect(B.under);
     B.loop = G(1); B.loop.connect(B.under);       // engines, hydrant hiss
     B.vox = G(1.15);
     var vh = F("highpass", 120, 0.7), vp = F("peaking", 2600, 0.9), vc = ctx.createDynamicsCompressor(); vp.gain.value = 5;
@@ -124,7 +125,7 @@
     chain(B.vox, vh, vp, vc, out);
 
     // music: everything feeds a tone filter so the pause menu can muffle it
-    B.mus = G(0); B.tone = F("lowpass", 18000, 0.6); chain(B.mus, B.tone, out);
+    B.mus = G(0); B.tone = F("lowpass", 18000, 0.6); chain(B.mus, B.tone, B.mtrim);
     B.bed = G(1); B.bed.connect(B.tone);          // pre-rendered music + ocean loop
     mverb = verb(2.8, 2.6, 0.02, 5200, 0.55, B.tone);
     echo = pingpong(60 / C.bpm * 0.75, B.tone);
@@ -138,6 +139,7 @@
     send(B.lead, mverb, 0.42); send(B.lead, echo, 0.32);
 
     if (!given) timer = setInterval(function () { pump(ctx.currentTime + 0.25); }, 25);
+    if (window.LT_SET && !given) LT_SET.on(function (k, v, S) { mix(S); });
     return ctx;
   }
 
@@ -311,6 +313,14 @@
     while (W.on && W.next < until) wave();
   }
 
+  // the settings' levels (0-100): master, music, effects (and the beds under them), voices
+  function mix(S) {
+    if (!ctx || !out) return; var t = now(), lv = function (k, d) { var v = S[k]; return (v === undefined ? d : v) / 100; };
+    out.gain.setTargetAtTime(0.8 * lv("master", 100), t, 0.05);
+    B.mtrim.gain.setTargetAtTime(lv("music", 70), t, 0.05);
+    B.sfx.gain.setTargetAtTime(lv("sfx", 100), t, 0.05); B.btrim.gain.setTargetAtTime(lv("sfx", 100), t, 0.05);
+    B.vox.gain.setTargetAtTime(1.15 * lv("voices", 100), t, 0.05);
+  }
   // pull the beds down while a voice is heard, back up after
   var duckEnd = 0;
   function duck(dur, depth) {
@@ -559,6 +569,44 @@
       duck(n / rate + 0.1, 0.55);
       src.start(t);
     },
+    /* fast travel, the switch: each cut of the camera is air ripping past (noise
+       through a sweeping band), a sub thump you feel, a shutter tick, and a dark
+       stab that climbs a step with each cut going up and falls going down. */
+    switchHop: function (up, k) {
+      if (!ctx) return; var t = now(), lvl = [0.8, 0.9, 1][k] || 0.9, bus = G(lvl); bus.connect(B.sfx); send(bus, hall, 0.3); send(bus, street(), 0.15);
+      var n = noise("pink", t, 1.0), bp = F("bandpass", up ? 260 : 3200, 1.3), g = G(0);
+      bp.frequency.exponentialRampToValueAtTime(up ? 2400 + k * 900 : 220, t + 0.6);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55, t + 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85); chain(n, bp, P(up ? -0.3 : 0.3), g, bus);
+      var w = noise("white", t, 0.5), wh = F("highpass", 5000), wg = G(0); wg.gain.setValueAtTime(0.0001, t); wg.gain.exponentialRampToValueAtTime(0.12, t + 0.06); wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.45); chain(w, wh, wg, bus);
+      var o = O("sine", 92 - k * 8, t), og = G(0); o.frequency.exponentialRampToValueAtTime(30, t + 0.55); perc(og, t, 0.004, 1.0, 0.6); chain(o, og, bus); o.start(t); o.stop(t + 0.8);
+      var c = noise("white", t, 0.05), cb = F("bandpass", 2600, 3), cg = G(0); perc(cg, t, 0.0005, 0.5, 0.03); chain(c, cb, cg, bus);
+      var root = (up ? 40 + k * 3 : 46 - (2 - k) * 3), sl = F("lowpass", 900, 1.2), sg = G(0); sl.frequency.exponentialRampToValueAtTime(260, t + 0.7);
+      [0, 7, 10, 15].forEach(function (iv) { var so = O("sawtooth", mtof(root + iv), t); so.detune.value = (rnd() - 0.5) * 14; chain(so, sl); so.start(t); so.stop(t + 0.9); });
+      perc(sg, t, 0.006, 0.16, 0.75); chain(sl, sg, bus); send(sg, mverb, 0.3);
+    },
+    // up in the sky: wind across the lens, a low drone and a high airy shimmer, until the drop
+    skyBed: function () {
+      if (!ctx) return { stop: function () {} }; var t = now(), bus = G(0); bus.connect(B.sfx); send(bus, hall, 0.35);
+      bus.gain.setValueAtTime(0, t); bus.gain.linearRampToValueAtTime(1, t + 0.6);
+      var wd = noise("pink", t, 0, true), wb = F("bandpass", 700, 0.7), wl = O("sine", 0.23, t), wlg = G(400); chain(wl, wlg, wb.frequency); chain(wd, wb, G(0.22), bus);
+      var dl = F("lowpass", 320, 0.8), dg = G(0.09), nodes = [wd, wl];
+      [26, 26.08, 33].forEach(function (m) { var o = O("sawtooth", mtof(m), t); chain(o, dl); nodes.push(o); o.start(t); });
+      chain(dl, dg, bus);
+      var hg = G(0.018), hl = O("sine", 4.2, t), hlg = G(0.012); chain(hl, hlg, hg.gain); nodes.push(hl);
+      [74, 79, 86].forEach(function (m) { var o = O("sine", mtof(m), t); chain(o, hg); nodes.push(o); o.start(t); });
+      chain(hg, bus); send(hg, mverb, 0.6); wl.start(t); hl.start(t);
+      return { stop: function () { var t2 = now(); bus.gain.cancelScheduledValues(t2); bus.gain.setTargetAtTime(0, t2, 0.12); nodes.forEach(function (x) { x.stop(t2 + 0.8); }); } };
+    },
+    // touchdown: the last cut lands with a deep hit and a reversed swell into it
+    switchLand: function () {
+      if (!ctx) return; var t = now(), bus = G(1); bus.connect(B.sfx); send(bus, hall, 0.4); send(bus, street(), 0.3);
+      var o = O("sine", 62, t + 0.04), og = G(0); o.frequency.exponentialRampToValueAtTime(26, t + 1.2); perc(og, t + 0.04, 0.005, 1.2, 1.1); chain(o, og, bus); o.start(t); o.stop(t + 1.4);
+      var n = noise("brown", t, 0.9), nl = F("lowpass", 700), ng = G(0); perc(ng, t + 0.04, 0.004, 0.7, 0.6); chain(n, nl, ng, bus);
+      var r = noise("white", t - 0, 0.5), rb = F("highpass", 3000), rg = G(0); rg.gain.setValueAtTime(0.0001, t); rg.gain.exponentialRampToValueAtTime(0.1, t + 0.035); rg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5); chain(r, rb, rg, bus);
+      duck(0.1, 1);
+    },
+    // the world under the whole trip
+    duckAll: function (sec) { duck(sec || 6, 0.25); },
     // dying: a low thud and a long falling tone
     wasted: function () {
       if (!ctx) return; var t = now(), o = O("sawtooth", 220, t), lp = F("lowpass", 900, 1), g = G(0);
@@ -765,7 +813,7 @@
   window.LT = {
     loadBaked: loadBaked, bed: bed, playIntro: playIntro, startTitle: startTitle, cutIntro: function () { if (ctx) cutSeq(now()); },
     get baked() { return !!(BAKE.intro && BAKE.loop); },
-    init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix,
+    init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix, mix: function (S) { mix(S || (window.LT_SET ? LT_SET.all() : {})); },
     cue: { intro: cueIntro, skip: cueSkip },
     song: { play: songPlay, stop: songStop, get wanted() { return SONG.want; } },
     music: { start: musicStart, section: musicSection, stop: musicStop, get on() { return M.on; } },

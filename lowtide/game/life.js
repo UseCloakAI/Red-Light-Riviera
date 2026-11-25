@@ -9,7 +9,7 @@ import { findBones, Ragdoll } from "./rig.js?v=dev";
 import { lanePoint } from "./world.js?v=dev";
 
 const LINES = ["CMON BRO...", "DEAD", "REALLY?", "FLATLINED", "NOT AGAIN", "WHY", "UNLUCKY", "COME ON MAN", "BRUH", "\u{1F62D}", "\u{1F494}\u{1F494}\u{1F494}"];
-const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
+export const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
 const BILL = 150;
 // emoji lines draw as images (vendor/emoji), so they look the same on every device
 const emoji = (t) => [...t].map((c) => `<img class="emoji" src="vendor/emoji/${c.codePointAt(0).toString(16)}.png?v=dev" alt="${c}">`).join("");
