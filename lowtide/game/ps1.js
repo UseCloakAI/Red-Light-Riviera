@@ -2,8 +2,11 @@
    width to suit the screen) that is scaled up with hard pixels; every vertex in
    every material is snapped to that target's pixel grid (the wobble); textures
    are nearest-neighbour; the final image is cut to 15-bit colour with a 4x4
-   ordered dither. The sea and the swash use the same snap as the sand they meet,
-   so they move together and never open gaps. */
+   ordered dither. The wobble is half a target pixel, enough to read as PS1
+   without the world shaking. Flat ground layers (ground, roads, pavements, sand,
+   sea) don't snap at all: a snapped corner of a huge flat triangle tilts its
+   depth enough to push it through whatever lies a few centimetres above it.
+   They stack with depth offsets instead. */
 import * as THREE from "three";
 
 export const PS1 = { h: 270, w: 480 };
@@ -15,11 +18,13 @@ export function configure(aspect) {
   // every built-in material: snap clip-space xy to the low-res pixel grid
   THREE.ShaderChunk.project_vertex = THREE.ShaderChunk.project_vertex + `
   #ifndef PS1_NOSNAP
-  if (gl_Position.w > 0.0) { vec2 ps1g = vec2(${(PS1.w / 2).toFixed(1)}, ${(PS1.h / 2).toFixed(1)}); gl_Position.xy = floor(gl_Position.xy / gl_Position.w * ps1g + 0.5) / ps1g * gl_Position.w; }
+  if (gl_Position.w > 0.0) { vec2 ps1g = vec2(${PS1.w.toFixed(1)}, ${PS1.h.toFixed(1)}); gl_Position.xy = floor(gl_Position.xy / gl_Position.w * ps1g + 0.5) / ps1g * gl_Position.w; }
   #endif`;
 }
 // the same snap for hand-written shaders
-export const snapGLSL = () => `vec4 snap(vec4 c){if(c.w<=0.)return c;vec2 g=vec2(${(PS1.w / 2).toFixed(1)},${(PS1.h / 2).toFixed(1)});c.xy=floor(c.xy/c.w*g+.5)/g*c.w;return c;}`;
+export const snapGLSL = () => `vec4 snap(vec4 c){if(c.w<=0.)return c;vec2 g=vec2(${PS1.w.toFixed(1)},${PS1.h.toFixed(1)});c.xy=floor(c.xy/c.w*g+.5)/g*c.w;return c;}`;
+// flat ground layers: no snap, and a depth offset so they stack (lower factor = drawn over higher)
+export const flat = (offset = 0) => ({ defines: { PS1_NOSNAP: "" }, ...(offset ? { polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset } : {}) });
 
 // the upscale: tone map, 15-bit colour with an ordered dither, nearest-neighbour onto the screen
 export function makeBlit() {
