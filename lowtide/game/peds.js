@@ -4,7 +4,10 @@
 
    They walk the sidewalk loops around the blocks and cross at the zebra
    crossings to the next block, stop now and then, glance at the player as
-   they pass, sidestep a player running at them, and stagger if barged. They
+   they pass. Some stand about instead: pairs in conversation (nodding, shaking
+   their heads, taking turns) and people waiting by the buildings, who break up
+   after a while and walk on. Walkers
+   sidestep a player running at them, and stagger if barged. They
    are recycled out of sight as the player moves. Animation only runs near
    the camera, and the crowd shrinks if the machine is struggling. */
 import * as THREE from "three";
@@ -14,6 +17,8 @@ import { AMBIENT, BUMP } from "./lines.js?v=dev";
 
 const INSET = 1.5;                       // walk this far in from the lot edge (sidewalk is 3 m)
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.4;
+const PAIRS = 0.14, SOLO = 0.08;          // share of the crowd standing about, in pairs and alone
+const GESTURES = ["agree", "headShake"];
 
 function perimeter(L) { return 2 * ((L.x1 - L.x0) + (L.z1 - L.z0)); }
 // position and heading at distance s around the loop
@@ -53,6 +58,28 @@ export async function spawnPeds(scene, world, o = {}) {
     }
     pd.L = blocks[0]; pd.s = 0;
   }
+  // a spot by the buildings for someone (and maybe a friend) to stand and talk
+  function placeStand(pd, near) {
+    place(pd, near);
+    const L = pd.L; along(L, pd.s, tmp);
+    const ix = -tmp.dz, iz = tmp.dx, cx = tmp.x + ix * 0.75, cz = tmp.z + iz * 0.75;   // inward, toward the buildings
+    const out = Math.atan2(-ix, -iz), t = 25 + R() * 70, m = pd.st && pd.st.mate;
+    if (!m) { pd.st = { x: cx, z: cz, yaw: out + (R() - 0.5) * 1.2, t, lead: true, mate: null, s: pd.s }; return; }
+    // two people half facing each other, opened a little toward the street
+    const ax = cx - tmp.dx * 0.55, az = cz - tmp.dz * 0.55, bx = cx + tmp.dx * 0.55, bz = cz + tmp.dz * 0.55;
+    const yawA = Math.atan2(bx - ax, bz - az), yawB = yawA + Math.PI, open = 0.35;
+    pd.st = { x: ax, z: az, yaw: yawA - open * Math.sign(Math.sin(yawA - out)), t, lead: true, mate: m, s: pd.s - 0.55 };
+    m.st = { x: bx, z: bz, yaw: yawB - open * Math.sign(Math.sin(yawB - out)), t, lead: false, mate: pd, s: pd.s + 0.55 };
+    m.L = L; m.s = pd.s;
+  }
+  // done talking: walk on from where they stood
+  function breakUp(pd) {
+    // pick up from the spot on the loop, still 0.75 m toward the buildings; side eases back to the line
+    for (const q of [pd, pd.st.mate]) {
+      if (!q || !q.st) continue;
+      q.s = q.st.s; q.dir = R() < 0.5 ? 1 : -1; q.side = 0.75 * q.dir; q.pause = R() * 1.5; q.cross = null; q.st = null;
+    }
+  }
   // at a corner: maybe cross the road to the block beside or below/above
   function maybeCross(pd, k) {
     if (R() > CROSS_CHANCE) return false;
@@ -71,10 +98,10 @@ export async function spawnPeds(scene, world, o = {}) {
     const h = new Human(D, p, { lod: p.sex < 0.5 ? "female1605" : "male1591" });
     h.group.traverse((m) => { if (m.isMesh) { m.castShadow = m.name === "body"; m.receiveShadow = false; } });
     const mixer = new THREE.AnimationMixer(h.group), act = {};
-    for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); }
+    for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
     const pd = { h, mixer, act, head, neck, dir: R() < 0.5 ? 1 : -1, speed: 1.15 + R() * 0.45, pause: 0, wW: 1, rW: 0, first: true,
-      side: 0, look: 0, stagger: 0, cross: null };
+      side: 0, look: 0, stagger: 0, cross: null, st: null, gW: 0, gT: 0, gest: null };
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
     act.walk.time = R() * act.walk.getClip().duration;
@@ -86,8 +113,54 @@ export async function spawnPeds(scene, world, o = {}) {
     if (o.progress) o.progress((i + 1) / count);
     if (i % 3 === 2) await new Promise((r) => setTimeout(r));   // keep the loading bar moving
   }
+  // some of the crowd stands about instead of walking (spread through the list, so a lower limit keeps a mix)
+  for (let i = 0; i < peds.length; i++) {
+    const r = R(), a = peds[i], b = peds[i + 1];
+    if (r < PAIRS && b) { a.st = { mate: b }; a.first = b.first = true; placeStand(a, o.near || world.spawn); a.first = b.first = false; i++; }
+    else if (r < PAIRS + SOLO) { a.first = true; placeStand(a, o.near || world.spawn); a.first = false; }
+  }
 
   const look = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  // head and neck turn toward the player when they're close and in front
+  function glance(pd, g, toPx, toPz, d, dt) {
+    const fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y);
+    const facing = (toPx * fx + toPz * fz) / (d || 1);
+    const want = d < 6 && facing > -0.1 ? THREE.MathUtils.clamp(Math.atan2(toPx * fz - toPz * fx, toPx * fx + toPz * fz), -1.1, 1.1) : 0;
+    pd.look += (want - pd.look) * Math.min(1, dt * 3);
+    if (Math.abs(pd.look) > 0.01) {
+      look.setFromAxisAngle(up, pd.look * 0.55); pd.head.quaternion.premultiply(look);
+      look.setFromAxisAngle(up, pd.look * 0.3); pd.neck.quaternion.premultiply(look);
+    }
+    return facing;
+  }
+  function standing(pd, g, x, z, d, px, pz, dt) {
+    const st = pd.st, toPx = px - x, toPz = pz - z;
+    g.position.set(x, world.heightAt(x, z), z);
+    let yaw = st.yaw; if (pd.stagger > 0) { pd.stagger -= dt; yaw = Math.atan2(toPx, toPz); }
+    let dy = yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    g.rotation.y += dy * Math.min(1, dt * (pd.stagger > 0 ? 10 : 4));
+    g.visible = d < FAR;
+    if (d >= NEAR) return;
+    // in conversation: whoever's talking nods or shakes their head; the other mostly listens
+    pd.gT -= dt;
+    if (pd.gT <= 0) {
+      const talking = st.mate && (st.lead ? (st.turn = R() < 0.5) : !st.mate.st.turn);
+      const r = R();
+      pd.gest = st.mate ? (talking ? (r < 0.65 ? "agree" : r < 0.9 ? "headShake" : null) : (r < 0.25 ? "agree" : null)) : (r < 0.1 ? "headShake" : null);
+      pd.gT = 2 + R() * 3.5;
+      if (pd.gest && pd.act[pd.gest] && pd.act[pd.gest].getEffectiveWeight() < 0.05) pd.act[pd.gest].time = 0;
+    }
+    const gw = pd.gest && pd.act[pd.gest] ? (st.mate ? 0.8 : 0.5) : 0;
+    pd.gW += (gw - pd.gW) * Math.min(1, dt * 3);
+    pd.wW += (0 - pd.wW) * Math.min(1, dt * 6);
+    pd.act.walk.setEffectiveWeight(pd.wW);
+    for (const n of GESTURES) if (pd.act[n]) pd.act[n].setEffectiveWeight(n === pd.gest ? pd.gW : 0);
+    pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - (pd.gest ? pd.gW : 0)));
+    pd.mixer.update(dt);
+    const facing = glance(pd, g, toPx, toPz, d, dt);
+    if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z))); }
+    if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
+  }
   return {
     peds,
     set limit(n) { limit = Math.max(0, Math.min(count, n)); },
@@ -99,7 +172,11 @@ export async function spawnPeds(scene, world, o = {}) {
         const g = pd.h.group;
         if (idx >= limit) { g.visible = false; return; }
         let x, z, hx, hz;
-        if (pd.cross) {
+        const st = pd.st, lead = st && (st.lead ? pd : st.mate);
+        if (st) {
+          if (st.mate && peds.indexOf(st.mate) >= limit) { breakUp(pd); return; }   // their friend was culled: walk on
+          x = st.x; z = st.z; hx = Math.sin(st.yaw); hz = Math.cos(st.yaw);
+        } else if (pd.cross) {
           // on the zebra: straight across at a slightly brisker pace
           const c = pd.cross; if (pd.pause <= 0) c.t += (pd.speed * 1.1 * dt) / c.len;
           if (c.t >= 1) {
@@ -110,6 +187,15 @@ export async function spawnPeds(scene, world, o = {}) {
           along(pd.L, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx * pd.dir; hz = tmp.dz * pd.dir;
         }
         let d = Math.hypot(x - px, z - pz);
+        if (st) {
+          if (st.lead) {
+            st.t -= dt;
+            if (d > FAR) { placeStand(pd, player.pos); x = pd.st.x; z = pd.st.z; d = Math.hypot(x - px, z - pz); }
+            else if (st.t <= 0 && d > 12) { breakUp(pd); return; }   // never mid-glance with the player close by
+          }
+          if (!pd.st) return;                                        // the lead just walked off with us
+          return standing(pd, g, x, z, d, px, pz, dt);
+        }
         if (d > FAR) { place(pd, player.pos); along(pd.L, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx * pd.dir; hz = tmp.dz * pd.dir; d = Math.hypot(x - px, z - pz); }
 
         // the player a step ahead: wait; the player running at us: sidestep instead
@@ -145,19 +231,12 @@ export async function spawnPeds(scene, world, o = {}) {
           pd.wW += ((moving ? 1 : 0) - pd.wW) * Math.min(1, dt * 6);
           pd.act.walk.setEffectiveWeight(pd.wW); pd.act.idle.setEffectiveWeight(1 - pd.wW);
           pd.act.walk.timeScale = pd.speed / 1.45;
+          if (pd.gW > 0.001) { pd.gW *= Math.max(0, 1 - dt * 4); for (const n of GESTURES) if (pd.act[n]) pd.act[n].setEffectiveWeight(n === pd.gest ? pd.gW : 0); }
           pd.mixer.update(dt);
-          // glance at the player when they're close and in front of us
-          const fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y);
-          const facing = (toP.x * fx + toP.z * fz) / (d || 1);
-          const want = d < 6 && facing > -0.1 ? THREE.MathUtils.clamp(Math.atan2(toP.x * fz - toP.z * fx, toP.x * fx + toP.z * fz), -1.1, 1.1) : 0;
-          pd.look += (want - pd.look) * Math.min(1, dt * 3);
+          const facing = glance(pd, g, toP.x, toP.z, d, dt);
           // now and then, someone close says something
           if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z))); }
           if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
-          if (Math.abs(pd.look) > 0.01) {
-            look.setFromAxisAngle(up, pd.look * 0.55); pd.head.quaternion.premultiply(look);
-            look.setFromAxisAngle(up, pd.look * 0.3); pd.neck.quaternion.premultiply(look);
-          }
         }
       });
     },
