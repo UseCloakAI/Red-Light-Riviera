@@ -261,7 +261,7 @@ export class Vehicles {
     if (input.hit("KeyE") && Math.abs(c.speed) < 3) { this.exit(); return true; }
     const thr = (input.down("KeyW", "ArrowUp") ? 1 : 0) - (input.down("KeyS", "ArrowDown") ? 1 : 0), hand = input.down("Space");
     // throttle, brakes, reverse, rolling resistance and drag
-    const top = MAX * (0.45 + 0.55 * Math.min(1, c.health / 60));   // a hurt engine won't pull as hard
+    const top = MAX * (0.45 + 0.55 * Math.min(1, c.health / 60)) * (c.flats ? 0.42 : 1);   // a hurt engine won't pull as hard; shredded tyres even less
     if (thr > 0) c.speed += (c.speed < 0 ? 16 : 9 * Math.max(0, 1 - c.speed / top)) * dt;
     else if (thr < 0) c.speed -= (c.speed > 0 ? 16 : 6 * (1 + c.speed / REV)) * dt;
     else c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), 2.5 * dt);
@@ -270,6 +270,7 @@ export class Vehicles {
     // steering: less lock at speed; the handbrake lets the back step out
     const st = ((input.down("KeyA", "ArrowLeft") ? 1 : 0) - (input.down("KeyD", "ArrowRight") ? 1 : 0)) * 0.6 * (1 - Math.min(0.65, Math.abs(c.speed) / 38));
     c.steer += (st - c.steer) * Math.min(1, dt * 7);
+    if (c.flats) { c.steer += Math.sin(performance.now() / 160) * 0.05 * Math.min(1, Math.abs(c.speed) / 8); if (this.fx && Math.abs(c.speed) > 4 && Math.random() < dt * 20) this.fx.sparks(new THREE.Vector3(c.x - Math.sin(c.a) * 1.3, 0.15, c.z - Math.cos(c.a) * 1.3), 3, new THREE.Vector3(-Math.sin(c.a), 0.6, -Math.cos(c.a)), 3, 0xffc070, 0.25); }
     const yawRate = c.speed / WB * Math.tan(c.steer) * (hand ? 1.6 : 1);
     c.a += yawRate * dt;
     const fx = Math.sin(c.a), fz = Math.cos(c.a);

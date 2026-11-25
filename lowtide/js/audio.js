@@ -602,6 +602,14 @@
       if (!ctx) return; var t = now();
       [[52, 0], [55 + Math.min(4, n), 0.11]].forEach(function (k) { var o = O("sawtooth", mtof(k[0]), t + k[1]), lp = F("lowpass", 1400, 2), g = G(0); perc(g, t + k[1], 0.005, 0.1, 0.35); chain(o, lp, g, B.ui); o.start(t + k[1]); o.stop(t + k[1] + 0.5); });
     },
+    // a tyre going on a spike strip: a sharp pop and a rush of air
+    pop: function (dist) {
+      if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 12); if (v < 0.05) return;
+      var bus = G(v); bus.connect(B.sfx); send(bus, street(), 0.25);
+      var n = noise("white", t, 0.08), hp = F("highpass", 600), g = G(0); perc(g, t, 0.0005, 0.7, 0.05); chain(n, hp, g, bus);
+      var o = O("sine", 180, t), og = G(0); o.frequency.exponentialRampToValueAtTime(60, t + 0.08); perc(og, t, 0.001, 0.5, 0.08); chain(o, og, bus); o.start(t); o.stop(t + 0.15);
+      var h = noise("pink", t + 0.03, 0.9), hb = F("bandpass", 2400, 0.8), hg = G(0); hg.gain.setValueAtTime(0.0001, t + 0.03); hg.gain.exponentialRampToValueAtTime(0.18, t + 0.08); hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); chain(h, hb, hg, bus);
+    },
     // melee: the air a fist or a bat moves
     swing: function (kind, dist) {
       if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 8); if (v < 0.06) return;

@@ -153,7 +153,7 @@ export class Traffic {
       if (this.cars.some((o) => o.active && Math.hypot(o.x - p.x, o.z - p.z) < 22)) continue;
       Object.assign(c, { active: true, ai: true, w: l, next: null, s, x: p.x, z: p.z, y: this.world.heightAt(p.x, p.z), a: Math.atan2(p.dx, p.dz), speed: l.cruise * 0.7, steer: 0,
         wait: 0, still: 0, honk: 0, stun: 0, panic: 0, health: 100, wreck: false, go: false, bend: 0, lift: 0, taken: false });
-      this.driver(c); this.uncop(c);
+      this.driver(c); this.uncop(c); c.flats = false;
       if (c.body) { c.body.group.visible = true; }
       return true;
     }
@@ -257,7 +257,7 @@ export class Traffic {
       // the speed we'd like: our own, less on bends and while passing, more when getting out of trouble
       const k = Math.max(bend(c, c.s, 12), bend(c, c.s + 8, 14));
       if (c.yieldT > 0) c.yieldT -= dt;
-      let v0 = c.w.cruise * c.v0 * (panic ? 1.35 : 1) * (c.yieldT > 0 ? 0.35 : 1); v0 = Math.min(v0, Math.sqrt(4.2 / Math.max(1e-3, k)) * (panic ? 1.2 : 1));
+      let v0 = c.w.cruise * c.v0 * (panic ? 1.35 : 1) * (c.yieldT > 0 ? 0.35 : 1) * (c.flats ? 0.35 : 1); v0 = Math.min(v0, Math.sqrt(4.2 / Math.max(1e-3, k)) * (panic ? 1.2 : 1));
       // the leader: nearest thing ahead in the strip we're steering into
       const lc = c.offT - c.off;
       let gap = Infinity, lv = 0, byPlayer = false, lead = null, edge = 0;
@@ -386,12 +386,13 @@ export class Traffic {
   get sirens() { return this._sir || (this._sir = []); }
   uncop(c) { c.cop = false; c.pursue = false; c.siren = false; c.deployed = false; c.target = null; c.yieldT = 0; this.meshes[0].setColorAt(c.i, _c.set(c.color)); this.meshes[0].instanceColor.needsUpdate = true; }
   // a patrol car out of sight around `near`, sent after `target` ({x, z}); returns the car or null
-  spawnCop(near, target) {
+  spawnCop(near, target, opt = {}) {
+    const lo = opt.min ?? 70, hi = opt.max ?? 140;
     const c = this.cars.find((k) => !k.active && !k.taken && !k.wreck); if (!c) return null;
     for (let tries = 0; tries < 60; tries++) {
       let r = this.R() * this.total, l = this.lanes[0]; for (const m of this.lanes) { r -= m.L; if (r <= 0) { l = m; break; } }
       const s = this.R() * l.L, p = pointOn(l, s), d = Math.hypot(p.x - near.x, p.z - near.z);
-      if (d < 70 || d > 140) continue;
+      if (d < lo || d > hi || (opt.ok && tries < 45 && !opt.ok(p))) continue;
       if (this.cars.some((o) => o.active && Math.hypot(o.x - p.x, o.z - p.z) < 12)) continue;
       Object.assign(c, { active: true, ai: true, w: l, next: null, s, x: p.x, z: p.z, y: this.world.heightAt(p.x, p.z), a: Math.atan2(p.dx, p.dz), speed: 6, steer: 0,
         wait: 0, still: 0, honk: 0, stun: 0, panic: 0, health: 100, wreck: false, go: false, bend: 0, lift: 0, taken: false });
@@ -403,6 +404,12 @@ export class Traffic {
     }
     return null;
   }
+  // back onto the nearest lane (after cutting across to you)
+  snapCop(c) {
+    let best = null, bd = Infinity; const fx = Math.sin(c.a), fz = Math.cos(c.a);
+    for (const l of this.lanes) for (let i = 0; i < l.pts.length - 1; i += 2) { const p = l.pts[i], n = l.pts[i + 1], d = Math.hypot(p.x - c.x, p.z - c.z) - ((n.x - p.x) * fx + (n.z - p.z) * fz) * 2; if (d < bd) { bd = d; best = { l, s: l.cum[i] }; } }
+    if (best) { c.w = best.l; c.s = best.s; c.next = null; }
+  }
   /* a car in pursuit: along the roads toward the target while it's far (taking the turn that gets
      closer at each junction, through red lights), then straight at it: up to a stop beside you
      on foot (they get out: c.deployed), or into your car to box it in */
@@ -412,34 +419,37 @@ export class Traffic {
     if (c.stun > 0) { c.stun -= dt; c.speed *= 1 - Math.min(1, dt * 3); this.move(c, dt, 0); return; }
     if (c.rev > 0) { c.rev -= dt; c.speed += (-3 - c.speed) * Math.min(1, dt * 3); this.move(c, dt, c.revSteer); if (c.rev <= 0) c.speed = 0; return; }
     let tx, tz, want;
-    if (d > 45 && c.mode === "road") {   // the road network
+    if (d > 60 && c.mode === "road") {   // the road network
       if (!c.w.turn && !c.next && c.w.L - c.s < 25) {
         const outs = c.w.out; let best = null, bd = Infinity;
         for (const m of outs) { const e = m.pts[m.pts.length - 1], dd = Math.hypot(e.x - tx0, e.z - tz0); if (dd < bd) { bd = dd; best = m; } }
         if (best) { const save = c.w.out; c.w.out = [best]; c.next = this.chooseNext(c); c.w.out = save; }
       }
-      const Ld = 3 + c.speed * 0.35, Q = chainPoint(c, c.s + Ld); tx = Q.x; tz = Q.z;
-      want = c.w.cruise * 1.55;
+      // anything slow ahead in our lane: out into the other lane round it, siren going
+      let block = false; for (const o of this.cars) { if (o === c || !o.active) continue; const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz; if (ah > 0 && ah < 16 && Math.abs(-dx * fz + dz * fx) < 1.8 && o.speed < c.speed - 1) { block = true; break; } }
+      c.offP = (c.offP || 0) + ((block ? -2 * (c.w.off || 3) : 0) - (c.offP || 0)) * Math.min(1, dt * 3);
+      const Ld = 3 + c.speed * 0.35, Q = chainPoint(c, c.s + Ld); tx = Q.x - Q.dz * c.offP; tz = Q.z + Q.dx * c.offP;
+      want = Math.max(16, c.w.cruise * 2.1);
       c.s += Math.max(0, c.speed * dt * 0.98);
       if (c.s >= c.w.L) { const over = c.s - c.w.L; if (c.w.turn) { c.w = c.w.lane; c.next = null; c.s = over; } else { const nx = c.next || this.chooseNext(c); if (nx) { c.w = nx; c.next = null; c.s = over; } else c.mode = "direct"; } }
     } else {   // straight for them
-      c.mode = d > 70 ? "road" : "direct";
+      if (d > 90) { c.mode = "road"; this.snapCop(c); } else c.mode = "direct";
       const lead = driving ? 0.6 : 0, vx = driving ? Math.sin(driving.a) * driving.speed : 0, vz = driving ? Math.cos(driving.a) * driving.speed : 0;
       tx = tx0 + vx * lead; tz = tz0 + vz * lead;
-      if (driving) { want = Math.min(26, 8 + d * 0.9); c.stopT = d < 9 && Math.abs(driving.speed) < 2 ? (c.stopT || 0) + dt : 0; if (c.stopT > 2) { want = 0; if (c.speed < 1) c.deployed = true; } }   // ram them; if you've stopped, get out
-      else { const stopAt = 7; want = d < stopAt ? 0 : Math.min(18, (d - stopAt) * 1.3 + 2); if (d < stopAt + 0.5 && c.speed < 1) c.deployed = true; }
+      if (driving) { want = Math.min(32, 10 + d * 1.0); c.stopT = d < 9 && Math.abs(driving.speed) < 2 ? (c.stopT || 0) + dt : 0; if (c.stopT > 2) { want = 0; if (c.speed < 1) c.deployed = true; } }   // ram them; if you've stopped, get out
+      else { const stopAt = 6; want = d < stopAt ? 0 : Math.min(24, (d - stopAt) * 1.6 + 2); if (d < stopAt + 0.5 && c.speed < 1) c.deployed = true; }
       if (c.mode === "road") { c.mode = "road"; }
     }
     // steer for the point; brake for anything solid right in front (not for the car they're chasing)
     const ax = tx - c.x, az = tz - c.z, alpha = Math.atan2(ax * fz - az * fx, ax * fx + az * fz), Ld2 = Math.max(3, Math.hypot(ax, az));
     const st = Math.max(-0.65, Math.min(0.65, Math.atan(2 * WB * Math.sin(alpha) / Ld2)));
     c.steer += (st - c.steer) * Math.min(1, dt * 7);
-    for (const o of this.cars) { if (o === c || !o.active || (driving && o === driving)) continue; const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz; if (ah > 0 && ah < 9 && Math.abs(-dx * fz + dz * fx) < 1.9) want = Math.min(want, Math.max(0, ah - 4.5)); }
+    if (c.mode !== "road") for (const o of this.cars) { if (o === c || !o.active || (driving && o === driving)) continue; const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz; if (ah > 0 && ah < 9 && Math.abs(-dx * fz + dz * fx) < 1.9) want = Math.min(want, Math.max(4, ah - 3)); }
     if (Math.abs(alpha) > 1.3 && d < 25) want = Math.min(want, 5);         // turning hard: slow for it
-    const acc = want > c.speed ? 5.5 : -9; c.speed = Math.max(0, Math.min(want > c.speed ? want : c.speed, c.speed + acc * dt));
+    const acc = want > c.speed ? 8.5 : -10; c.speed = Math.max(0, Math.min(want > c.speed ? want : c.speed, c.speed + acc * dt));
     c.brake = acc < 0; c.ind = 0;
     c.still = c.speed < 0.5 && want > 1 ? (c.still || 0) + dt : 0;
-    if (c.still > 2.2) { c.rev = 1.2; c.revSteer = alpha > 0 ? -0.55 : 0.55; c.still = 0; }
+    if (c.still > 1.6) { c.rev = 1.1; c.revSteer = alpha > 0 ? -0.55 : 0.55; c.still = 0; }
     this.move(c, dt, c.steer);
   }
   // is the other side of the road clear far enough ahead to pull out and pass?
