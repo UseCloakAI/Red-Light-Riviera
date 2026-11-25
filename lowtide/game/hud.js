@@ -75,7 +75,7 @@ export class Hud {
     el.hidden = !w; if (!w) return;
     const k = w.id + w.ammo + "/" + w.left + (w.reloading ? "r" : ""); if (k === this.wKey) return; this.wKey = k;
     el.dataset.w = w.id;
-    el.querySelector("b").textContent = w.ammo; el.querySelector("span").textContent = "/ " + w.left; el.classList.toggle("reloading", !!w.reloading);
+    el.querySelector("b").textContent = w.melee ? "" : w.ammo; el.querySelector("span").textContent = w.melee ? w.name : "/ " + w.left; el.classList.toggle("reloading", !!w.reloading);
   }
   // shown while aiming; the ticks open with the spread and go red over a person
   reticle(alpha, spreadPx, target) {
@@ -90,7 +90,7 @@ export class Hud {
     const el = this.whEl || (this.whEl = this.root.querySelector(".wheel")); if (!el) return;
     if (!this.wsl) {
       const ICON = { null: '<svg viewBox="0 0 40 40"><path d="M9 14q0-4 4-4h3q2-3 5-1 3-2 5 1 4-1 5 3v12q0 9-9 9h-5q-8 0-8-8z"/></svg>',
-        pistol: this.root.querySelector(".i-pistol").outerHTML, shotgun: this.root.querySelector(".i-shotgun").outerHTML };
+        pistol: this.root.querySelector(".i-pistol").outerHTML, shotgun: this.root.querySelector(".i-shotgun").outerHTML, melee: this.root.querySelector(".i-melee").outerHTML };
       const NAMES = ["Unarmed", "Melee", "Pistol", "SMG", "Shotgun", "Rifle", "Sniper", "Thrown"], IDS = [null, "melee", "pistol", "smg", "shotgun", "rifle", "sniper", "thrown"];
       this.wsl = IDS.map((id, i) => {
         const d = document.createElement("div"); d.className = "ws"; d.style.setProperty("--a", (i * 45) + "deg");
@@ -104,7 +104,7 @@ export class Hud {
     if (key === this.wK) return; this.wK = key;
     this.wsl.forEach((d, i) => { d.classList.toggle("on", i === sel); d.classList.toggle("empty", !have.has(d.dataset.id)); });
     const w = list.find((x) => x.id === this.wsl[sel].dataset.id);
-    el.querySelector(".wc b").textContent = w ? w.name : "Unarmed"; el.querySelector(".wc span").textContent = w ? w.ammo + " / " + w.left : "";
+    el.querySelector(".wc b").textContent = w ? w.name : "Unarmed"; el.querySelector(".wc span").textContent = w && !w.melee ? w.ammo + " / " + w.left : "";
   }
   hitmark(kill) {
     const el = this.hEl || (this.hEl = this.root.querySelector(".hitmark")); if (!el) return;

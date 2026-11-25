@@ -569,6 +569,27 @@
       duck(n / rate + 0.1, 0.55);
       src.start(t);
     },
+    // melee: the air a fist or a bat moves
+    swing: function (kind, dist) {
+      if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 8); if (v < 0.06) return;
+      var bat = kind === "bat", n = noise("pink", t, bat ? 0.32 : 0.16), bp = F("bandpass", bat ? 380 : 700, 1.6), g = G(0);
+      bp.frequency.exponentialRampToValueAtTime(bat ? 1500 : 2400, t + (bat ? 0.22 : 0.1));
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime((bat ? 0.32 : 0.18) * v, t + (bat ? 0.14 : 0.05)); g.gain.exponentialRampToValueAtTime(0.0001, t + (bat ? 0.3 : 0.15)); chain(n, bp, g, B.sfx);
+    },
+    // a blow landing: a fist (a chesty thud and a slap), a bat (a wooden crack over the thud), a car (sheet metal)
+    punch: function (kind, dist) {
+      if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 10); if (v < 0.05) return;
+      var bus = G(v), sh = ctx.createWaveShaper(); sh.curve = SAT2; chain(bus, sh, B.sfx); send(bus, street(), 0.12);
+      if (kind === "car") {
+        var m = noise("white", t, 0.2), mb = F("bandpass", 1300, 2), mg = G(0); perc(mg, t, 0.001, 0.6, 0.12); chain(m, mb, mg, bus);
+        [212, 418, 733, 1190].forEach(function (f, i) { var o = O(i ? "sine" : "square", f * (0.97 + rnd() * 0.06), t), og = G(0); perc(og, t, 0.001, [0.12, 0.1, 0.07, 0.05][i], [0.12, 0.3, 0.25, 0.18][i]); chain(o, og, bus); o.start(t); o.stop(t + 0.4); });
+        return;
+      }
+      var o = O("sine", kind === "bat" ? 110 : 140, t), og = G(0); o.frequency.exponentialRampToValueAtTime(48, t + 0.12); perc(og, t, 0.002, 1.0, 0.13); chain(o, og, bus); o.start(t); o.stop(t + 0.2);
+      var n = noise("brown", t, 0.12), nl = F("lowpass", 900), ng = G(0); perc(ng, t, 0.002, 0.8, 0.08); chain(n, nl, ng, bus);
+      var s2 = noise("white", t, 0.04), sb = F("bandpass", kind === "bat" ? 1900 : 2600, kind === "bat" ? 3 : 1.2), sg = G(0); perc(sg, t, 0.0006, kind === "bat" ? 0.6 : 0.35, kind === "bat" ? 0.045 : 0.025); chain(s2, sb, sg, bus);
+      if (kind === "bat") { var w = O("triangle", 760, t), wg = G(0); perc(wg, t, 0.001, 0.12, 0.09); chain(w, wg, bus); w.start(t); w.stop(t + 0.15); }
+    },
     /* fast travel, the switch: each cut of the camera is air ripping past (noise
        through a sweeping band), a sub thump you feel, a shutter tick, and a dark
        stab that climbs a step with each cut going up and falls going down. */

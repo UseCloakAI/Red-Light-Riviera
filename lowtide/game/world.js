@@ -411,8 +411,8 @@ export async function buildWorld(scene, opts = {}) {
         for (let t = e.s0 + 5; t < e.s1 - 3; t += 32) { const p = at(e.pl, t), o = e.w / 2 + SIDEWALK - 0.3, q = [p.x + p.nx * o, p.z + p.nz * o, Math.atan2(p.tx, p.tz)]; if (last) for (const dy of [9.2, 8.6]) wires.push([last, q, dy]); poles.push({ x: q[0], z: q[1], a: q[2] }); grid.circle(q[0], q[1], 0.18, 10); last = q; }
       }
       // parked cars along the kerb of ordinary streets
-      if (e.kind === "street" && e.w >= 9) for (let t = e.s0 + 6; t < e.s1 - 6; t += 6.5 + R() * 6) if (R() < 0.42) {
-        const p = at(e.pl, t), o = e.w / 2 - 1.2, x = p.x + p.nx * s * o, z = p.z + p.nz * s * o, a = Math.atan2(p.tx * s, p.tz * s);
+      if (e.kind === "street" && e.w >= 11) for (let t = e.s0 + 6; t < e.s1 - 6; t += 6.5 + R() * 6) if (R() < 0.42) {
+        const p = at(e.pl, t), o = e.w / 2 - 1.02, x = p.x + p.nx * s * o, z = p.z + p.nz * s * o, a = Math.atan2(p.tx * s, p.tz * s);
         cars.push({ x, z, a });
       }
     }

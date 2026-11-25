@@ -74,7 +74,8 @@ export async function start(o) {
   const gore = new Gore(scene, world);
   const voice = makeVoice(o.sfx);   // S.A.M. reads the lines
   const heard = (pd) => (pd ? Math.hypot(pd.h.group.position.x - player.pos.x, pd.h.group.position.z - player.pos.z) : 0);
-  try { peds = await spawnPeds(scene, world, { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos, onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
+  const pedHooks = { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos };   // the fight callbacks get filled in once there's a player to hit
+  try { peds = await spawnPeds(scene, world, Object.assign(pedHooks, { onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) })); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
   // Stage 3: weapons
@@ -85,11 +86,25 @@ export async function start(o) {
   // your health; cars and blasts take it
   const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
   arsenal.say = (t, pd) => { if (pd) voice.speak(t, pd.voice, heard(pd), "scared"); };
+  // fights: a shove back, a punch landing on you, whether you're down
+  arsenal.vehicles = vehicles; arsenal.traffic = traffic;
+  pedHooks.isDown = () => life.dead || life.knock > 0;
+  pedHooks.onShove = (pd, dx, dz) => {
+    if (vehicles.driving || life.down) return;
+    player.vel.x += dx * 5.5; player.vel.z += dz * 5.5; rig.shake = Math.max(rig.shake, 0.25);
+    if (o.sfx && o.sfx.punch) o.sfx.punch("fist", 0);
+    if (Math.random() < 0.25) life.fling({ dir: new THREE.Vector3(dx, 0.3, dz), force: 3.5 }, 1.3);
+  };
+  pedHooks.onHitPlayer = (pd, dmg, dir) => {
+    if (vehicles.driving || life.down) return;
+    life.damage(dmg, { point: player.pos.clone().setY(player.pos.y + 1.4), dir: dir.setY(0.15), force: 2.5, cause: "fist" });
+    if (o.sfx && o.sfx.punch) o.sfx.punch("fist", 0);
+  };
   traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
   // gunfire: drivers panic, and cars take rounds (enough of them and they go up)
   arsenal.onShot = (pos, hit) => {
-    traffic.panic(pos.x, pos.z, 75);
+    traffic.panic(pos.x, pos.z, 75, true);
     if (!hit || !hit.point) return;
     // the first car along the round's path takes it
     const all = vehicles.cars.concat(traffic.cars.filter((k) => k.active || k.taken)), dx = hit.point.x - pos.x, dz = hit.point.z - pos.z, L = Math.hypot(dx, dz);
@@ -138,6 +153,8 @@ export async function start(o) {
     aim: "Raise your gun near someone and the sights find them. The view slows while you're on a target.",
     empty: "Out of rounds. {R} reloads.",
     "near-car": "{E} gets in. Every car on the island is unlocked, apparently.",
+    melee: "Unarmed, click or {F} throws punches. Land three in a row for a knockout. {4} or the wheel gets the bat.",
+    "equip:melee": "The bat swings wide and hits hard. Click or {F}.",
     "in-car": "{W} drives, {S} brakes and reverses, {A} {D} steer, {Space} is the handbrake. {E} gets out."
   };
   vehicles.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
@@ -148,6 +165,7 @@ export async function start(o) {
     if (was < 1.5 && tipClock >= 1.5) hud.tipOnce("move", TIPS.move);
     if (was < 14 && tipClock >= 14) hud.tipOnce("weapons", TIPS.weapons);
     if (was < 40 && tipClock >= 40) hud.tipOnce("pause", TIPS.pause);
+    if (was < 70 && tipClock >= 70) hud.tipOnce("melee", TIPS.melee);
   };
 
   // PS1: nearest-neighbour textures everywhere; a soft dark blob under each person instead of a real shadow

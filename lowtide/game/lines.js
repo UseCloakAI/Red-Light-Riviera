@@ -5,6 +5,16 @@ export const BUMP = ["Watch it.", "Sidewalk is for walking.", "Easy. Nobody's ch
 
 // shouted when something goes wrong nearby
 export const PANIC = ["Gun! He's got a gun!", "Get down!", "Oh my God.", "Run!", "Somebody call the police!", "Not again. Not on this street.", "Move, move, move!", "I didn't see anything!", "Get inside!", "Are you out of your mind?"];
+// pushed once too often
+export const SHOVE = ["Back off!", "Touch me again. I dare you.", "You got a problem?", "Keep walking.", "Watch your hands.", "Hey! Personal space!"];
+// squaring up
+export const FIGHT = ["Alright, you asked for it.", "Let's go, then!", "Oh, you want some?", "Come on, then!", "Big mistake."];
+// they won
+export const WON = ["Stay down.", "That's what I thought.", "Don't get up.", "Next time, keep walking."];
+// backing off
+export const BACKOFF = ["Okay, okay! I'm going!", "You're out of your mind!", "Psycho!", "Somebody stop them!"];
+// a fight on the street
+export const BRAWL = ["Fight! Fight!", "Leave them alone!", "Somebody break it up!", "Whoa, whoa, whoa!", "Call the cops!"];
 // a car's just hit someone
 export const STRUCK = ["Oh my God, they hit someone!", "Call an ambulance!", "Did you see that?", "Slow down, you maniac!", "Somebody help!", "He came out of nowhere."];
 // said with your gun in their face

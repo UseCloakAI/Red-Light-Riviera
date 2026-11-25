@@ -17,8 +17,8 @@
 import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
 import { lanePoint, linkPath, laneEndPos } from "./world.js?v=dev";
-import { AMBIENT, BUMP, PANIC, STRUCK } from "./lines.js?v=dev";
-import { findBones, Ragdoll } from "./rig.js?v=dev";
+import { AMBIENT, BUMP, PANIC, STRUCK, SHOVE, FIGHT, WON, BACKOFF, BRAWL } from "./lines.js?v=dev";
+import { findBones, Ragdoll, ik, wpos } from "./rig.js?v=dev";
 
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.35;
 const PAIRS = 0.14, SOLO = 0.08;          // share of the crowd standing about, in pairs and alone
@@ -116,10 +116,11 @@ export async function spawnPeds(scene, world, o = {}) {
   }
   // back into the crowd as a fresh face somewhere out of sight
   function revive(pd, near) {
-    pd.dead = false; pd.rag = null; pd.hp = 100; pd.fear = null; pd.cower = 0; pd.stagger = 0; pd.pause = 0; pd.st = null;
+    pd.dead = false; pd.rag = null; pd.hp = 100; pd.fear = null; pd.cower = 0; pd.stagger = 0; pd.pause = 0; pd.st = null; pd.down = 0; pd.free = null; pd.anger = 0;
     place(pd, near); pd.h.group.visible = false;
   }
   function die(pd, hit) {
+    pd.down = 0; pd.free = null;
     if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
     pd.B = pd.B || findBones(pd.h.group);
     pd.dead = true; pd.fear = null;
@@ -146,7 +147,8 @@ export async function spawnPeds(scene, world, o = {}) {
     for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
     const pd = { voice: { female: p.sex < 0.5, pitch: 0.92 + R() * 0.16, age: p.age }, h, mixer, act, head, neck, w: null, s: 0, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
-      side: 0, look: 0, stagger: 0, st: null, gW: 0, gT: 0, gest: null };
+      side: 0, look: 0, stagger: 0, st: null, gW: 0, gT: 0, gest: null,
+      brave: R(), anger: 0, bumpT: -9, down: 0, free: null };   // brave: who squares up, who shoves back, who runs
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
     act.walk.time = R() * act.walk.getClip().duration;
@@ -206,13 +208,113 @@ export async function spawnPeds(scene, world, o = {}) {
     if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z)), pd); }
     if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
   }
+  /* ---- off the pavement: knocked flat, squaring up to the player, finding their way back ---- */
+  let clock = 0;
+  const pick = (L) => L[(R() * L.length) | 0];
+  const A = new THREE.Vector3(), Bv = new THREE.Vector3(), C = new THREE.Vector3(), F = new THREE.Vector3(), U = new THREE.Vector3(0, 1, 0), RT = new THREE.Vector3(), POLE = new THREE.Vector3();
+  // knocked off their feet: a ragdoll that gets back up after a moment
+  function knock(pd, hit) {
+    if (pd.dead || pd.down > 0) return;
+    if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
+    pd.B = pd.B || findBones(pd.h.group); if (!pd.B) { pd.stagger = 1.4; return; }
+    pd.h.group.updateMatrixWorld(true);
+    pd.rag = new Ragdoll(pd.B, world, new THREE.Vector3(pd.vx || 0, 0, pd.vz || 0), hit);
+    pd.down = 2.3 + R() * 1.2; pd.free = null;
+  }
+  function getUp(pd) {
+    const g = pd.h.group, h = pd.rag.p[0];
+    g.position.set(h.x, world.heightAt(h.x, h.z), h.z); pd.rag = null; pd.down = 0;
+    pd.free = { mode: pd.anger > 2.5 && pd.brave > 0.55 && pd.hp > 40 ? "fight" : "back", cd: 0.8, punch: 0, t: 0 };
+    if (pd.free.mode === "fight") say(pick(FIGHT), pd, "angry");
+    else if (pd.anger > 1) { pd.fear = { x: ear.x, z: ear.z, t: 10 }; say(pick(BACKOFF), pd, "scared"); }
+  }
+  function squareUp(pd) {
+    if (pd.dead || pd.down > 0) return;
+    if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
+    pd.fear = null; pd.cower = 0; pd.free = { mode: "fight", cd: 0.6 + R() * 0.5, punch: 0, t: 0 };
+    say(pick(FIGHT), pd, "angry");
+  }
+  // walking free of the lanes: toward the player to fight, or back to where they were going
+  function freeStep(pd, g, dt, player) {
+    const f = pd.free, P = player.pos; f.t += dt;
+    let tx, tz, speed, face;
+    const dxp = P.x - g.position.x, dzp = P.z - g.position.z, dp = Math.hypot(dxp, dzp);
+    if (f.mode === "fight") {
+      // give up: they're gone, down, or we're hurt
+      if (o.isDown && o.isDown()) { if (f.t > 0.5 && !f.gloat) { f.gloat = true; say(pick(WON), pd, "angry"); } if (f.t > 4) f.mode = "back"; }
+      else if (dp > 24 || pd.hp < 35) { f.mode = "back"; if (pd.hp < 35) { pd.fear = { x: P.x, z: P.z, t: 12 }; say(pick(BACKOFF), pd, "scared"); } }
+      tx = P.x; tz = P.z; face = Math.atan2(dxp, dzp);
+      speed = dp > 4 ? pd.run * 0.85 : dp > 1.15 ? pd.speed * 1.2 : 0;
+      // throw a punch when close
+      if (f.mode === "fight" && !f.gloat) {
+        f.cd -= dt;
+        if (dp < 1.35 && f.cd <= 0 && !f.punch) { f.punch = 0.0001; f.hit = false; f.hand = R() < 0.6 ? "R" : "L"; f.cd = 0.85 + R() * 0.8; if (sfx.swing) sfx.swing("fist", distTo(pd)); }
+      }
+    }
+    if (f.mode === "back") {   // walk (or run, if scared) back onto the pavement where we left it
+      pointOn(pd.w, pd.s, tmp); tx = tmp.x; tz = tmp.z; speed = pd.fear ? pd.run : pd.speed;
+      face = Math.atan2(tx - g.position.x, tz - g.position.z);
+      if (Math.hypot(tx - g.position.x, tz - g.position.z) < 0.35) { pd.free = null; pd.side = 0; return; }
+    }
+    // move, out of walls
+    const dx = tx - g.position.x, dz = tz - g.position.z, d = Math.hypot(dx, dz) || 1, step = Math.min(d, speed * dt);
+    const q = { x: g.position.x + dx / d * step, z: g.position.z + dz / d * step }; world.grid.resolve(q, 0.3, g.position.y + 0.2, 1.6);
+    if (dt > 0) { pd.vx = (q.x - g.position.x) / dt; pd.vz = (q.z - g.position.z) / dt; }
+    g.position.set(q.x, world.heightAt(q.x, q.z), q.z);
+    let dy = face - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); g.rotation.y += dy * Math.min(1, dt * 10);
+    g.visible = true;
+    const moving = step > 0.002, running = speed > pd.speed * 1.5, k = Math.min(1, dt * 8);
+    pd.wW += ((moving && !running ? 1 : 0) - pd.wW) * k; pd.rW += ((moving && running ? 1 : 0) - pd.rW) * k; pd.cW += (0 - pd.cW) * k;
+    pd.act.walk.setEffectiveWeight(pd.wW); pd.act.run.setEffectiveWeight(pd.rW); if (pd.act.sneak_pose) pd.act.sneak_pose.setEffectiveWeight(0);
+    pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - pd.rW));
+    pd.mixer.update(dt);
+    // fists up, and the punch: the hand drives out to the player's chest and back
+    if (f.mode === "fight" && (pd.B = pd.B || findBones(g))) {
+      const B = pd.B; g.updateMatrixWorld(true);
+      wpos(B.chest, C); F.set(Math.sin(g.rotation.y), 0, Math.cos(g.rotation.y)); RT.set(-F.z, 0, F.x);
+      let ext = 0;
+      if (f.punch) {
+        f.punch += dt; const t = f.punch / 0.42; ext = t < 0.45 ? Math.sin(t / 0.45 * Math.PI / 2) : Math.max(0, 1 - (t - 0.45) / 0.55);
+        if (!f.hit && t > 0.42) { f.hit = true; if (dp < 1.45 && (dxp * F.x + dzp * F.z) / (dp || 1) > 0.5 && o.onHitPlayer) o.onHitPlayer(pd, 6 + R() * 5, F.clone()); }
+        if (t >= 1) f.punch = 0;
+      }
+      for (const [arm, sgn] of [[B.armR, -1], [B.armL, 1]]) {
+        const hit = f.punch && (f.hand === "R") === (sgn < 0) ? ext : 0;
+        A.copy(C).addScaledVector(F, 0.26 + hit * 0.42).addScaledVector(U, 0.2 - hit * 0.05).addScaledVector(RT, sgn * (0.13 - hit * 0.1));
+        POLE.set(0, -1, 0).addScaledVector(RT, sgn * 0.8);
+        ik(arm, A, POLE, 1);
+      }
+    }
+  }
+  // the player got too close: a look, a step aside, a word; enough of it and they push back, square up, or go
+  function bumped(pd, fromX, fromZ, speed) {
+    if (pd.dead || pd.down > 0 || (pd.free && pd.free.mode === "fight")) return;
+    if (clock - pd.bumpT < 0.7) return; pd.bumpT = clock;
+    const g = pd.h.group.position, ax = g.x - fromX, az = g.z - fromZ, al = Math.hypot(ax, az) || 1;
+    if (speed < 1.2) { pd.anger += 0.25; pd.side += (ax > 0 ? 0.25 : -0.25); return; }   // brushed past: a glance
+    const hard = speed > 5.2;
+    pd.anger += hard ? 1.5 : 0.8;
+    if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
+    if (hard && R() < 0.5) { knock(pd, { point: new THREE.Vector3(g.x, g.y + 1.1, g.z), dir: new THREE.Vector3(ax / al, 0.25, az / al), force: 3.2 + speed * 0.25 }); if (sfx.grunt) sfx.grunt(pd.voice, distTo(pd)); return; }
+    pd.stagger = hard ? 1.2 : 0.7; pd.side += (ax > 0 ? -0.4 : 0.4);
+    if (pd.anger >= 2.4 && !pd.fear) {
+      if (pd.brave > 0.62) return squareUp(pd);
+      if (pd.brave < 0.28) { pd.fear = { x: fromX, z: fromZ, t: 10 }; pd.anger = 0; return say(pick(BACKOFF), pd, "scared"); }
+      pd.anger = 1.2; say(pick(SHOVE), pd, "angry");                       // a shove back
+      if (o.onShove) o.onShove(pd, -ax / al, -az / al);
+      return;
+    }
+    if (quiet <= 0 || hard) say(pd.anger > 1.2 ? pick(SHOVE) : pick(BUMP), pd, "angry");
+    if (o.onBump) o.onBump(pd);
+  }
+
   return {
     peds,
     set limit(n) { limit = Math.max(0, Math.min(count, n)); },
     get limit() { return limit; },
     update(dt, player) {
       const px = player.pos.x, pz = player.pos.z, pv = player.speed || 0; ear = player.pos;
-      quiet -= dt;
+      quiet -= dt; clock += dt;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
         if (idx >= limit) { g.visible = false; return; }
@@ -222,6 +324,13 @@ export async function spawnPeds(scene, world, o = {}) {
           if (dd < NEAR && pd.rag.step(dt)) pd.rag.pose();
           return;
         }
+        pd.anger = Math.max(0, pd.anger - dt * 0.08);
+        if (pd.down > 0) {   // on the floor; then up again
+          pd.down -= dt; if (pd.rag.step(dt)) pd.rag.pose();
+          if (pd.down <= 0) getUp(pd);
+          return;
+        }
+        if (pd.free) return freeStep(pd, g, dt, player);
         let x, z, hx, hz;
         const st = pd.st, lead = st && (st.lead ? pd : st.mate);
         if (st) {
@@ -288,7 +397,7 @@ export async function spawnPeds(scene, world, o = {}) {
     },
     // a round hit someone. hit: { point, dir, damage, head, from }. Returns "dead", "hurt" or "body"
     damage(pd, hit) {
-      if (gore && hit.point) gore.hit(hit.point, hit.dir || new THREE.Vector3(0, 0, 1), hit.head ? 2.8 : (hit.force || 0) > 6 ? 1.9 : 1.1, this.fx);
+      if (gore && hit.point) gore.hit(hit.point, hit.dir || new THREE.Vector3(0, 0, 1), hit.blunt ? hit.blunt : hit.head ? 2.8 : (hit.force || 0) > 6 ? 1.9 : 1.1, this.fx);
       if (pd.dead) { if (pd.rag) { pd.rag.impulse(hit.point, hit.dir, 2.5); pd.rag.sleep = 0; } return "body"; }
       pd.hp -= hit.head ? 1000 : hit.damage;
       if (pd.hp <= 0) {
@@ -298,10 +407,17 @@ export async function spawnPeds(scene, world, o = {}) {
         if (sfx.rattle) setTimeout(() => sfx.rattle(pd.voice, distTo(pd)), hit.head ? 300 : 700 + Math.random() * 500);
         return "dead";
       }
+      if (pd.down > 0 && pd.rag) { pd.rag.impulse(hit.point, hit.dir, hit.force || 2.5); pd.rag.sleep = 0; pd.down = Math.max(pd.down, 1.5); return "hurt"; }
       if (sfx.grunt) sfx.grunt(pd.voice, distTo(pd));
-      if (Math.random() < 0.55) setTimeout(() => scream(pd, true), 180);
+      if (!hit.melee && Math.random() < 0.55) setTimeout(() => scream(pd, true), 180);
       if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
       pd.stagger = 0.7; pd.cower = 0; pd.pause = 0.4;
+      if (hit.melee) {   // hit with a fist or a bat: down, or it starts a fight, or they run
+        pd.anger += 2;
+        if (hit.knock) { knock(pd, { point: hit.point, dir: hit.dir, force: hit.force || 4 }); return "hurt"; }
+        if (pd.brave > 0.5 && pd.hp > 40) { if (!pd.free || pd.free.mode !== "fight") squareUp(pd); pd.stagger = 0.35; return "hurt"; }
+        pd.free = pd.free ? Object.assign(pd.free, { mode: "back" }) : null;
+      }
       pd.fear = { x: hit.from.x, z: hit.from.z, t: 20 }; pd.speed *= 0.8;   // hurt: they still run, a little slower
       return "hurt";
     },
@@ -313,11 +429,14 @@ export async function spawnPeds(scene, world, o = {}) {
       if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
+    knock, bumped, squareUp,
+    get fighting() { return peds.filter((pd) => pd.free && pd.free.mode === "fight" && !pd.dead); },
     alarm(x, z, r = 40, shout = true, kind = "gun") {
       let nearest = null, nd = Infinity;
       for (let i = 0; i < Math.min(limit, peds.length); i++) {
         const pd = peds[i], g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z);
-        if (d > r || pd.dead) continue;
+        if (d > r || pd.dead || pd.down > 0) continue;
+        if (pd.free && pd.free.mode === "fight") { if (kind === "fight") continue; pd.free.mode = "back"; }
         if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
         const fresh = !pd.fear;
         pd.fear = { x, z, t: 9 + R() * 8 }; pd.pause = fresh ? 0.15 + R() * 0.5 : 0;   // a beat to register it
@@ -326,7 +445,7 @@ export async function spawnPeds(scene, world, o = {}) {
         if (pd.w) { pointOn(pd.w, pd.s + 2, tmp); const a = Math.hypot(tmp.x - x, tmp.z - z); pointOn(pd.w, Math.max(0, pd.s - 2), tmp); if (a < Math.hypot(tmp.x - x, tmp.z - z)) reverse(pd); }
         if (d < nd) { nd = d; nearest = pd; }
       }
-      if (shout && nearest && nd < 25) { quiet = 0; { const L = kind === "car" ? STRUCK : PANIC; say(L[(R() * L.length) | 0], nearest, "scared"); } quiet = 3 + R() * 3; }
+      if (shout && nearest && nd < 25) { quiet = 0; { const L = kind === "car" ? STRUCK : kind === "fight" ? BRAWL : PANIC; say(L[(R() * L.length) | 0], nearest, "scared"); } quiet = 3 + R() * 3; }
       // someone near it screams
       if (nearest && nd < 30 && R() < 0.8) scream(nearest);
       return nearest;
@@ -334,11 +453,11 @@ export async function spawnPeds(scene, world, o = {}) {
     // keep the player from walking through people; a sprinting player knocks them off their stride
     push(p, r, speed) {
       for (let i = 0; i < Math.min(limit, peds.length); i++) {
-        const pd = peds[i]; if (pd.dead) continue;
+        const pd = peds[i]; if (pd.dead || pd.down > 0) continue;
         const g = pd.h.group.position, dx = p.x - g.x, dz = p.z - g.z, dd = Math.hypot(dx, dz), m = r + 0.3;
         if (dd < m && dd > 1e-4) {
           p.x = g.x + dx / dd * m; p.z = g.z + dz / dd * m;
-          if ((speed || 0) > 5 && pd.stagger <= 0) { pd.stagger = 1.2; pd.side += (dx > 0 ? -0.4 : 0.4); say(BUMP[(R() * BUMP.length) | 0], pd, "angry"); if (o.onBump) o.onBump(pd); }
+          bumped(pd, p.x, p.z, speed || 0);
         }
       }
     }
