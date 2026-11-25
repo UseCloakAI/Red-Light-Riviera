@@ -106,10 +106,10 @@ export class Hud {
     const w = list.find((x) => x.id === this.wsl[sel].dataset.id);
     el.querySelector(".wc b").textContent = w ? w.name : "Unarmed"; el.querySelector(".wc span").textContent = w && !w.melee ? w.ammo + " / " + w.left : "";
   }
-  hitmark(kill) {
+  hitmark(kill, head) {
     const el = this.hEl || (this.hEl = this.root.querySelector(".hitmark")); if (!el) return;
-    el.classList.toggle("kill", !!kill); el.getAnimations().forEach((a) => a.cancel());
-    el.animate([{ opacity: 1, scale: 1.25 }, { opacity: 1, scale: 1, offset: 0.25 }, { opacity: 0, scale: 1 }], { duration: kill ? 420 : 260, easing: "cubic-bezier(.16,1,.3,1)" });
+    el.classList.toggle("kill", !!kill); el.classList.toggle("head", !!head); el.getAnimations().forEach((a) => a.cancel());
+    el.animate([{ opacity: 1, scale: 1.25 }, { opacity: 1, scale: 1, offset: 0.25 }, { opacity: 0, scale: 1 }], { duration: head ? 900 : kill ? 420 : 260, easing: "cubic-bezier(.16,1,.3,1)" });
   }
   setWanted(n) {
     this.wanted = n;

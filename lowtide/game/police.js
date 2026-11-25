@@ -22,7 +22,7 @@ import { lanePoint } from "./world.js?v=dev";
 import { shotgunModel } from "./weapons.js?v=dev";
 
 export const STATION = { x: 30, z: -150, name: "Marlowe Keys PD" };
-const CARS = [0, 1, 2, 3, 4, 5], COPS_PER_CAR = 2, HELI_HP = 260;
+const CARS = [0, 1, 2, 3, 4, 4], COPS_PER_CAR = 2, HELI_HP = 260;
 const SAY = {
   stop: ["Police! Stop right there!", "Freeze!", "Stay where you are!"],
   armed: ["Drop the weapon!", "Suspect is armed!", "Put it down, now!"],
@@ -192,9 +192,9 @@ export class Police {
         if (sees !== this.seen) { this.seen = sees; if (this.hud.searching) this.hud.searching(!sees); }
       }
       if (!this.seen) {
-        const R = 55 + this.level * 25, out = Math.hypot(P.x - this.last.x, P.z - this.last.z) > R;
+        const R = 50 + this.level * 22, out = Math.hypot(P.x - this.last.x, P.z - this.last.z) > R;
         if (this.hud.searchArea) this.hud.searchArea({ x: this.last.x, z: this.last.z, r: R });
-        if (out) { this.evade += dt; if (this.evade > 6 + this.level * 2.5) { this.setLevel(0); if (this.cops[0]) this.line(pick(SAY.lost), this.cops[0]); } }
+        if (out) { this.evade += dt; if (this.evade > 5 + this.level * 2) { this.setLevel(0); if (this.cops[0]) this.line(pick(SAY.lost), this.cops[0]); } }
       } else if (this.hud.searchArea) this.hud.searchArea(null);
       if ((this.dispatchT -= dt) <= 0) { this.dispatchT = 1; this.dispatch(); }
       /* hunting: out of sight they don't just sit on the last sighting. They sweep toward where you
@@ -337,7 +337,7 @@ export class Police {
         // fire
         if (lethal && aiming) {
           pd.fireT -= dt;
-          if (pd.fireT <= 0) { pd.fireT = pd.arm === "shotgun" ? 1.25 + Math.random() * 0.6 : 0.5 + Math.random() * 0.7 - this.level * 0.05; this.shoot(pd, d, !!driving); }
+          if (pd.fireT <= 0) { pd.fireT = pd.arm === "shotgun" ? 1.5 + Math.random() * 0.7 : 0.8 + Math.random() * 0.8 - this.level * 0.05; this.shoot(pd, d, !!driving); }
         }
       }
       // move (out of walls), turn, animate
@@ -381,11 +381,11 @@ export class Police {
     if (this.fx) { this.fx.puff(m, new THREE.Vector3(0, 0.3, 0), 0.25, 0.6, 0xb8b2a8, 0.3); this.fx.sparks(m, 3, new THREE.Vector3(Math.sin(pd.h.group.rotation.y), 0, Math.cos(pd.h.group.rotation.y)), 2, 0xffd080, 0.08); }
     if (Math.random() < 0.3) this.line(pick(SAY.shoot), pd);
     // a shotgun: murderous close, nothing much past 25 m
-    const odds = sg ? (d < 25 ? 0.85 * (1 - d / 30) : 0.05) * (inCar ? 0.8 : 1) : 0.6 * Math.max(0.15, 1 - d / 55) * (this.player.speed > 3 ? 0.6 : 1) * (inCar ? 0.65 : 1);
+    const odds = sg ? (d < 25 ? 0.7 * (1 - d / 30) : 0.04) * (inCar ? 0.75 : 1) : 0.46 * Math.max(0.12, 1 - d / 55) * (this.player.speed > 3 ? 0.55 : 1) * (inCar ? 0.6 : 1);
     const dir = new THREE.Vector3(P.x - m.x, 0, P.z - m.z).normalize();
     if (Math.random() < odds) {
       if (inCar) { const c = this.vehicles.car; this.vehicles.hurt(c, sg ? 9 : 4); this.vehicles.impactCar(c, P.x - dir.x, P.z - dir.z, dir.x, dir.z, 3); if (Math.random() < 0.25) this.life.damage(5, { dir, force: 0 }); }
-      else this.life.damage(sg ? 18 + 22 * Math.max(0, 1 - d / 25) : 8 + this.level * 1.5, { point: new THREE.Vector3(P.x, P.y + 1.2, P.z), dir, force: sg ? 6 * Math.max(0, 1 - d / 15) : 1.5, cause: "cop" });
+      else this.life.damage(sg ? 14 + 16 * Math.max(0, 1 - d / 25) : 6 + this.level * 1.1, { point: new THREE.Vector3(P.x, P.y + 1.2, P.z), dir, force: sg ? 6 * Math.max(0, 1 - d / 15) : 1.5, cause: "cop" });
     } else if (this.fx) {   // a miss: the round hits round you
       const q = new THREE.Vector3(P.x + (Math.random() - 0.5) * 3, 0, P.z + (Math.random() - 0.5) * 3); q.y = this.world.heightAt(q.x, q.z);
       this.fx.puff(q, new THREE.Vector3(0, 0.6, 0), 0.25, 0.6, 0x9a948a, 0.5); this.fx.sparks(q, 4, new THREE.Vector3(0, 1, 0), 2, 0xffb050, 0.15);
@@ -430,7 +430,7 @@ export class Police {
       if (this.sfx.shot) this.sfx.shot(Math.hypot(h.position.x - P.x, h.position.z - P.z), 0);
       if (this.fx) this.fx.sparks(h.position.clone().add(new THREE.Vector3(0, -0.8, 0)), 4, new THREE.Vector3(0, -1, 0), 2, 0xffd080, 0.1);
       const dir = new THREE.Vector3(P.x - h.position.x, 0, P.z - h.position.z).normalize();
-      if (Math.random() < 0.32 * Math.max(0.2, 1 - hd / 90) * (this.player.speed > 3 ? 0.6 : 1)) { if (this.vehicles.car) this.vehicles.hurt(this.vehicles.car, 6); else this.life.damage(10, { point: new THREE.Vector3(P.x, P.y + 1.3, P.z), dir, force: 1, cause: "cop" }); }
+      if (Math.random() < 0.22 * Math.max(0.2, 1 - hd / 90) * (this.player.speed > 3 ? 0.6 : 1)) { if (this.vehicles.car) this.vehicles.hurt(this.vehicles.car, 5); else this.life.damage(7, { point: new THREE.Vector3(P.x, P.y + 1.3, P.z), dir, force: 1, cause: "cop" }); }
       else if (this.fx) { const q = new THREE.Vector3(P.x + (Math.random() - 0.5) * 4, 0, P.z + (Math.random() - 0.5) * 4); q.y = this.world.heightAt(q.x, q.z); this.fx.puff(q, new THREE.Vector3(0, 0.6, 0), 0.25, 0.6, 0x9a948a, 0.5); }
     }
     if (h.leave && Math.hypot(h.position.x - P.x, h.position.z - P.z) > 260) { h.visible = false; beam.visible = false; beam.userData.spot.visible = false; if (this.heliSfx) { this.heliSfx.stop(); this.heliSfx = null; } }

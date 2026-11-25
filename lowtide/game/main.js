@@ -15,6 +15,7 @@ import { Vehicles } from "./vehicles.js?v=dev";
 import { Traffic } from "./traffic.js?v=dev";
 import { Life, HOSPITAL } from "./life.js?v=dev";
 import { Travel } from "./travel.js?v=dev";
+import { BulletCam } from "./bulletcam.js?v=dev";
 import { Police, STATION } from "./police.js?v=dev";
 import { Gore } from "./gore.js?v=dev";
 import { makeVoice } from "./voice.js?v=dev";
@@ -123,7 +124,7 @@ export async function start(o) {
     }
   };
   /* ---- what the pause menu shows: stats, the brief (everything said and shown), the clock ---- */
-  const stats = { played: 0, foot: 0, drive: 0, shots: 0, downed: 0, deaths: 0, bills: 0, wrecks: 0, lamps: 0, hydrants: 0, trips: 0, hijacks: 0, maxWanted: 0, busted: 0, copsDowned: 0 };
+  const stats = { played: 0, foot: 0, drive: 0, shots: 0, downed: 0, deaths: 0, bills: 0, wrecks: 0, lamps: 0, hydrants: 0, trips: 0, hijacks: 0, maxWanted: 0, busted: 0, copsDowned: 0, headshots: 0 };
   const wrap = (obj, name, fn) => { if (!obj || !obj[name]) return; const f = obj[name].bind(obj); obj[name] = (...a) => { const r = f(...a); fn(...a); return r; }; };
   const shot0 = arsenal.onShot; arsenal.onShot = (pos, hit) => { stats.shots++; shot0(pos, hit); if (police) police.crime("shots", pos); };
   wrap(vehicles, "explode", () => stats.wrecks++);
@@ -152,6 +153,16 @@ export async function start(o) {
   const FOG0 = scene.fog.density;
   const setFog = (k) => { const d = FOG0 * (1 - 0.72 * k); scene.fog.density = d; for (const u of fogMats) u.value = d; };
   const travel = new Travel({ world, player, rig, camera, blit, sfx: o.sfx || {}, hud, vehicles, life, setFog, onArrive: (sp) => { stats.trips++; hud.area = null; } });
+  /* headshots: every one counts; the first, and every few after, rides the bullet cam */
+  const bulletcam = new BulletCam({ scene, camera, rig, blit, sfx: o.sfx || {}, hud });
+  let heads = 0, nextCine = 1;
+  arsenal.onHeadshot = (hit, dir, muzzle, apply) => {
+    heads++; stats.headshots++;
+    if (heads < nextCine || bulletcam.active || travel.active || life.down || vehicles.driving) return false;
+    nextCine = heads + 3 + ((Math.random() * 3) | 0);
+    const pd = hit.ped;
+    return bulletcam.start({ from: muzzle, to: hit.point, dir, apply, body: () => (pd.rag ? pd.rag.p[0] : pd.h.group.position) });
+  };
   // the police's hooks into everything else
   hud.blips = () => police.blips(); travel.police = police; arsenal.targets = () => police.targets();
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
@@ -234,6 +245,13 @@ export async function start(o) {
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
     // a car first (it may take E for the door), then the gun, unless you're driving
     clockMin += dt / 2; stats.played += dt;
+    if (bulletcam.active) {   // riding the round: the world all but stops; it has the camera
+      const ws = bulletcam.update(dt), d2 = dt * ws;
+      if (bulletcam.active || ws !== 1) {
+        traffic.update(d2, player, vehicles, peds); gore.update(d2); if (peds) peds.update(d2, player); if (police) police.update(d2);
+        arsenal.tickFx(d2); player.animate(d2); sky.update(t, player.pos, camera.position); draw(); return;
+      }
+    }
     if (travel.active) {   // the sky camera has the picture; the island keeps living under it
       traffic.update(dt, player, vehicles, peds); gore.update(dt); vehicles.update(dt, { hit: () => false, down: () => false, keys: new Set() });
       player.animate(dt); if (peds) peds.update(dt, player);
@@ -284,7 +302,7 @@ export async function start(o) {
       return [["Time on the island", tm(stats.played)], ["On foot", mi(stats.foot)], ["Driven", mi(stats.drive)], ["Fast trips", stats.trips],
         ["Shots fired", stats.shots], ["People downed", stats.downed], ["Cars wrecked", stats.wrecks], ["Cars taken", stats.hijacks],
         ["Lamp posts flattened", stats.lamps], ["Hydrants burst", stats.hydrants], ["Times flatlined", stats.deaths], ["Hospital bills", "$" + stats.bills.toLocaleString("en-US")],
-        ["Highest wanted", stats.maxWanted ? "\u2605".repeat(stats.maxWanted) : "None"], ["Times busted", stats.busted], ["Officers downed", stats.copsDowned]];
+        ["Headshots", stats.headshots], ["Highest wanted", stats.maxWanted ? "\u2605".repeat(stats.maxWanted) : "None"], ["Times busted", stats.busted], ["Officers downed", stats.copsDowned]];
     },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
     rig, world, arsenal, vehicles, traffic, life, get peds() { return peds; }

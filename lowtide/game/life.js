@@ -9,11 +9,9 @@ import { findBones, Ragdoll } from "./rig.js?v=dev";
 import { lanePoint } from "./world.js?v=dev";
 import { STATION } from "./police.js?v=dev";
 
-const LINES = ["CMON BRO...", "DEAD", "REALLY?", "FLATLINED", "NOT AGAIN", "WHY", "UNLUCKY", "COME ON MAN", "BRUH", "\u{1F62D}", "\u{1F494}\u{1F494}\u{1F494}"];
+const LINES = ["CMON BRO...", "DEAD", "REALLY?", "FLATLINED", "NOT AGAIN", "WHY", "UNLUCKY", "COME ON MAN", "BRUH"];
 export const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
 const BILL = 150, BAIL = 300;
-// emoji lines draw as images (vendor/emoji), so they look the same on every device
-const emoji = (t) => [...t].map((c) => `<img class="emoji" src="vendor/emoji/${c.codePointAt(0).toString(16)}.png?v=dev" alt="${c}">`).join("");
 
 export class Life {
   constructor({ player, world, rig, hud, root, blit, sfx, vehicles }) {
@@ -48,7 +46,7 @@ export class Life {
     if (this.gore) this.gore.pool(() => (this.rag ? this.rag.p[0] : null));
     if (this.sfx.rattle) setTimeout(() => this.sfx.rattle({ female: true, pitch: 1 }, 0), 500);
     this.line = LINES[(Math.random() * LINES.length) | 0];
-    if (this.el) { const b = this.el.querySelector("b"); if (/[a-z]/i.test(this.line)) b.textContent = this.line; else b.innerHTML = emoji(this.line); this.el.classList.add("on"); }
+    if (this.el) { this.el.querySelector("b").textContent = this.line; this.el.classList.add("on"); }
     if (this.sfx.wasted) this.sfx.wasted();
   }
   // arrested: the world slows and drains like a death, BUSTED, and you're out at the station with a bail bill

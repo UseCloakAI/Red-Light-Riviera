@@ -543,9 +543,21 @@ export class Arsenal {
     this.hudSync();
 
     // what it hit: people take every pellet; walls get a hole each
-    let marked = null, sounds = 0;
+    let marked = null, sounds = 0, cine = false, headMark = false;
     for (const [hit, to] of shots) {
       if (hit.obj) { hit.obj.hit(w.damage, hit.point); this.fx.sparks(hit.point, 5, hit.normal, 3, 0xffc070, 0.2); marked = marked || "body"; continue; }
+      // a headshot with a single round: maybe the bullet cam (main.js decides); it lands the shot when the round arrives
+      if (hit.ped && hit.head && w.pellets === 1 && !hit.ped.dead && this.onHeadshot && !cine) {
+        const pd = hit.ped, pt = hit.point.clone(), dd = to.clone(), from = this.player.pos.clone();
+        const apply = () => {
+          const r = this.peds.damage(pd, { point: pt, dir: dd, damage: w.damage, head: true, from, byPlayer: true, force: 6.5 });
+          if (this.hud.hitmark) this.hud.hitmark(r === "dead", true);
+          if (this.sfx.impact) this.sfx.impact("flesh", 0, 0);
+          this.fx.puff(pt, dd.clone().multiplyScalar(1.4), 0.55, 0.9, 0x5a0808, 0.75); this.fx.sparks(pt, 10, dd, 3, 0x4a0606, 0.5);
+        };
+        if (this.onHeadshot(hit, dd, muzzle.clone(), apply)) { cine = true; continue; }
+        headMark = true;
+      }
       if (hit.ped) {
         const fall = w.pellets > 1 ? THREE.MathUtils.clamp(1 - (hit.t - 8) / 40, 0.3, 1) : 1;
         const r = this.peds.damage(hit.ped, { point: hit.point, dir: to, damage: w.damage * fall * (hit.head && w.pellets > 1 ? 3 : 1), head: hit.head && w.pellets === 1,
@@ -562,7 +574,7 @@ export class Arsenal {
         if (sounds++ < 2 && this.sfx.impact) this.sfx.impact(sand ? "sand" : "hard", hit.t, 0);
       }
     }
-    if (marked && this.hud.hitmark) this.hud.hitmark(marked === "dead");
+    if (marked && this.hud.hitmark) this.hud.hitmark(marked === "dead", headMark);
     if (this.peds) this.peds.alarm(this.player.pos.x, this.player.pos.z, w.pellets > 1 ? 70 : 55);
     if (this.onShot) this.onShot(this.player.pos, shots[0][0]);
   }
