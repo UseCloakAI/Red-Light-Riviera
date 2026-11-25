@@ -158,7 +158,7 @@ export class Traffic {
     for (const c of this.cars) if (c.active) o.push({ x: c.x, z: c.z, r: 1.1, v: c.speed, a: c.a, car: c });
     if (vehicles && vehicles.car) o.push({ x: vehicles.car.x, z: vehicles.car.z, r: 1.1, v: vehicles.car.speed, a: vehicles.car.a, player: true });
     else if (!(this.life && this.life.dead)) o.push({ x: player.pos.x, z: player.pos.z, r: 0.5, v: 0, player: true, foot: true });
-    if (peds) for (const pd of peds.peds) { if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position; if (this.world.mask.get(g.x, g.z) === 2) o.push({ x: g.x, z: g.z, r: 0.5, v: 0, foot: true }); }
+    if (peds) for (const pd of peds.peds) { if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position; if (this.world.mask.get(g.x, g.z) !== 1) o.push({ x: g.x, z: g.z, r: 0.5, v: 0, foot: true }); }
     return o;
   }
   // something frightening at (x, z): drivers within r panic
@@ -222,7 +222,7 @@ export class Traffic {
         else { const nx = c.next || this.chooseNext(c); if (!nx) { c.active = false; this.hide(c); continue; } c.w = nx; c.next = null; c.s = over; }
       }
       // running people down (a driver who's braking won't, unless they can't stop in time)
-      if (c.speed > 2.5) this.runOver(c, peds, vehicles);
+      if (c.speed > 2.5) this.runOver(c, peds, vehicles, P);
     }
     // cars bumping each other (it happens in a panic): push apart, damage by closing speed
     for (let i = 0; i < this.cars.length; i++) {
@@ -259,12 +259,19 @@ export class Traffic {
     c.roll += (-yawRate * c.speed * 0.01 - c.roll) * Math.min(1, dt * 5);
     this.place(c);
   }
-  runOver(c, peds, vehicles) {
+  runOver(c, peds, vehicles, P = { x: c.x, z: c.z }) {
     const fx = Math.sin(c.a), fz = Math.cos(c.a), co = Math.cos(c.a), sn = Math.sin(c.a);
     const inside = (x, z) => { const rx = x - c.x, rz = z - c.z, lx = rx * co - rz * sn, lz = rx * sn + rz * co; return Math.abs(lx) < 1.15 && lz > -2.3 && lz < 2.6; };
     if (peds) for (const pd of peds.peds) {
       if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position;
-      if (inside(g.x, g.z)) { peds.damage(pd, { point: new THREE.Vector3(g.x, g.y + 0.9, g.z), dir: new THREE.Vector3(fx, 0.35, fz).normalize(), damage: c.speed * 10, from: { x: c.x, z: c.z }, force: Math.min(10, c.speed * 0.75) }); c.speed *= 0.9; if (this.sfx.impact) this.sfx.impact("flesh", 0, 0); peds.alarm(c.x, c.z, 30); }
+      if (!inside(g.x, g.z)) continue;
+      // one hit per car per person, not one a frame while they're still under the bumper
+      if (pd.hitBy === c && this.t - pd.hitT < 1.5) continue; pd.hitBy = c; pd.hitT = this.t;
+      const far = Math.hypot(g.x - P.x, g.z - P.z);
+      // a calm driver rolling slowly only nudges someone; it takes speed (or panic) to really hit them
+      if (c.ai && !(c.panic > 0) && c.speed < 4.5) { c.speed = 0; if (peds.bump) peds.bump(pd, c.x, c.z); continue; }
+      peds.damage(pd, { point: new THREE.Vector3(g.x, g.y + 0.9, g.z), dir: new THREE.Vector3(fx, 0.35, fz).normalize(), damage: c.speed * 10, from: { x: c.x, z: c.z }, force: Math.min(10, c.speed * 0.75) });
+      c.speed *= 0.9; if (this.sfx.impact) this.sfx.impact("flesh", far, 0); peds.alarm(c.x, c.z, 30, true, "car");
     }
     const L = this.life;
     if (L && !L.dead && !(vehicles && vehicles.driving) && inside(L.player.pos.x, L.player.pos.z) && L.iframes <= 0) {

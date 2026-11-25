@@ -5,5 +5,7 @@ export const BUMP = ["Watch it.", "Sidewalk is for walking.", "Easy. Nobody's ch
 
 // shouted when something goes wrong nearby
 export const PANIC = ["Gun! He's got a gun!", "Get down!", "Oh my God.", "Run!", "Somebody call the police!", "Not again. Not on this street.", "Move, move, move!", "I didn't see anything!", "Get inside!", "Are you out of your mind?"];
+// a car's just hit someone
+export const STRUCK = ["Oh my God, they hit someone!", "Call an ambulance!", "Did you see that?", "Slow down, you maniac!", "Somebody help!", "He came out of nowhere."];
 // said with your gun in their face
 export const HELD = ["Okay. Okay. Easy.", "Take whatever you want.", "Please, I have kids.", "I'm going, I'm going."];
