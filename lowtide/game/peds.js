@@ -7,13 +7,13 @@
    they pass. Some stand about instead: pairs in conversation (nodding, shaking
    their heads, taking turns) and people waiting by the buildings, who break up
    after a while and walk on. Walkers
-   sidestep a player running at them, and stagger if barged. They
+   flee or duck when something goes wrong nearby (alarm), sidestep a player running at them, and stagger if barged. They
    are recycled out of sight as the player moves. Animation only runs near
    the camera, and the crowd shrinks if the machine is struggling. */
 import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
 import { P as PITCH } from "./world.js?v=dev";
-import { AMBIENT, BUMP } from "./lines.js?v=dev";
+import { AMBIENT, BUMP, PANIC } from "./lines.js?v=dev";
 
 const INSET = 1.5;                       // walk this far in from the lot edge (sidewalk is 3 m)
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.4;
@@ -100,7 +100,7 @@ export async function spawnPeds(scene, world, o = {}) {
     const mixer = new THREE.AnimationMixer(h.group), act = {};
     for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
-    const pd = { h, mixer, act, head, neck, dir: R() < 0.5 ? 1 : -1, speed: 1.15 + R() * 0.45, pause: 0, wW: 1, rW: 0, first: true,
+    const pd = { h, mixer, act, head, neck, dir: R() < 0.5 ? 1 : -1, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0,
       side: 0, look: 0, stagger: 0, cross: null, st: null, gW: 0, gT: 0, gest: null };
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
@@ -178,7 +178,7 @@ export async function spawnPeds(scene, world, o = {}) {
           x = st.x; z = st.z; hx = Math.sin(st.yaw); hz = Math.cos(st.yaw);
         } else if (pd.cross) {
           // on the zebra: straight across at a slightly brisker pace
-          const c = pd.cross; if (pd.pause <= 0) c.t += (pd.speed * 1.1 * dt) / c.len;
+          const c = pd.cross; if (pd.pause <= 0) c.t += ((pd.fear ? pd.run : pd.speed * 1.1) * dt) / c.len;
           if (c.t >= 1) {
             pd.L = c.N; const k = cornerIndex(c.N, c.x1, c.z1); pd.s = corners(c.N)[k] + pd.dir * 0.01; pd.cross = null;
             along(pd.L, pd.s, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx * pd.dir; hz = tmp.dz * pd.dir;
@@ -204,7 +204,10 @@ export async function spawnPeds(scene, world, o = {}) {
         const inPath = ahead > 0 && ahead < 3.2 && Math.abs(lateral) < 1.1;
         const wantSide = inPath && pv > 3 ? (lateral > 0 ? -0.9 : 0.9) : 0;
         pd.side += (wantSide - pd.side) * Math.min(1, dt * 5);
+        if (pd.fear && (pd.fear.t -= dt) <= 0) pd.fear = null;
+        if (pd.cower > 0) { pd.cower -= dt; pd.pause = Math.max(pd.pause, 0.1); }
         if (pd.pause > 0) pd.pause -= dt;
+        else if (pd.fear) { /* running: no stopping */ }
         else if (inPath && pv <= 3 && ahead < 1.6) pd.pause = 0.5 + R() * 0.7;
         else if (!pd.cross && R() < dt * 0.015) pd.pause = 2 + R() * 4;            // stop and stand for a moment
         if (pd.stagger > 0) { pd.stagger -= dt; pd.pause = Math.max(pd.pause, 0.2); }
@@ -213,7 +216,7 @@ export async function spawnPeds(scene, world, o = {}) {
         if (moving && !pd.cross) {
           // passing a corner: maybe head across the road
           const before = pd.s, P = perimeter(pd.L);
-          pd.s += pd.dir * pd.speed * dt;
+          pd.s += pd.dir * (pd.fear ? pd.run : pd.speed) * dt;
           const cs = corners(pd.L), b0 = ((before % P) + P) % P, b1 = ((pd.s % P) + P) % P;
           for (let k = 0; k < 4; k++) {
             const c = cs[k], hit = pd.dir > 0 ? (b0 < c && b1 >= c) || (b0 > b1 && c === 0) : (b0 > c && b1 <= c) || (b1 > b0 && c === 0);
@@ -224,13 +227,17 @@ export async function spawnPeds(scene, world, o = {}) {
         g.position.set(x + rx * pd.side, gy, z + rz * pd.side);
         let yaw = Math.atan2(hx, hz);
         if (pd.stagger > 0) yaw = Math.atan2(toP.x, toP.z);                     // turn to see who did that
+        else if (pd.cower > 0 && pd.fear) yaw = Math.atan2(x - pd.fear.x, z - pd.fear.z);   // duck, back to the danger
         let dy = yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
         g.rotation.y += dy * Math.min(1, dt * (pd.stagger > 0 ? 10 : 6));
         g.visible = d < FAR;
         if (d < NEAR) {
-          pd.wW += ((moving ? 1 : 0) - pd.wW) * Math.min(1, dt * 6);
-          pd.act.walk.setEffectiveWeight(pd.wW); pd.act.idle.setEffectiveWeight(1 - pd.wW);
-          pd.act.walk.timeScale = pd.speed / 1.45;
+          const k = Math.min(1, dt * 6), running = moving && !!pd.fear;
+          pd.wW += ((moving && !running ? 1 : 0) - pd.wW) * k; pd.rW += ((running ? 1 : 0) - pd.rW) * k; pd.cW += ((pd.cower > 0 ? 1 : 0) - pd.cW) * k * 1.5;
+          pd.act.walk.setEffectiveWeight(pd.wW); pd.act.run.setEffectiveWeight(pd.rW);
+          if (pd.act.sneak_pose) pd.act.sneak_pose.setEffectiveWeight(pd.cW);
+          pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - pd.rW - pd.cW));
+          pd.act.walk.timeScale = pd.speed / 1.45; pd.act.run.timeScale = pd.run / 4.8;
           if (pd.gW > 0.001) { pd.gW *= Math.max(0, 1 - dt * 4); for (const n of GESTURES) if (pd.act[n]) pd.act[n].setEffectiveWeight(n === pd.gest ? pd.gW : 0); }
           pd.mixer.update(dt);
           const facing = glance(pd, g, toP.x, toP.z, d, dt);
@@ -239,6 +246,23 @@ export async function spawnPeds(scene, world, o = {}) {
           if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
         }
       });
+    },
+    // something went wrong at (x, z): people within r run from it; the closest may duck first
+    alarm(x, z, r = 40, shout = true) {
+      let nearest = null, nd = Infinity;
+      for (let i = 0; i < Math.min(limit, peds.length); i++) {
+        const pd = peds[i], g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z);
+        if (d > r || pd.dead) continue;
+        if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
+        const fresh = !pd.fear;
+        pd.fear = { x, z, t: 9 + R() * 8 }; pd.pause = fresh ? 0.15 + R() * 0.5 : 0;   // a beat to register it
+        if (fresh && d < 9 && R() < 0.4) pd.cower = 2 + R() * 3;
+        // run whichever way along the block takes them away from it
+        if (!pd.cross) { along(pd.L, pd.s + 2, tmp); const a = Math.hypot(tmp.x - x, tmp.z - z); along(pd.L, pd.s - 2, tmp); pd.dir = a >= Math.hypot(tmp.x - x, tmp.z - z) ? 1 : -1; }
+        if (d < nd) { nd = d; nearest = pd; }
+      }
+      if (shout && nearest && nd < 25) { quiet = 0; say(PANIC[(R() * PANIC.length) | 0]); quiet = 3 + R() * 3; }
+      return nearest;
     },
     // keep the player from walking through people; a sprinting player knocks them off their stride
     push(p, r, speed) {
