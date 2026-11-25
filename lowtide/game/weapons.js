@@ -401,7 +401,7 @@ export class Arsenal {
       const g = pd.h.group.position, low = pd.down > 0, point = new THREE.Vector3(g.x, g.y + (low ? 0.3 : a.k === 3 ? 1.5 : 1.35), g.z);
       const dmg = a.bat ? 48 : a.k === 3 ? 26 : 15;
       const knock = a.bat ? Math.random() < 0.75 : a.k === 3 && Math.random() < 0.8;
-      const r = this.peds.damage(pd, { point, dir, damage: dmg, from: P.pos.clone(), melee: true, blunt: a.bat ? 0.8 : 0.25, knock, force: a.bat ? 6.5 : a.k === 3 ? 5 : 3 });
+      const r = this.peds.damage(pd, { point, dir, damage: dmg, from: P.pos.clone(), byPlayer: true, melee: true, blunt: a.bat ? 0.8 : 0.25, knock, force: a.bat ? 6.5 : a.k === 3 ? 5 : 3 });
       if (this.sfx.punch) this.sfx.punch(a.bat ? "bat" : "fist", 0);
       this.rig.shake = Math.max(this.rig.shake, a.bat ? 0.45 : 0.22); this.hitStop = a.bat ? 0.09 : a.k === 3 ? 0.07 : 0.045;
       if (this.hud.hitmark && r !== "body") this.hud.hitmark(r === "dead");
@@ -548,7 +548,7 @@ export class Arsenal {
       if (hit.ped) {
         const fall = w.pellets > 1 ? THREE.MathUtils.clamp(1 - (hit.t - 8) / 40, 0.3, 1) : 1;
         const r = this.peds.damage(hit.ped, { point: hit.point, dir: to, damage: w.damage * fall * (hit.head && w.pellets > 1 ? 3 : 1), head: hit.head && w.pellets === 1,
-          from: this.player.pos, force: w.pellets > 1 ? 7 * fall : undefined });
+          from: this.player.pos, force: w.pellets > 1 ? 7 * fall : undefined, byPlayer: true });
         this.fx.puff(hit.point, to.clone().multiplyScalar(0.6), 0.22, 0.45, 0x4a0c0c, 0.55);
         this.fx.sparks(hit.point, 4, to, 1.6, 0x3a0606, 0.35);
         if (sounds++ < 2 && this.sfx.impact) this.sfx.impact("flesh", hit.t, 0);
@@ -587,8 +587,8 @@ export class Arsenal {
     // people: a capsule for the body and a sphere for the head
     if (this.peds) {
       const P = this.peds.peds;
-      for (let i = 0; i < Math.min(this.peds.limit, P.length); i++) {
-        const pd = P[i], g = pd.h.group; if (pd.dead || !g.visible) continue;
+      for (let i = 0; i < P.length; i++) {
+        const pd = P[i], g = pd.h.group; if (pd.dead || !g.visible || (i >= this.peds.limit && !pd.cop)) continue;
         const gp = g.position; if (Math.abs(gp.x - o.x) > best + 1 || Math.abs(gp.z - o.z) > best + 1) continue;
         pd.B = pd.B || findBones(g); if (!pd.B) continue;
         const hc = wpos(pd.B.head, _hc); hc.y += 0.07;

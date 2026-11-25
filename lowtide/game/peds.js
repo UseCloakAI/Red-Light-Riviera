@@ -155,6 +155,18 @@ export async function spawnPeds(scene, world, o = {}) {
     scene.add(h.group);
     peds.push(pd);
   }
+  // the police: the same people, in navy, kept off the street until they're called (police.js drives them)
+  async function makeCop() {
+    const p = randomPerson(R); p.outfit = p.sex < 0.5 ? "female_casualsuit02" : "male_worksuit01"; p.shoes = "shoes01"; p.hat = null; p.age = 26 + ((R() * 22) | 0);
+    const h = new Human(D, p, { lod: p.sex < 0.5 ? "female1605" : "male1591" });
+    h.group.traverse((m) => { if (!m.isMesh) return; m.receiveShadow = false; if (m.name === "outfit" || m.name === "shoes") { m.material = m.material.clone(); m.material.color.set(m.name === "outfit" ? 0x2b3b6e : 0x151515); } });
+    const mixer = new THREE.AnimationMixer(h.group), act = {};
+    for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
+    act.idle.setEffectiveWeight(1);
+    const pd = { cop: true, active: false, voice: { female: p.sex < 0.5, pitch: 0.95 + R() * 0.1, age: p.age }, h, mixer, act, head: h.bones.find((b) => b.name === "head"), neck: h.bones.find((b) => b.name === "neck01"),
+      speed: 1.6, run: 5.2 + R() * 0.6, wW: 0, rW: 0, cW: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0, side: 0, stagger: 0, down: 0, free: null, anger: 0, bumpT: -9, brave: 1, fear: null, cower: 0, pause: 0 };
+    h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
+  }
   for (let i = 0; i < count; i++) {
     await make(o.near || world.spawn);
     if (o.progress) o.progress((i + 1) / count);
@@ -317,6 +329,7 @@ export async function spawnPeds(scene, world, o = {}) {
       quiet -= dt; clock += dt;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
+        if (pd.cop) { if (pd.dead && pd.rag && g.visible && pd.rag.step(dt)) pd.rag.pose(); return; }
         if (idx >= limit) { g.visible = false; return; }
         if (pd.dead) {   // a body: let it fall and settle; clear it away once nobody can see
           const dd = Math.hypot(g.position.x - px, g.position.z - pz);
@@ -407,6 +420,7 @@ export async function spawnPeds(scene, world, o = {}) {
         if (sfx.rattle) setTimeout(() => sfx.rattle(pd.voice, distTo(pd)), hit.head ? 300 : 700 + Math.random() * 500);
         return "dead";
       }
+      if (pd.cop) { pd.stagger = 0.35; if (sfx.grunt) sfx.grunt(pd.voice, distTo(pd)); return "hurt"; }   // police.js decides what they do about it
       if (pd.down > 0 && pd.rag) { pd.rag.impulse(hit.point, hit.dir, hit.force || 2.5); pd.rag.sleep = 0; pd.down = Math.max(pd.down, 1.5); return "hurt"; }
       if (sfx.grunt) sfx.grunt(pd.voice, distTo(pd));
       if (!hit.melee && Math.random() < 0.55) setTimeout(() => scream(pd, true), 180);
@@ -429,7 +443,8 @@ export async function spawnPeds(scene, world, o = {}) {
       if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
-    knock, bumped, squareUp,
+    knock, bumped, squareUp, makeCop,
+    get cops() { return peds.filter((pd) => pd.cop); },
     get fighting() { return peds.filter((pd) => pd.free && pd.free.mode === "fight" && !pd.dead); },
     alarm(x, z, r = 40, shout = true, kind = "gun") {
       let nearest = null, nd = Infinity;

@@ -7,10 +7,11 @@
 import * as THREE from "three";
 import { findBones, Ragdoll } from "./rig.js?v=dev";
 import { lanePoint } from "./world.js?v=dev";
+import { STATION } from "./police.js?v=dev";
 
 const LINES = ["CMON BRO...", "DEAD", "REALLY?", "FLATLINED", "NOT AGAIN", "WHY", "UNLUCKY", "COME ON MAN", "BRUH", "\u{1F62D}", "\u{1F494}\u{1F494}\u{1F494}"];
 export const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
-const BILL = 150;
+const BILL = 150, BAIL = 300;
 // emoji lines draw as images (vendor/emoji), so they look the same on every device
 const emoji = (t) => [...t].map((c) => `<img class="emoji" src="vendor/emoji/${c.codePointAt(0).toString(16)}.png?v=dev" alt="${c}">`).join("");
 
@@ -50,8 +51,15 @@ export class Life {
     if (this.el) { const b = this.el.querySelector("b"); if (/[a-z]/i.test(this.line)) b.textContent = this.line; else b.innerHTML = emoji(this.line); this.el.classList.add("on"); }
     if (this.sfx.wasted) this.sfx.wasted();
   }
+  // arrested: the world slows and drains like a death, BUSTED, and you're out at the station with a bail bill
+  bust() {
+    if (this.dead || this.busted) return;
+    this.busted = true; this.t = 0; this.player.vel.set(0, 0, 0);
+    if (this.el) { this.el.querySelector("b").textContent = "BUSTED"; this.el.classList.add("on", "busted"); }
+    if (this.sfx.wasted) this.sfx.wasted();
+  }
   // true while the body is on the floor (the game shouldn't drive the player then)
-  get down() { return this.dead || this.knock > 0; }
+  get down() { return this.dead || this.busted || this.knock > 0; }
   // dt: real time (timers); sim: the world's (slowed) time, for the body
   update(dt, input, sim = dt) {
     this.iframes = Math.max(0, this.iframes - dt);
@@ -65,23 +73,27 @@ export class Life {
       if (this.knock <= 0) { this.rag = null; P.vel.set(0, 0, 0); P.pos.y = this.world.heightAt(P.pos.x, P.pos.z); }   // up again; the clips take the bones back
     }
     // dying: slow time, drain the colour, then wake up at the hospital
-    this.timeScale += ((this.dead ? 0.3 : 1) - this.timeScale) * Math.min(1, dt * 4);
-    this.grey += ((this.dead ? 1 : 0) - this.grey) * Math.min(1, dt * 2.5);
+    const out = this.dead || this.busted;
+    this.timeScale += ((out ? 0.3 : 1) - this.timeScale) * Math.min(1, dt * 4);
+    this.grey += ((out ? 1 : 0) - this.grey) * Math.min(1, dt * 2.5);
     if (this.blit) this.blit.mat.uniforms.uGrey.value = this.grey;
-    if (this.dead) { this.t += dt; if (this.t > 3.2 || (this.t > 1.1 && input && (input.hit("Enter") || input.hit("Space")))) this.respawn(); }
+    if (this.dead || this.busted) { this.t += dt; if (this.t > 3.2 || (this.t > 1.1 && input && (input.hit("Enter") || input.hit("Space")))) this.respawn(); }
     // a little health back over time while nothing's hurting you
-    if (!this.dead && this.health < 100 && this.iframes <= 0) { this.regen = (this.regen || 0) + dt; if (this.regen > 6) { this.health = Math.min(100, this.health + dt * 2); this.sync(); } }
+    if (!this.dead && !this.busted && this.health < 100 && this.iframes <= 0) { this.regen = (this.regen || 0) + dt; if (this.regen > 6) { this.health = Math.min(100, this.health + dt * 2); this.sync(); } }
     else this.regen = 0;
   }
   respawn() {
-    const P = this.player, H = { ...HOSPITAL };
-    // the pavement nearest the hospital's door (never inside a wall)
-    let best = Infinity; for (const l of this.world.lanes) for (let s = 0; s < l.L; s += 4) { const p = lanePoint(l, s), d = Math.hypot(p.x - HOSPITAL.x, p.z - HOSPITAL.z); if (d < best) { best = d; H.x = p.x; H.z = p.z; } }
+    const P = this.player, jail = !!this.busted, at = jail ? STATION : HOSPITAL, H = { x: at.x, z: at.z, yaw: HOSPITAL.yaw };
+    // the pavement nearest the door (never inside a wall)
+    let best = Infinity; for (const l of this.world.lanes) for (let s = 0; s < l.L; s += 4) { const p = lanePoint(l, s), d = Math.hypot(p.x - at.x, p.z - at.z); if (d < best) { best = d; H.x = p.x; H.z = p.z; } }
+    this.busted = false; if (this.el) this.el.classList.remove("busted");
+    if (this.onRespawn) this.onRespawn(jail);
     this.dead = false; this.rag = null; this.knock = 0; this.health = 100; this.iframes = 3; this.sync();
     P.pos.set(H.x, this.world.heightAt(H.x, H.z), H.z); P.vel.set(0, 0, 0); P.yaw = H.yaw;
     if (P.model) P.model.visible = true;
     if (this.rig) { this.rig.yaw = H.yaw + Math.PI; this.rig.cur = null; }
     if (this.el) this.el.classList.remove("on");
-    if (this.hud) { this.hud.cash = Math.max(0, this.hud.cash - BILL); this.hud.cashEl.textContent = "$" + this.hud.cash.toLocaleString("en-US"); this.hud.subtitle(`Marlowe General. The bill was $${BILL}. They kept your watch.`); }
+    if (this.hud && jail) { this.hud.cash = Math.max(0, this.hud.cash - BAIL); this.hud.cashEl.textContent = "$" + this.hud.cash.toLocaleString("en-US"); this.hud.subtitle(STATION.name + ". Bail was $" + BAIL + ". They let you keep the shoes."); }
+    else if (this.hud) { this.hud.cash = Math.max(0, this.hud.cash - BILL); this.hud.cashEl.textContent = "$" + this.hud.cash.toLocaleString("en-US"); this.hud.subtitle(`Marlowe General. The bill was $${BILL}. They kept your watch.`); }
   }
 }

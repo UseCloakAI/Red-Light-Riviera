@@ -99,7 +99,11 @@ export class Traffic {
     // driver's left is -x in the car's frame (+z forward, right = (-dz, dx) in the world)
     this.indL = lamp(mergeGeometries([box(0.12, 0.1, 0.06, 0.86, 0.72, 2.15), box(0.12, 0.1, 0.06, 0.86, 0.74, -2.15)]), B({ color: 0xffa020 }));
     this.indR = lamp(mergeGeometries([box(0.12, 0.1, 0.06, -0.86, 0.72, 2.15), box(0.12, 0.1, 0.06, -0.86, 0.74, -2.15)]), B({ color: 0xffa020 }));
-    this.lampMeshes = [this.heads, this.tails, this.indL, this.indR]; this.threat = 0;
+    // police: a lightbar on the roof, red and blue taking turns
+    this.barR = lamp(box(0.5, 0.12, 0.22, 0.3, 1.5, -0.25), B({ color: 0xff2030 }));
+    this.barB = lamp(box(0.5, 0.12, 0.22, -0.3, 1.5, -0.25), B({ color: 0x2060ff }));
+    this.barBase = lamp(box(1.25, 0.08, 0.26, 0, 1.45, -0.25), B({ color: 0x1a1a1a }));
+    this.lampMeshes = [this.heads, this.tails, this.indL, this.indR, this.barR, this.barB, this.barBase]; this.threat = 0;
     this.signals = world.props ? world.props.signals : [];
   }
   hide(c) { _m.compose(_z, _q.identity(), _z); for (const im of this.meshes) im.setMatrixAt(c.i, _m); if (this.lampMeshes) for (const im of this.lampMeshes) im.setMatrixAt(c.i, _m); }
@@ -112,6 +116,9 @@ export class Traffic {
     this.heads.setMatrixAt(c.i, _m); this.tails.setMatrixAt(c.i, _m);
     this.tails.setColorAt(c.i, _c.set(c.brake ? 0xff2a18 : 0x6a0c0a));
     this.indL.setMatrixAt(c.i, c.ind < 0 && blink ? _m : _hid); this.indR.setMatrixAt(c.i, c.ind > 0 && blink ? _m : _hid);
+    const flash = (this.t * 4.2 + c.i * 0.3) % 1;
+    this.barBase.setMatrixAt(c.i, c.cop ? _m : _hid);
+    this.barR.setMatrixAt(c.i, c.cop && (!c.siren || flash < 0.5) ? _m : _hid); this.barB.setMatrixAt(c.i, c.cop && (!c.siren || flash >= 0.5) ? _m : _hid);
   }
   // signals: two groups of roads take turns, with a moment of all-red between
   signalled(node) { return node.deg >= 3 && node.ends.some((d) => d.e.kind === "avenue"); }
@@ -146,7 +153,7 @@ export class Traffic {
       if (this.cars.some((o) => o.active && Math.hypot(o.x - p.x, o.z - p.z) < 22)) continue;
       Object.assign(c, { active: true, ai: true, w: l, next: null, s, x: p.x, z: p.z, y: this.world.heightAt(p.x, p.z), a: Math.atan2(p.dx, p.dz), speed: l.cruise * 0.7, steer: 0,
         wait: 0, still: 0, honk: 0, stun: 0, panic: 0, health: 100, wreck: false, go: false, bend: 0, lift: 0, taken: false });
-      this.driver(c);
+      this.driver(c); this.uncop(c);
       if (c.body) { c.body.group.visible = true; }
       return true;
     }
@@ -211,12 +218,13 @@ export class Traffic {
   update(dt, player, vehicles, peds) {
     this.t += dt;
     const P = player.pos, obs = this.obstacles(player, vehicles, peds), W = this.world;
-    let n = 0; for (const c of this.cars) if (c.active && c.ai) n++;
+    let n = 0; for (const c of this.cars) if (c.active && c.ai && !c.cop) n++;
     for (const c of this.cars) {
-      if (c.active && c.ai && (Math.hypot(c.x - P.x, c.z - P.z) > RECYCLE || (c.still > 18 && Math.hypot(c.x - P.x, c.z - P.z) > 60))) { c.active = false; this.hide(c); if (c.body) c.body.group.visible = false; n--; }
-      if (!c.active && !c.taken && !c.wreck && n < this.limit && this.spawn(c, P)) n++;
+      if (c.active && c.ai && !c.pursue && (Math.hypot(c.x - P.x, c.z - P.z) > RECYCLE || (c.still > 18 && Math.hypot(c.x - P.x, c.z - P.z) > 60))) { c.active = false; this.hide(c); if (c.body) c.body.group.visible = false; if (c.cop) this.uncop(c); n--; }
+      if (!c.active && !c.taken && !c.wreck && !c.cop && n < this.limit && this.spawn(c, P)) n++;
     }
     if (this.threat > 0) this.threat -= dt;
+    this.sirens.length = 0; for (const c of this.cars) if (c.active && c.cop && c.siren && c.speed > 3) this.sirens.push(c);
     for (const c of this.cars) {
       if (!c.active || !c.ai) continue;
       if (c.stun > 0) {   // just been hit: sit there, then lean on the horn
@@ -224,8 +232,11 @@ export class Traffic {
         if (c.stun <= 0 && this.sfx.horn) { const d = Math.hypot(c.x - P.x, c.z - P.z); this.sfx.horn(d); if (c.style !== "calm") setTimeout(() => this.sfx.horn(d), 380); }
         continue;
       }
+      if (c.cop && c.pursue) { this.pursue(c, dt, P, vehicles); continue; }
       if (c.panic > 0) c.panic -= dt;
       const panic = c.panic > 0;
+      // a siren behind us: slow down and pull over to the right until it's gone by
+      if (!c.cop && this.sirens.length) { let y = false; for (const k of this.sirens) { const dx = c.x - k.x, dz = c.z - k.z; if (Math.abs(dx) < 40 && Math.abs(dz) < 40 && dx * Math.sin(k.a) + dz * Math.cos(k.a) > 0 && Math.hypot(dx, dz) < 38) { y = true; break; } } if (y) { c.yieldT = 2.5; } }
       // the next street, chosen in good time
       if (!c.w.turn && !c.next && c.w.L - c.s < 25) c.next = this.chooseNext(c);
       const fx = Math.sin(c.a), fz = Math.cos(c.a), rx = -fz, rz = fx;   // forward, and the driver's right
@@ -245,7 +256,8 @@ export class Traffic {
       c.steer += (want - c.steer) * Math.min(1, dt * 6);
       // the speed we'd like: our own, less on bends and while passing, more when getting out of trouble
       const k = Math.max(bend(c, c.s, 12), bend(c, c.s + 8, 14));
-      let v0 = c.w.cruise * c.v0 * (panic ? 1.35 : 1); v0 = Math.min(v0, Math.sqrt(4.2 / Math.max(1e-3, k)) * (panic ? 1.2 : 1));
+      if (c.yieldT > 0) c.yieldT -= dt;
+      let v0 = c.w.cruise * c.v0 * (panic ? 1.35 : 1) * (c.yieldT > 0 ? 0.35 : 1); v0 = Math.min(v0, Math.sqrt(4.2 / Math.max(1e-3, k)) * (panic ? 1.2 : 1));
       // the leader: nearest thing ahead in the strip we're steering into
       const lc = c.offT - c.off;
       let gap = Infinity, lv = 0, byPlayer = false, lead = null, edge = 0;
@@ -287,7 +299,7 @@ export class Traffic {
           else if (byPlayer || c.style !== "calm") { if (c.honk >= 0 && this.sfx.horn) { this.sfx.horn(Math.hypot(c.x - P.x, c.z - P.z)); c.honk = -3 - this.R() * 3; } }
         }
       } else { c.blocked = Math.max(0, c.blocked - dt * 2); }
-      if (!c.passing) { c.nudge = edge ? 0.6 : Math.max(0, c.nudge - dt); c.offT = edge ? edge * 0.7 : (c.nudge > 0 ? c.offT : 0); }
+      if (!c.passing) { c.nudge = edge ? 0.6 : Math.max(0, c.nudge - dt); c.offT = c.yieldT > 0 ? 1.3 : edge ? edge * 0.7 : (c.nudge > 0 ? c.offT : 0); }
       // Intelligent Driver Model
       const v = c.speed, dv = v - lv, sStar = c.s0 + Math.max(0, v * c.T + v * dv / (2 * Math.sqrt(c.acc * c.brk)));
       let acc = c.acc * (panic ? 1.6 : 1) * (1 - Math.pow(Math.max(0, v) / Math.max(0.1, v0), 4) - (gap < Infinity ? (sStar / Math.max(0.1, gap)) ** 2 : 0));
@@ -369,6 +381,66 @@ export class Traffic {
       L.damage(c.speed * 7.5, { point: L.player.pos.clone().setY(L.player.pos.y + 1), dir: new THREE.Vector3(fx, 0.4, fz).normalize(), force: Math.min(10, c.speed * 0.8), cause: "car" });
       L.iframes = Math.max(L.iframes, 0.6); c.speed *= 0.85; if (this.sfx.impact) this.sfx.impact("flesh", 0, 0);
     }
+  }
+  /* ---- police cars ---- */
+  get sirens() { return this._sir || (this._sir = []); }
+  uncop(c) { c.cop = false; c.pursue = false; c.siren = false; c.deployed = false; c.target = null; c.yieldT = 0; this.meshes[0].setColorAt(c.i, _c.set(c.color)); this.meshes[0].instanceColor.needsUpdate = true; }
+  // a patrol car out of sight around `near`, sent after `target` ({x, z}); returns the car or null
+  spawnCop(near, target) {
+    const c = this.cars.find((k) => !k.active && !k.taken && !k.wreck); if (!c) return null;
+    for (let tries = 0; tries < 60; tries++) {
+      let r = this.R() * this.total, l = this.lanes[0]; for (const m of this.lanes) { r -= m.L; if (r <= 0) { l = m; break; } }
+      const s = this.R() * l.L, p = pointOn(l, s), d = Math.hypot(p.x - near.x, p.z - near.z);
+      if (d < 70 || d > 140) continue;
+      if (this.cars.some((o) => o.active && Math.hypot(o.x - p.x, o.z - p.z) < 12)) continue;
+      Object.assign(c, { active: true, ai: true, w: l, next: null, s, x: p.x, z: p.z, y: this.world.heightAt(p.x, p.z), a: Math.atan2(p.dx, p.dz), speed: 6, steer: 0,
+        wait: 0, still: 0, honk: 0, stun: 0, panic: 0, health: 100, wreck: false, go: false, bend: 0, lift: 0, taken: false });
+      this.driver(c); c.v0 = 1.2; c.patience = 0.6;
+      Object.assign(c, { cop: true, pursue: true, siren: true, deployed: false, target, mode: "road" });
+      this.meshes[0].setColorAt(c.i, _c.set(0x16181d)); this.meshes[0].instanceColor.needsUpdate = true;
+      if (c.body) c.body.group.visible = true;
+      return c;
+    }
+    return null;
+  }
+  /* a car in pursuit: along the roads toward the target while it's far (taking the turn that gets
+     closer at each junction, through red lights), then straight at it: up to a stop beside you
+     on foot (they get out: c.deployed), or into your car to box it in */
+  pursue(c, dt, P, vehicles) {
+    const T = c.target || P, driving = vehicles && vehicles.car, tx0 = driving ? driving.x : T.x, tz0 = driving ? driving.z : T.z;
+    const d = Math.hypot(tx0 - c.x, tz0 - c.z), fx = Math.sin(c.a), fz = Math.cos(c.a);
+    if (c.stun > 0) { c.stun -= dt; c.speed *= 1 - Math.min(1, dt * 3); this.move(c, dt, 0); return; }
+    if (c.rev > 0) { c.rev -= dt; c.speed += (-3 - c.speed) * Math.min(1, dt * 3); this.move(c, dt, c.revSteer); if (c.rev <= 0) c.speed = 0; return; }
+    let tx, tz, want;
+    if (d > 45 && c.mode === "road") {   // the road network
+      if (!c.w.turn && !c.next && c.w.L - c.s < 25) {
+        const outs = c.w.out; let best = null, bd = Infinity;
+        for (const m of outs) { const e = m.pts[m.pts.length - 1], dd = Math.hypot(e.x - tx0, e.z - tz0); if (dd < bd) { bd = dd; best = m; } }
+        if (best) { const save = c.w.out; c.w.out = [best]; c.next = this.chooseNext(c); c.w.out = save; }
+      }
+      const Ld = 3 + c.speed * 0.35, Q = chainPoint(c, c.s + Ld); tx = Q.x; tz = Q.z;
+      want = c.w.cruise * 1.55;
+      c.s += Math.max(0, c.speed * dt * 0.98);
+      if (c.s >= c.w.L) { const over = c.s - c.w.L; if (c.w.turn) { c.w = c.w.lane; c.next = null; c.s = over; } else { const nx = c.next || this.chooseNext(c); if (nx) { c.w = nx; c.next = null; c.s = over; } else c.mode = "direct"; } }
+    } else {   // straight for them
+      c.mode = d > 70 ? "road" : "direct";
+      const lead = driving ? 0.6 : 0, vx = driving ? Math.sin(driving.a) * driving.speed : 0, vz = driving ? Math.cos(driving.a) * driving.speed : 0;
+      tx = tx0 + vx * lead; tz = tz0 + vz * lead;
+      if (driving) { want = Math.min(26, 8 + d * 0.9); c.stopT = d < 9 && Math.abs(driving.speed) < 2 ? (c.stopT || 0) + dt : 0; if (c.stopT > 2) { want = 0; if (c.speed < 1) c.deployed = true; } }   // ram them; if you've stopped, get out
+      else { const stopAt = 7; want = d < stopAt ? 0 : Math.min(18, (d - stopAt) * 1.3 + 2); if (d < stopAt + 0.5 && c.speed < 1) c.deployed = true; }
+      if (c.mode === "road") { c.mode = "road"; }
+    }
+    // steer for the point; brake for anything solid right in front (not for the car they're chasing)
+    const ax = tx - c.x, az = tz - c.z, alpha = Math.atan2(ax * fz - az * fx, ax * fx + az * fz), Ld2 = Math.max(3, Math.hypot(ax, az));
+    const st = Math.max(-0.65, Math.min(0.65, Math.atan(2 * WB * Math.sin(alpha) / Ld2)));
+    c.steer += (st - c.steer) * Math.min(1, dt * 7);
+    for (const o of this.cars) { if (o === c || !o.active || (driving && o === driving)) continue; const dx = o.x - c.x, dz = o.z - c.z, ah = dx * fx + dz * fz; if (ah > 0 && ah < 9 && Math.abs(-dx * fz + dz * fx) < 1.9) want = Math.min(want, Math.max(0, ah - 4.5)); }
+    if (Math.abs(alpha) > 1.3 && d < 25) want = Math.min(want, 5);         // turning hard: slow for it
+    const acc = want > c.speed ? 5.5 : -9; c.speed = Math.max(0, Math.min(want > c.speed ? want : c.speed, c.speed + acc * dt));
+    c.brake = acc < 0; c.ind = 0;
+    c.still = c.speed < 0.5 && want > 1 ? (c.still || 0) + dt : 0;
+    if (c.still > 2.2) { c.rev = 1.2; c.revSteer = alpha > 0 ? -0.55 : 0.55; c.still = 0; }
+    this.move(c, dt, c.steer);
   }
   // is the other side of the road clear far enough ahead to pull out and pass?
   clear(c, across) {

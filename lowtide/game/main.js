@@ -15,6 +15,7 @@ import { Vehicles } from "./vehicles.js?v=dev";
 import { Traffic } from "./traffic.js?v=dev";
 import { Life, HOSPITAL } from "./life.js?v=dev";
 import { Travel } from "./travel.js?v=dev";
+import { Police, STATION } from "./police.js?v=dev";
 import { Gore } from "./gore.js?v=dev";
 import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -77,6 +78,9 @@ export async function start(o) {
   const pedHooks = { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos };   // the fight callbacks get filled in once there's a player to hit
   try { peds = await spawnPeds(scene, world, Object.assign(pedHooks, { onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) })); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
+  const cops = [];   // the Marlowe Keys PD: eight officers, kept out of sight until they're needed
+  if (peds) try { for (let i = 0; i < 8; i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
+  let police = null;
 
   // Stage 3: weapons
   const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
@@ -100,6 +104,9 @@ export async function start(o) {
     life.damage(dmg, { point: player.pos.clone().setY(player.pos.y + 1.4), dir: dir.setY(0.15), force: 2.5, cause: "fist" });
     if (o.sfx && o.sfx.punch) o.sfx.punch("fist", 0);
   };
+  // the police and the wanted level
+  police = new Police({ scene, world, player, peds, traffic, vehicles, life, hud, sfx: o.sfx || {}, fx: arsenal.fx, arsenal, cops,
+    say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "angry"); } });
   traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
   // gunfire: drivers panic, and cars take rounds (enough of them and they go up)
@@ -111,20 +118,23 @@ export async function start(o) {
     for (let t = 0.5; t < L; t += 0.5) {
       const x = pos.x + dx * t / L, z = pos.z + dz * t / L, y = pos.y + 1.4 + (hit.point.y - pos.y - 1.4) * t / L;
       const c = all.find((k) => !k.wreck && Math.abs(k.x - x) < 3 && Math.abs(k.z - z) < 3 && vehicles.touching(k, x, z, 0) && y < (k.y || 0) + 1.5);
-      if (c) { vehicles.impactCar(c, x, z, dx / L, dz / L, 4); vehicles.hurt(c, 9); break; }
+      if (c) { c.byPlayerT = performance.now(); vehicles.impactCar(c, x, z, dx / L, dz / L, 4); vehicles.hurt(c, 9); break; }
     }
   };
   /* ---- what the pause menu shows: stats, the brief (everything said and shown), the clock ---- */
-  const stats = { played: 0, foot: 0, drive: 0, shots: 0, downed: 0, deaths: 0, bills: 0, wrecks: 0, lamps: 0, hydrants: 0, trips: 0, hijacks: 0 };
+  const stats = { played: 0, foot: 0, drive: 0, shots: 0, downed: 0, deaths: 0, bills: 0, wrecks: 0, lamps: 0, hydrants: 0, trips: 0, hijacks: 0, maxWanted: 0, busted: 0, copsDowned: 0 };
   const wrap = (obj, name, fn) => { if (!obj || !obj[name]) return; const f = obj[name].bind(obj); obj[name] = (...a) => { const r = f(...a); fn(...a); return r; }; };
-  const shot0 = arsenal.onShot; arsenal.onShot = (pos, hit) => { stats.shots++; shot0(pos, hit); };
+  const shot0 = arsenal.onShot; arsenal.onShot = (pos, hit) => { stats.shots++; shot0(pos, hit); if (police) police.crime("shots", pos); };
   wrap(vehicles, "explode", () => stats.wrecks++);
   wrap(vehicles, "breakLamp", () => stats.lamps++);
   wrap(vehicles, "breakHydrant", () => stats.hydrants++);
   wrap(vehicles, "enter", (c) => { if (c && c.ai !== undefined) stats.hijacks++; });
   wrap(life, "die", () => stats.deaths++);
   wrap(life, "respawn", () => { stats.bills += 150; });
-  if (peds && peds.damage) { const d0 = peds.damage.bind(peds); peds.damage = (pd, hit) => { const was = pd.dead; const r = d0(pd, hit); if (!was && pd.dead) stats.downed++; return r; }; }
+  if (peds && peds.damage) { const d0 = peds.damage.bind(peds); peds.damage = (pd, hit) => {
+    const was = pd.dead; const r = d0(pd, hit); if (!was && pd.dead) { stats.downed++; if (pd.cop && hit && hit.byPlayer) stats.copsDowned++; }
+    if (police && hit && hit.byPlayer && !was) police.crime(pd.dead ? (pd.cop ? "copkill" : "murder") : (pd.cop ? "copassault" : "assault"), pd.h.group.position);
+    return r; }; }
   let clockMin = 19 * 60 + 12;   // dusk on Marlowe Keys; a game minute every two seconds
   const clockStr = () => { const m = Math.floor(clockMin) % 1440, h = Math.floor(m / 60), mm = m % 60; return ((h + 11) % 12 + 1) + ":" + String(mm).padStart(2, "0") + (h < 12 ? " AM" : " PM"); };
   const brief = [];
@@ -141,6 +151,13 @@ export async function start(o) {
   const FOG0 = scene.fog.density;
   const setFog = (k) => { const d = FOG0 * (1 - 0.72 * k); scene.fog.density = d; for (const u of fogMats) u.value = d; };
   const travel = new Travel({ world, player, rig, camera, blit, sfx: o.sfx || {}, hud, vehicles, life, setFog, onArrive: (sp) => { stats.trips++; hud.area = null; } });
+  // the police's hooks into everything else
+  hud.blips = () => police.blips(); travel.police = police;
+  life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
+  police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
+  { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }
+  wrap(vehicles, "explode", (c) => { if (performance.now() - (c.byPlayerT || -1e9) < 15000) police.crime("explosion", c); });
+  { let ram = 0; const ic0 = vehicles.impactCar.bind(vehicles); vehicles.impactCar = (c, ...a) => { if (c.cop && vehicles.car && c !== vehicles.car && performance.now() - ram > 2000) { ram = performance.now(); police.crime("copassault", c); } return ic0(c, ...a); }; }
 
   // key tips: the basics as you start, the rest the first time they matter
   const TIPS = {
@@ -155,6 +172,7 @@ export async function start(o) {
     "near-car": "{E} gets in. Every car on the island is unlocked, apparently.",
     melee: "Unarmed, click or {F} throws punches. Land three in a row for a knockout. {4} or the wheel gets the bat.",
     "equip:melee": "The bat swings wide and hits hard. Click or {F}.",
+    wanted: "Wanted. Get out of the flashing area on the radar and stay out of sight to lose them. One star, unarmed and still: they'll arrest you.",
     "in-car": "{W} drives, {S} brakes and reverses, {A} {D} steer, {Space} is the handbrake. {E} gets out."
   };
   vehicles.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
@@ -234,6 +252,7 @@ export async function start(o) {
     if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down) player.animate(dw);
     if (peds) peds.update(dw, player);
+    if (police) police.update(dw);
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
@@ -250,7 +269,8 @@ export async function start(o) {
     resume() { if (running) return; running = true; last = 0; input.active = true; raf = requestAnimationFrame(loop); },
     pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); },
     lock() { input.lock(); },
-    drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL }, opt)); },
+    drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL, station: STATION }, opt)); },
+    get police() { return police; },
     // fast travel: check a map pick, why not now, go (done() once you've landed)
     travelCheck(x, z) { return travel.check(x, z); },
     travelBlock() { return travel.blocked(); },
@@ -262,7 +282,8 @@ export async function start(o) {
       const mi = (m) => (m / 1609.34).toFixed(1) + " mi", tm = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return h ? h + "h " + m + "m" : m + "m " + Math.floor(s % 60) + "s"; };
       return [["Time on the island", tm(stats.played)], ["On foot", mi(stats.foot)], ["Driven", mi(stats.drive)], ["Fast trips", stats.trips],
         ["Shots fired", stats.shots], ["People downed", stats.downed], ["Cars wrecked", stats.wrecks], ["Cars taken", stats.hijacks],
-        ["Lamp posts flattened", stats.lamps], ["Hydrants burst", stats.hydrants], ["Times flatlined", stats.deaths], ["Hospital bills", "$" + stats.bills.toLocaleString("en-US")]];
+        ["Lamp posts flattened", stats.lamps], ["Hydrants burst", stats.hydrants], ["Times flatlined", stats.deaths], ["Hospital bills", "$" + stats.bills.toLocaleString("en-US")],
+        ["Highest wanted", stats.maxWanted ? "\u2605".repeat(stats.maxWanted) : "None"], ["Times busted", stats.busted], ["Officers downed", stats.copsDowned]];
     },
     info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
     rig, world, arsenal, vehicles, traffic, life, get peds() { return peds; }

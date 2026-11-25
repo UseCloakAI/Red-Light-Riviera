@@ -171,6 +171,9 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .hud-tr{position:absolute;right:32px;top:26px;text-align:right}
 .stars{font-size:26px;letter-spacing:4px;color:rgba(247,242,234,.25);text-shadow:0 2px 0 rgba(0,0,0,.5)}
 .stars i{font-style:normal}.stars i.on{color:var(--gold)}
+.stars.search i.on{animation:starflash .5s steps(1) infinite}
+@keyframes starflash{50%{color:rgba(247,242,234,.35)}}
+.wasted.busted b{color:#3C6EFF}
 .cash{font:extra-condensed 900 40px/1 var(--fd);color:#7CE3A1;text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 12px rgba(0,0,0,.35)}
 .area{position:absolute;right:36px;bottom:36px;text-align:right;opacity:0}
 .area b{display:block;font:extra-condensed 900 46px/1 var(--fd);text-transform:uppercase;color:#FFF5EA;text-shadow:0 3px 0 rgba(0,0,0,.5)}

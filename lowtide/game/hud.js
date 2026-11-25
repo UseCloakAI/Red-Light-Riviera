@@ -124,6 +124,9 @@ export class Hud {
     el.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none", offset: 0.12 }, { opacity: 1, transform: "none", offset: 0.8 }, { opacity: 0, transform: "none" }],
       { duration: 4200, easing: "cubic-bezier(.16,1,.3,1)", fill: "forwards" });
   }
+  // wanted: the stars flash while they've lost sight of you; the search area on the radar; cop blips
+  searching(on) { this.starsEl.classList.toggle("search", !!on); }
+  searchArea(a) { this.search = a; }
   update(player, camYaw) {
     this.showArea(this.world.districtAt(player.pos.x, player.pos.z));
     const g = this.g, W = this.radar.width, r = W / 2, k = r / 120 / S;   // ~120 m to the rim
@@ -132,6 +135,16 @@ export class Hud {
     g.fillStyle = "#0E2436"; g.fillRect(0, 0, W, W);
     g.translate(r, r); g.rotate(camYaw); g.scale(k, k);
     g.drawImage(this.map.canvas, -(player.pos.x - this.map.x0) * S, -(player.pos.z - this.map.z0) * S);
+    const flash = (performance.now() / 260 | 0) % 2;
+    if (this.search) {   // where they're looking for you
+      g.fillStyle = flash ? "rgba(229,72,77,.22)" : "rgba(60,110,255,.22)"; g.strokeStyle = flash ? "rgba(229,72,77,.8)" : "rgba(60,110,255,.8)"; g.lineWidth = 2 / k;
+      g.beginPath(); g.arc((this.search.x - player.pos.x) * S, (this.search.z - player.pos.z) * S, this.search.r * S, 0, Math.PI * 2); g.fill(); g.stroke();
+    }
+    if (this.blips) for (const b of this.blips()) {
+      const bx = (b.x - player.pos.x) * S, bz = (b.z - player.pos.z) * S, rr = (b.heli ? 9 : b.foot ? 5 : 7) / k;
+      g.fillStyle = ((b.x * 7 + b.z) | 0) % 2 === flash ? "#E5484D" : "#3C6EFF"; g.strokeStyle = "#0A0A0A"; g.lineWidth = 2 / k;
+      g.beginPath(); if (b.heli) { g.rect(bx - rr, bz - rr, rr * 2, rr * 2); } else g.arc(bx, bz, rr, 0, Math.PI * 2); g.fill(); g.stroke();
+    }
     g.restore();
     // the player: a teal arrow pointing the way they face, relative to the camera
     g.save(); g.translate(r, r); g.rotate(camYaw + Math.PI - player.yaw);
@@ -158,6 +171,11 @@ export class Hud {
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(247,242,234,.62)"; ctx.font = `800 ${Math.round(16 + z * 3)}px Archivo, sans-serif`;
     for (const [t, x, zz] of this.world.map.labels) ctx.fillText(t.toUpperCase(), X(x), Y(zz));
+    if (opt.station) {   // the police station
+      const sx = X(opt.station.x), sy = Y(opt.station.z);
+      ctx.fillStyle = "#3C6EFF"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.fillRect(sx - 10, sy - 10, 20, 20); ctx.strokeRect(sx - 10, sy - 10, 20, 20);
+      ctx.fillStyle = "#fff"; ctx.font = "900 15px Archivo, sans-serif"; ctx.fillText("P", sx, sy + 1);
+    }
     if (opt.hospital) {   // Marlowe General
       const hx = X(opt.hospital.x), hy = Y(opt.hospital.z);
       ctx.fillStyle = "#E5484D"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.fillRect(hx - 10, hy - 10, 20, 20); ctx.strokeRect(hx - 10, hy - 10, 20, 20);
