@@ -76,6 +76,10 @@ class Grid {
     const [x0, z0, x1, z1] = o.r ? [o.x - o.r, o.z - o.r, o.x + o.r, o.z + o.r] : o.ob ? [o.cx - e, o.cz - f, o.cx + e, o.cz + f] : [o.x0, o.z0, o.x1, o.z1];
     this._cells(x0, z0, x1, z1, k => { let a = this.m.get(k); if (!a) this.m.set(k, a = []); a.push(o); });
   }
+  remove(o) {
+    const i = this.all.indexOf(o); if (i < 0) return; this.all.splice(i, 1);
+    for (const a of this.m.values()) { const k = a.indexOf(o); if (k >= 0) a.splice(k, 1); }
+  }
   box(x0, z0, x1, z1, h) { const o = { x0, z0, x1, z1, h: h === undefined ? 50 : h }; this.add(o); return o; }
   // a turned box: centre, half sizes along its own axes, angle (radians, x toward z)
   obb(cx, cz, hx, hz, ang, h, y0) { const o = { ob: true, cx, cz, hx, hz, cs: Math.cos(ang), sn: Math.sin(ang), h, y0 }; this.add(o); return o; }
@@ -402,7 +406,7 @@ export async function buildWorld(scene, opts = {}) {
   for (const n of roads.nodes) if (n.deg >= 3 && n.ends.some((d) => d.e.kind === "avenue")) for (const d of n.ends) {
     const o = d.e.w / 2 + 0.7, x = d.p.x + d.n.x * o, z = d.p.z + d.n.z * o; signals.push({ x, z, a: Math.atan2(-d.dir.x, -d.dir.z), go: (n.ends.indexOf(d) % 2) === 0 }); grid.circle(x, z, 0.15, 6);
   }
-  for (const c of cars) grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);   // a turn of a about y puts local x on angle -a
+  for (const c of cars) c.obb = grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);   // a turn of a about y puts local x on angle -a
   for (const t of trees) grid.circle(t.x, t.z, 0.35, 8);
   for (const [x, z] of palms) grid.circle(x, z, 0.3, 9);
 
@@ -431,10 +435,11 @@ export async function buildWorld(scene, opts = {}) {
   instanced(scene, canopy, L({ color: 0xffffff, flatShading: true }), trees.map((t, i) => ({ ...t, c: i % 3 ? 0x4a7a3a : 0x5e8a3e })));
   // cars: a low-poly body in one of a dozen paints, a glasshouse, four wheels
   const paints = [0xC23B2A, 0x2F5D8C, 0xE8E2D6, 0x2a2a2e, 0x8a8d92, 0x3F7A4A, 0xD9A441, 0x6a2a4a, 0x7a9ab8, 0xa8a08a, 0x5a3a2a, 0xf0f0f0];
-  const carList = cars.map((c) => ({ x: c.x, z: c.z, a: c.a, c: paints[(R() * paints.length) | 0] }));
-  instanced(scene, mergeGeometries([new THREE.BoxGeometry(1.8, 0.62, 4.3).translate(0, 0.58, 0), new THREE.BoxGeometry(1.75, 0.2, 1.0).translate(0, 0.95, 1.55)]), L({ color: 0xffffff }), carList);
-  instanced(scene, new THREE.BoxGeometry(1.55, 0.55, 2.1).translate(0, 1.16, -0.25), L({ color: 0x2a3644, emissive: 0x0c1218 }), carList);
-  instanced(scene, mergeGeometries([[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]].map(([x, z]) => new THREE.CylinderGeometry(0.33, 0.33, 0.22, 8).rotateZ(Math.PI / 2).translate(x, 0.33, z))), L({ color: 0x18181a }), carList);
+  const carList = cars.map((c) => ({ x: c.x, z: c.z, a: c.a, c: paints[(R() * paints.length) | 0], obb: c.obb }));
+  const carMeshes = [];
+  carMeshes.push(instanced(scene, mergeGeometries([new THREE.BoxGeometry(1.8, 0.62, 4.3).translate(0, 0.58, 0), new THREE.BoxGeometry(1.75, 0.2, 1.0).translate(0, 0.95, 1.55)]), L({ color: 0xffffff }), carList));
+  carMeshes.push(instanced(scene, new THREE.BoxGeometry(1.55, 0.55, 2.1).translate(0, 1.16, -0.25), L({ color: 0x2a3644, emissive: 0x0c1218 }), carList));
+  carMeshes.push(instanced(scene, mergeGeometries([[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]].map(([x, z]) => new THREE.CylinderGeometry(0.33, 0.33, 0.22, 8).rotateZ(Math.PI / 2).translate(x, 0.33, z))), L({ color: 0x18181a }), carList));
   buildPalms(scene, palms, R, add);
   buildLamps(scene, lamps, add, "high");
   for (const [x, z] of lamps) grid.circle(x, z, 0.15, 7);
@@ -542,7 +547,7 @@ export async function buildWorld(scene, opts = {}) {
   map.parks.push(Array.from({ length: 24 }, (_, k) => ({ x: 10 + Math.cos(k / 24 * 6.283) * 17, z: 10 + Math.sin(k / 24 * 6.283) * 17 })));
   // start on the beach by the pier, facing the sunset
   const sx = PIER.x0 - 14, spawn = { x: sx, z: promenade(sx) + 3, yaw: -0.25 };
-  return { grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline };
+  return { grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes } };
 }
 function buildPalms(scene, palms, R, add) {
   // trunk: a tapered, slightly bent cylinder; crown: drooping fronds
@@ -584,12 +589,13 @@ function buildLamps(scene, lamps, add, quality) {
   rg.addColorStop(0, "rgba(255,190,120,.9)"); rg.addColorStop(0.45, "rgba(255,160,90,.35)"); rg.addColorStop(1, "rgba(255,140,80,0)");
   g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
   const gt = new THREE.CanvasTexture(glow); gt.colorSpace = THREE.SRGBColorSpace;
-  const lI = new THREE.InstancedMesh(new THREE.PlaneGeometry(9, 9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: gt, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }), lamps.length);
+  const lI = new THREE.InstancedMesh(new THREE.PlaneGeometry(9, 9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: gt, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55, ...flat(-6) }), lamps.length);
+  lI.renderOrder = 2;   // a pool of light: over the pavement and the road, never under them
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
   lamps.forEach(([x, z, dx, dz], n) => {
     const a = Math.atan2(dx, dz); q.setFromAxisAngle(up, a);
     m.compose(new THREE.Vector3(x, 0, z), q, one); pI.setMatrixAt(n, m); hI.setMatrixAt(n, m);
-    m.compose(new THREE.Vector3(x + Math.sin(a) * 1.5, 0.03, z + Math.cos(a) * 1.5), q, one); lI.setMatrixAt(n, m);
+    m.compose(new THREE.Vector3(x + Math.sin(a) * 1.5, 0.16, z + Math.cos(a) * 1.5), q, one); lI.setMatrixAt(n, m);
   });
   add(pI, true, false); add(hI); add(lI);
 }

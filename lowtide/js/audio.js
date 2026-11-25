@@ -448,6 +448,32 @@
       bp.frequency.exponentialRampToValueAtTime(open ? 1800 : 600, t + 0.25); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.06); g.gain.linearRampToValueAtTime(0, t + 0.28); chain(n, bp, g, B.ui);
     },
     tick: function () { ui.move(); },
+    // a car door: the latch and the thud
+    door: function () {
+      if (!ctx) return; var t = now();
+      var n = noise("brown", t, 0.2), lp = F("lowpass", 500), g = G(0); perc(g, t + 0.02, 0.003, 0.5, 0.12); chain(n, lp, g, B.sfx);
+      var k = noise("white", t, 0.04), kb = F("bandpass", 2400, 2), kg = G(0); perc(kg, t, 0.0005, 0.2, 0.02); chain(k, kb, kg, B.sfx);
+    },
+    crash: function (v) {
+      if (!ctx) return; var t = now(); v = v || 0.5;
+      var n = noise("white", t, 0.5), bp = F("bandpass", 900, 0.6), g = G(0); perc(g, t, 0.002, 0.7 * v, 0.25); chain(n, bp, g, B.sfx); send(g, street(), 0.3);
+      var o = O("sine", 70, t), og = G(0); o.frequency.exponentialRampToValueAtTime(35, t + 0.3); perc(og, t, 0.003, 0.8 * v, 0.2); chain(o, og, B.sfx); o.start(t); o.stop(t + 0.5);
+      for (var i = 0; i < 5; i++) { var c = noise("white", t + 0.05 + rnd() * 0.25, 0.04), cb = F("highpass", 3000 + rnd() * 3000), cg = G(0); perc(cg, t + 0.05 + rnd() * 0.25, 0.0005, 0.12 * v, 0.03); chain(c, cb, cg, B.sfx); }
+    },
+    // the engine: a low saw and a square an octave down through a filter that opens with the revs
+    engine: function () {
+      if (!ctx) return null; var t = now(), a = O("sawtooth", 40, t), b = O("square", 20, t), lp = F("lowpass", 300, 2), g = G(0), sub = G(0.5);
+      chain(a, lp); chain(b, sub, lp); chain(lp, g, B.sfx); a.start(t); b.start(t); g.gain.linearRampToValueAtTime(0.06, t + 0.3);
+      var rev = 0;
+      return {
+        set: function (speed, thr) {
+          var t2 = now(); rev += ((0.12 + speed * 0.75 + (thr > 0 ? 0.15 : 0)) - rev) * 0.1;
+          var f = 34 + rev * 120; a.frequency.setTargetAtTime(f, t2, 0.05); b.frequency.setTargetAtTime(f / 2, t2, 0.05);
+          lp.frequency.setTargetAtTime(250 + rev * 1600, t2, 0.08); g.gain.setTargetAtTime(0.05 + rev * 0.06, t2, 0.1);
+        },
+        stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.08); a.stop(t2 + 0.5); b.stop(t2 + 0.5); }
+      };
+    },
     dry: function () {
       if (!ctx) return; var t = now();
       var n = noise("white", t, 0.03), bp = F("bandpass", 2900, 3), g = G(0); perc(g, t, 0.0005, 0.3, 0.014); chain(n, bp, g, B.sfx);

@@ -216,6 +216,13 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .hitmark i:nth-child(1){left:-12px;top:-12px;rotate:-45deg}.hitmark i:nth-child(2){left:10px;top:-12px;rotate:45deg}
 .hitmark i:nth-child(3){left:-12px;top:3px;rotate:45deg}.hitmark i:nth-child(4){left:10px;top:3px;rotate:-45deg}
 .hitmark.kill i{background:#E5484D}
+/* the E over a car's door handle: a key cap on a little stem, following the handle */
+.prompt{position:absolute;left:0;top:0;opacity:0;transition:opacity .15s;pointer-events:none}
+.prompt.on{opacity:1}
+.prompt kbd{position:absolute;left:0;top:0;translate:-50% -100%;display:block;font:800 15px/1 var(--fu);padding:6px 9px;background:rgba(7,9,12,.85);color:#FFF5EA;border:2px solid var(--gold);box-shadow:0 3px 0 rgba(0,0,0,.4);animation:promptbob 1.4s ease-in-out infinite}
+.prompt kbd::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:8px;margin-left:-1px;background:var(--gold)}
+@keyframes promptbob{50%{translate:-50% calc(-100% - 4px)}}
+@media (prefers-reduced-motion:reduce){.prompt kbd{animation:none}}
 .clickplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:auto;cursor:pointer;background:rgba(7,9,12,.8);border:2px solid rgba(247,242,234,.6);color:var(--off);font:extra-condensed 800 22px/1 var(--fd);letter-spacing:.2em;text-transform:uppercase;padding:16px 26px 14px;display:none}
 .clickplay.on{display:block}
 .pmap{display:none;width:100%;height:100%;max-height:60vh;border:2px solid rgba(247,242,234,.22)}
