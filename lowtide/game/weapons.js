@@ -328,6 +328,8 @@ export class Arsenal {
     this.fx.update(dt, this.world, (v, p, kind) => this.sfx.shell && this.sfx.shell(v * 0.8, 0, kind));
     if (this.hud.reticle) this.hud.reticle(armed ? this.aim : 0, this.spread() * 900, !!this.over);
   }
+  // effects keep running while you drive (smoke, sparks, brass)
+  tickFx(dt) { this.fx.update(dt, this.world, () => {}); }
   spread() {
     const w = this.weapon; if (!w) return 0;
     return w.spread + this.bloom + (1 - this.aim) * 0.03 + Math.min(this.player.speed, 3) * 0.004;

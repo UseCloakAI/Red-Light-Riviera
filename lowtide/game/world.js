@@ -83,7 +83,7 @@ class Grid {
   box(x0, z0, x1, z1, h) { const o = { x0, z0, x1, z1, h: h === undefined ? 50 : h }; this.add(o); return o; }
   // a turned box: centre, half sizes along its own axes, angle (radians, x toward z)
   obb(cx, cz, hx, hz, ang, h, y0) { const o = { ob: true, cx, cz, hx, hz, cs: Math.cos(ang), sn: Math.sin(ang), h, y0 }; this.add(o); return o; }
-  circle(x, z, r, h) { this.add({ x, z, r, h: h || 3 }); }
+  circle(x, z, r, h) { const o = { x, z, r, h: h || 3 }; this.add(o); return o; }
   near(x0, z0, x1, z1) {
     const out = new Set();
     this._cells(x0, z0, x1, z1, k => { const a = this.m.get(k); if (a) for (const o of a) out.add(o); });
@@ -224,12 +224,25 @@ export async function buildWorld(scene, opts = {}) {
     }
   };
   const COL = { avenue: 0, ring: 0, street: 1, port: 2 };
+  // each junction's asphalt patch reaches as far as its roads overlap (further where they meet at a sharp angle),
+  // and the road ribbons stop just inside it, so no two road surfaces ever share the same patch of ground
+  const discR = new Map();
+  for (const n of roads.nodes) {
+    if (n.deg === 1) { discR.set(n, n.ends[0].e.w / 2); continue; }
+    let r = n.r - SIDEWALK + 0.5;
+    for (let k = 0; k < n.ends.length; k++) {
+      const A = n.ends[k], Bn = n.ends[(k + 1) % n.ends.length], th = Math.acos(Math.max(-1, Math.min(1, A.dir.x * Bn.dir.x + A.dir.z * Bn.dir.z)));
+      r = Math.max(r, (A.e.w + Bn.e.w) / 4 / Math.tan(Math.max(0.2, th) / 2) + 0.5);
+    }
+    discR.set(n, Math.min(r, 24));
+  }
+  const trimmed = (e, s0, s1, step = 3) => { const tr = { pts: [], cum: [0] }; for (let s = s0; ; s += Math.min(step, Math.max(0.5, s1 - s))) { const p = at(e.pl, Math.min(s, s1)); tr.pts.push({ x: p.x, z: p.z }); if (s >= s1) break; } for (let i = 1; i < tr.pts.length; i++) tr.cum.push(tr.cum[i - 1] + Math.hypot(tr.pts[i].x - tr.pts[i - 1].x, tr.pts[i].z - tr.pts[i - 1].z)); return tr; };
   for (const e of roads.edges) {
-    const c = COL[e.kind] ?? 1;
-    strip(RB, e.pl, -e.w / 2, e.w / 2, 0.04, c / 3 + 0.001, (c + 1) / 3 - 0.001, 8, white);
+    const c = COL[e.kind] ?? 1, A = roads.nodes.find((n) => n.id === e.a), Bn = roads.nodes.find((n) => n.id === e.b);
+    const r0 = A.deg > 1 ? discR.get(A) - 0.6 : 0, r1 = Bn.deg > 1 ? discR.get(Bn) - 0.6 : 0;
+    if (e.L - r1 > r0 + 0.5) { const tr = trimmed(e, r0, e.L - r1); if (tr.pts.length > 1) strip(RB, tr, -e.w / 2, e.w / 2, 0.04, c / 3 + 0.001, (c + 1) / 3 - 0.001, 8, white); }
     if (e.s1 > e.s0 + 0.5) {
-      const tr = { pts: [], cum: [] }; for (let s = e.s0; s <= e.s1 + 0.01; s += Math.min(3, Math.max(0.5, e.s1 - s))) { const p = at(e.pl, Math.min(s, e.s1)); tr.pts.push({ x: p.x, z: p.z }); if (s >= e.s1) break; }
-      tr.cum = [0]; for (let i = 1; i < tr.pts.length; i++) tr.cum.push(tr.cum[i - 1] + Math.hypot(tr.pts[i].x - tr.pts[i - 1].x, tr.pts[i].z - tr.pts[i - 1].z));
+      const tr = trimmed(e, e.s0, e.s1);
       if (tr.pts.length > 1) { strip(WB, tr, e.w / 2, e.w / 2 + SIDEWALK, KERB, 0, 1, 3, white, 1); strip(WB, tr, -e.w / 2 - SIDEWALK, -e.w / 2, KERB, 0, 1, 3, white, -1); }
     }
   }
@@ -248,7 +261,7 @@ export async function buildWorld(scene, opts = {}) {
   add(new THREE.Mesh(geometry(WB), walkMat), false, true);
   // junctions: plain asphalt discs over the ribbon ends
   const discs = [];
-  for (const n of roads.nodes) discs.push(new THREE.CircleGeometry(n.deg === 1 ? n.ends[0].e.w / 2 : n.r - SIDEWALK + 0.5, 28).rotateX(-Math.PI / 2).translate(n.x, 0.05, n.z));   // the roadway only; kerb corners sit over the rest
+  for (const n of roads.nodes) discs.push(new THREE.CircleGeometry(discR.get(n), 32).rotateX(-Math.PI / 2).translate(n.x, 0.05, n.z));   // the roadway only; kerb corners sit over the rest
   const plainRoad = ptex(canvas(16, 16, (g) => { g.fillStyle = "#3d3e47"; g.fillRect(0, 0, 16, 16); for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${R() < .5 ? "0,0,0" : "255,255,255"},${0.12 * R()})`; g.fillRect((R() * 16) | 0, (R() * 16) | 0, 1, 1); } }));
   plainRoad.repeat.set(0.25, 0.25);
   const discGeo = mergeGeometries(discs); { const p = discGeo.attributes.position, uv = discGeo.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, p.getX(k) / 4, p.getZ(k) / 4); }
@@ -389,7 +402,7 @@ export async function buildWorld(scene, opts = {}) {
         const p = at(e.pl, t), o = e.w / 2 + SIDEWALK - 0.45, x = p.x + p.nx * s * o, z = p.z + p.nz * s * o, a = Math.atan2(-p.nx * s, -p.nz * s), r = R();
         if (r < 0.4) { benches.push({ x, z, a }); grid.obb(x, z, 0.9, 0.3, -a, 0.5); }
         else if (r < 0.75) { bins.push({ x, z }); grid.circle(x, z, 0.3, 1); }
-        else { const o2 = e.w / 2 + 0.5; hydrants.push({ x: p.x + p.nx * s * o2, z: p.z + p.nz * s * o2 }); grid.circle(p.x + p.nx * s * o2, p.z + p.nz * s * o2, 0.2, 0.8); }
+        else { const o2 = e.w / 2 + 0.5; const hx = p.x + p.nx * s * o2, hz = p.z + p.nz * s * o2; hydrants.push({ x: hx, z: hz, obj: grid.circle(hx, hz, 0.2, 0.8) }); }
       }
       // power poles and sagging lines in the port and Bellwether
       if ((dist === "port" || dist === "bellwether") && s === 1) {
@@ -404,7 +417,7 @@ export async function buildWorld(scene, opts = {}) {
   }
   // traffic signals on the avenues' junctions
   for (const n of roads.nodes) if (n.deg >= 3 && n.ends.some((d) => d.e.kind === "avenue")) for (const d of n.ends) {
-    const o = d.e.w / 2 + 0.7, x = d.p.x + d.n.x * o, z = d.p.z + d.n.z * o; signals.push({ x, z, a: Math.atan2(-d.dir.x, -d.dir.z), go: (n.ends.indexOf(d) % 2) === 0 }); grid.circle(x, z, 0.15, 6);
+    const o = d.e.w / 2 + 0.7, x = d.p.x + d.n.x * o, z = d.p.z + d.n.z * o; signals.push({ x, z, a: Math.atan2(-d.dir.x, -d.dir.z), go: (n.ends.indexOf(d) % 2) === 0, node: n, end: n.ends.indexOf(d) }); grid.circle(x, z, 0.15, 6);
   }
   for (const c of cars) c.obb = grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);   // a turn of a about y puts local x on angle -a
   for (const t of trees) grid.circle(t.x, t.z, 0.35, 8);
@@ -421,14 +434,15 @@ export async function buildWorld(scene, opts = {}) {
   const dark = L({ color: 0x2b2e35 });
   instanced(scene, mergeGeometries([new THREE.BoxGeometry(1.8, 0.08, 0.45).translate(0, 0.45, 0), new THREE.BoxGeometry(1.8, 0.45, 0.06).translate(0, 0.72, 0.2), new THREE.BoxGeometry(0.08, 0.45, 0.4).translate(-0.8, 0.22, 0), new THREE.BoxGeometry(0.08, 0.45, 0.4).translate(0.8, 0.22, 0)]), L({ color: 0x6a4a32 }), benches);
   instanced(scene, new THREE.CylinderGeometry(0.28, 0.24, 0.9, 7).translate(0, 0.45, 0), L({ color: 0x2f5d4a }), bins);
-  instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.12, 0.15, 0.7, 6).translate(0, 0.35, 0), new THREE.SphereGeometry(0.13, 6, 4).translate(0, 0.72, 0), new THREE.BoxGeometry(0.4, 0.08, 0.08).translate(0, 0.5, 0)]), L({ color: 0xc23b2a }), hydrants);
+  const hydrantMesh = instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.12, 0.15, 0.7, 6).translate(0, 0.35, 0), new THREE.SphereGeometry(0.13, 6, 4).translate(0, 0.72, 0), new THREE.BoxGeometry(0.4, 0.08, 0.08).translate(0, 0.5, 0)]), L({ color: 0xc23b2a }), hydrants);
   instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.1, 0.14, 10, 6).translate(0, 5, 0), new THREE.BoxGeometry(1.8, 0.1, 0.1).translate(0, 9.2, 0)]), L({ color: 0x5a4632 }), poles);
   { const pts = []; for (const [a, b, dy] of wires) for (let k = 0; k < 4; k++) { const t0 = k / 4, t1 = (k + 1) / 4, y = (t) => dy - Math.sin(t * Math.PI) * 0.7; pts.push(a[0] + (b[0] - a[0]) * t0, y(t0), a[1] + (b[1] - a[1]) * t0, a[0] + (b[0] - a[0]) * t1, y(t1), a[1] + (b[1] - a[1]) * t1); }
     if (pts.length) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)); scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x1a1a1e }))); } }
   // traffic signals: a pole, an arm out over the road, a head with one lamp lit
   instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.08, 0.1, 5.5, 6).translate(0, 2.75, 0), new THREE.BoxGeometry(0.1, 0.1, 4).translate(0, 5.4, 2), new THREE.BoxGeometry(0.35, 1, 0.3).translate(0, 4.9, 3.6)]), dark, signals);
-  instanced(scene, new THREE.BoxGeometry(0.2, 0.2, 0.05).translate(0, 5.2, 3.44), new THREE.MeshBasicMaterial({ color: 0xff3b2a }), signals.filter((s) => !s.go));
-  instanced(scene, new THREE.BoxGeometry(0.2, 0.2, 0.05).translate(0, 4.6, 3.44), new THREE.MeshBasicMaterial({ color: 0x3bff8a }), signals.filter((s) => s.go));
+  // red and green lamps for every signal; traffic.js switches them by hiding one of each pair
+  const redMesh = instanced(scene, new THREE.BoxGeometry(0.2, 0.2, 0.05).translate(0, 5.2, 3.44), new THREE.MeshBasicMaterial({ color: 0xff3b2a }), signals);
+  const greenMesh = instanced(scene, new THREE.BoxGeometry(0.2, 0.2, 0.05).translate(0, 4.6, 3.44), new THREE.MeshBasicMaterial({ color: 0x3bff8a }), signals);
   // round trees: a trunk and a low-poly canopy, two greens
   const treeTrunk = new THREE.CylinderGeometry(0.15, 0.22, 3, 6).translate(0, 1.5, 0), canopy = new THREE.IcosahedronGeometry(2.4, 0).scale(1, 0.85, 1).translate(0, 4.4, 0);
   instanced(scene, treeTrunk, L({ color: 0x6a5240 }), trees);
@@ -441,8 +455,8 @@ export async function buildWorld(scene, opts = {}) {
   carMeshes.push(instanced(scene, new THREE.BoxGeometry(1.55, 0.55, 2.1).translate(0, 1.16, -0.25), L({ color: 0x2a3644, emissive: 0x0c1218 }), carList));
   carMeshes.push(instanced(scene, mergeGeometries([[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]].map(([x, z]) => new THREE.CylinderGeometry(0.33, 0.33, 0.22, 8).rotateZ(Math.PI / 2).translate(x, 0.33, z))), L({ color: 0x18181a }), carList));
   buildPalms(scene, palms, R, add);
-  buildLamps(scene, lamps, add, "high");
-  for (const [x, z] of lamps) grid.circle(x, z, 0.15, 7);
+  const lampMeshes = buildLamps(scene, lamps, add, "high");
+  const lampList = lamps.map(([x, z, dx, dz], i) => ({ x, z, dx, dz, i, obj: grid.circle(x, z, 0.15, 7) }));
 
   await breathe();
   /* ---- the ground: one painted texture for the whole island, a pixel a metre ---- */
@@ -547,7 +561,8 @@ export async function buildWorld(scene, opts = {}) {
   map.parks.push(Array.from({ length: 24 }, (_, k) => ({ x: 10 + Math.cos(k / 24 * 6.283) * 17, z: 10 + Math.sin(k / 24 * 6.283) * 17 })));
   // start on the beach by the pier, facing the sunset
   const sx = PIER.x0 - 14, spawn = { x: sx, z: promenade(sx) + 3, yaw: -0.25 };
-  return { grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes } };
+  return { grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
+    props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh } };
 }
 function buildPalms(scene, palms, R, add) {
   // trunk: a tapered, slightly bent cylinder; crown: drooping fronds
@@ -598,4 +613,5 @@ function buildLamps(scene, lamps, add, quality) {
     m.compose(new THREE.Vector3(x + Math.sin(a) * 1.5, 0.16, z + Math.cos(a) * 1.5), q, one); lI.setMatrixAt(n, m);
   });
   add(pI, true, false); add(hI); add(lI);
+  return { pole, head, pI, hI, lI };
 }
