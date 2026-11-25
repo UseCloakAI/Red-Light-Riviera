@@ -307,8 +307,22 @@ export class Vehicles {
         }
       }
     }
+    // other traffic: both cars take it, theirs stops (and is abandoned if it was hard)
+    if (this.traffic) for (const o of this.traffic.cars) {
+      if (!o.active || o === c || Math.abs(o.x - c.x) > 6 || Math.abs(o.z - c.z) > 6) continue;
+      const ox2 = Math.sin(o.a), oz2 = Math.cos(o.a);
+      for (const k of [1.45, 0, -1.45]) for (const j of [1.4, 0, -1.4]) {
+        const ax = c.x + fx * k, az = c.z + fz * k, bx = o.x + ox2 * j, bz = o.z + oz2 * j, dx = ax - bx, dz = az - bz, d = Math.hypot(dx, dz);
+        if (d < 2 && d > 1e-4) {
+          const m = (2 - d) / 2; c.x += dx / d * m; c.z += dz / d * m; o.x -= dx / d * m * 0.5; o.z -= dz / d * m * 0.5;
+          const rel = Math.abs(c.speed - o.speed * (fx * ox2 + fz * oz2)); push = Math.max(push, m);
+          if (rel > 4) { this.hurt(c, (rel - 3) * 3); this.hurt(o, (rel - 3) * 3.5); o.stun = 3; if (rel > 11 && o.ai) { o.ai = false; o.taken = true; o.speed = 0; o.obb = this.world.grid.obb(o.x, o.z, 0.95, 2.2, -o.a, 1.5); } this.traffic.place(o); }
+        }
+      }
+    }
     if (push > 0.01) {
       const v = Math.abs(c.speed); if (v > 6 && this.sfx.crash) this.sfx.crash(Math.min(1, v / 25));
+      if (v > 5) this.hurt(c, (v - 5) * 3.2);
       c.speed *= v > 3 ? -0.25 : 0.5; if (this.rig) this.rig.shake = Math.min(1, v / 20);
     }
     // ride the kerbs; lean into corners
