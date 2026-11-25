@@ -448,6 +448,22 @@
       bp.frequency.exponentialRampToValueAtTime(open ? 1800 : 600, t + 0.25); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.06); g.gain.linearRampToValueAtTime(0, t + 0.28); chain(n, bp, g, B.ui);
     },
     tick: function () { ui.move(); },
+    // an explosion: a sub drop you feel, a wide burst, a crack on top, the street throwing it back, then debris
+    explosion: function (dist) {
+      if (!ctx) return; var t = now(), d = dist || 0, v = 1.25 / (1 + d / 30), bus = G(v), lp = F("lowpass", 9000 / (1 + d / 40), 0.4); chain(bus, lp, B.sfx); send(lp, street(), 0.8); send(lp, hall, 0.25);
+      var sh = ctx.createWaveShaper(); sh.curve = SAT4 || (SAT4 = sat(4)); sh.connect(bus);
+      var o = O("sine", 70, t), og = G(0); o.frequency.exponentialRampToValueAtTime(22, t + 1.3); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(1.4, t + 0.01); og.gain.exponentialRampToValueAtTime(0.001, t + 1.6); chain(o, og, sh); o.start(t); o.stop(t + 1.7);
+      var n = noise("brown", t, 2.4), nl = F("lowpass", 900, 0.5), ng = G(0); nl.frequency.exponentialRampToValueAtTime(180, t + 2.2); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(1.6, t + 0.02); ng.gain.exponentialRampToValueAtTime(0.001, t + 2.3); chain(n, nl, ng, sh);
+      var c = noise("white", t, 0.25), ch = F("highpass", 1200), cg = G(0); perc(cg, t, 0.0005, 0.9, 0.12); chain(c, ch, cg, sh);
+      for (var i = 0; i < 9; i++) { var at = t + 0.4 + rnd() * 1.6, k = noise("white", at, 0.05), kb = F("bandpass", 1200 + rnd() * 3000, 3), kg = G(0); perc(kg, at, 0.001, 0.12 * v, 0.04); chain(k, kb, kg, B.sfx); }
+    },
+    // dying: a low thud and a long falling tone
+    wasted: function () {
+      if (!ctx) return; var t = now(), o = O("sawtooth", 220, t), lp = F("lowpass", 900, 1), g = G(0);
+      o.frequency.exponentialRampToValueAtTime(55, t + 2.2); lp.frequency.exponentialRampToValueAtTime(200, t + 2.2); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.12, t + 0.05); g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+      chain(o, lp, g, B.ui); send(g, hall, 0.4); o.start(t); o.stop(t + 2.7);
+      var n = noise("brown", t, 0.3), nl = F("lowpass", 300), ng = G(0); perc(ng, t, 0.003, 0.6, 0.25); chain(n, nl, ng, B.ui);
+    },
     // a car horn: two detuned squares, quieter with distance
     horn: function (dist) {
       if (!ctx) return; var t = now(), v = 0.07 / (1 + (dist || 0) / 15), lp = F("lowpass", 1800, 1), g = G(0);

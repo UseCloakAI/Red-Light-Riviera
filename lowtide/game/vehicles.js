@@ -15,8 +15,17 @@
    a charred shell, people nearby knocked flat. Lamp posts hit fast snap at the
    base and topple the way you hit them (a rod falling about its foot, bouncing
    once), sparking, the light gone out. Fire hydrants burst into a geyser that
-   lifts a car sitting over it. */
+   lifts a car sitting over it.
+
+   Crashes dent: the first hit swaps an instanced car for its own panelled body
+   (carbody.js), and every impact after pushes panels in where it lands and
+   scrapes the paint. Explosions are big: a flash, a fireball, debris, a scorch
+   mark, a smoke column, the wreck thrown into the air, a hard shake and a deep
+   boom; the blast hurts you, people, lamp posts and other cars (which can go
+   up in turn). */
 import * as THREE from "three";
+import { makeCarBody, toLocal } from "./carbody.js?v=dev";
+import { flat } from "./ps1.js?v=dev";
 
 const WB = 2.6, MAX = 30, REV = 9;
 const _c = new THREE.Color();
@@ -34,13 +43,55 @@ export class Vehicles {
     const N = 360, g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3).fill(-999), 3));
     this.spray = { N, pts: Array.from({ length: N }, () => ({ p: new THREE.Vector3(0, -999, 0), v: new THREE.Vector3(), life: 0 })), k: 0, g };
     if (scene) { const pm = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xbfe2ff, size: 0.12, transparent: true, opacity: 0.75, depthWrite: false })); pm.frustumCulled = false; scene.add(pm); }
+    this.life = null; this.bodies = 0;
+    if (scene) this.boomKit(scene);
   }
+  /* ---- explosions: a flash, debris, scorch marks ---- */
+  boomKit(scene) {
+    const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), rg = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    rg.addColorStop(0, "rgba(255,250,220,1)"); rg.addColorStop(0.3, "rgba(255,190,90,.9)"); rg.addColorStop(0.7, "rgba(255,90,20,.35)"); rg.addColorStop(1, "rgba(255,60,0,0)"); g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
+    const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter;
+    this.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); this.flash.visible = false; scene.add(this.flash); this.flashT = 0;
+    const DN = 64; this.debris = { N: DN, k: 0, mesh: new THREE.InstancedMesh(new THREE.BoxGeometry(0.35, 0.12, 0.5), new THREE.MeshLambertMaterial({ color: 0x2a2826, flatShading: true }), DN), list: Array.from({ length: DN }, () => ({ p: new THREE.Vector3(0, -99, 0), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3(), life: 0 })) };
+    this.debris.mesh.frustumCulled = false; this.debris.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(this.debris.mesh);
+    for (let i = 0; i < DN; i++) this.debris.mesh.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
+    this.scorchMat = new THREE.MeshBasicMaterial({ color: 0x0a0908, transparent: true, opacity: 0.7, depthWrite: false, ...flat(-5) }); this.scorches = [];
+  }
+  boomFx(dt) {
+    if (this.flash && this.flashT > 0) { this.flashT -= dt; const k = Math.max(0, this.flashT / 0.4); this.flash.material.opacity = k; this.flash.scale.setScalar(10 + (1 - k) * 10); if (this.flashT <= 0) this.flash.visible = false; }
+    const D = this.debris; if (!D) return; let any = false;
+    for (let i = 0; i < D.N; i++) {
+      const q = D.list[i]; if (q.life <= 0) continue; any = true; q.life -= dt;
+      q.v.y -= 9.8 * dt; q.p.addScaledVector(q.v, dt); q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt;
+      const g = this.world.heightAt(q.p.x, q.p.z) + 0.06; if (q.p.y < g) { q.p.y = g; q.v.y *= -0.3; q.v.x *= 0.6; q.v.z *= 0.6; q.w.multiplyScalar(0.5); }
+      _m.compose(q.p, _q.setFromEuler(q.r), q.life > 0 ? _s : new THREE.Vector3(0, 0, 0)); D.mesh.setMatrixAt(i, _m);
+    }
+    if (any) D.mesh.instanceMatrix.needsUpdate = true;
+  }
+  // the instanced car becomes its own dentable body the first time it's hit
+  bodyOf(c) {
+    if (c.body || !this.scene) return c.body;
+    if (this.bodies > 40) return null; this.bodies++;
+    c.body = makeCarBody(c.color ?? 0xffffff); this.scene.add(c.body.group);
+    for (const im of c.meshes || this.meshes) { im.setMatrixAt(c.i, new THREE.Matrix4().makeScale(0, 0, 0)); im.instanceMatrix.needsUpdate = true; }
+    this.place(c); return c.body;
+  }
+  // a blow to car c at world (x, z), pushing along (dx, dz), closing speed v
+  impactCar(c, x, z, dx, dz, v) {
+    if (v < 2.5) return;
+    this.hurt(c, Math.max(0, v - 4) * 3.2);
+    const b = this.bodyOf(c); if (b) { const L = toLocal(c, x, (c.y || 0) + 0.6, z, dx, dz); b.hit(L.p, L.dir, v); }
+    if (v > 6 && this.fx) this.fx.sparks(new THREE.Vector3(x, (c.y || 0) + 0.5, z), Math.min(20, v | 0), new THREE.Vector3(-dx, 0.4, -dz), 3 + v * 0.1, 0xffc070, 0.35);
+  }
+  // hits are tested against the car's real outline (a box), not just its centre line
+  touching(c, x, z, r) { const s = Math.sin(c.a), co = Math.cos(c.a), rx = x - c.x, rz = z - c.z, lx = rx * co - rz * s, lz = rx * s + rz * co; return Math.abs(lx) < 0.95 + r && Math.abs(lz) < 2.2 + r; }
   get driving() { return !!this.car; }
   // the driver's door handle: left side, just ahead of the middle
   door(c) { const fx = Math.sin(c.a), fz = Math.cos(c.a), lx = Math.cos(c.a), lz = -Math.sin(c.a); return { x: c.x + lx * 0.95 + fx * 0.25, y: c.y + 0.95, z: c.z + lz * 0.95 + fz * 0.25, lx, lz }; }
   place(c) {
     const bend = c.bend || 0;   // a damaged car sits crooked
-    _q.setFromAxisAngle(UP, c.a + bend * 0.5); const r = new THREE.Quaternion().setFromAxisAngle(_v.set(Math.cos(c.a), 0, -Math.sin(c.a)), (c.roll || 0) + bend); _q.premultiply(r);
+    _q.setFromAxisAngle(UP, c.a + bend * 0.5); const r = new THREE.Quaternion().setFromAxisAngle(_v.set(Math.cos(c.a), 0, -Math.sin(c.a)), (c.roll || 0) + bend + (c.flip || 0)); _q.premultiply(r);
+    if (c.body) { c.body.group.position.set(c.x, c.y + (c.lift || 0), c.z); c.body.group.quaternion.copy(_q); return; }
     _m.compose(_p.set(c.x, c.y + (c.lift || 0), c.z), _q, _s);
     for (const im of c.meshes || this.meshes) { im.setMatrixAt(c.i, _m); im.instanceMatrix.needsUpdate = true; }
   }
@@ -49,25 +100,53 @@ export class Vehicles {
     if (c.wreck || amount <= 0) return;
     c.health = Math.max(0, (c.health ?? 100) - amount);
     c.bend = (c.bend || 0) + (Math.random() - 0.5) * amount * 0.0025;
-    const k = 0.35 + 0.65 * Math.min(1, c.health / 70); (c.meshes || this.meshes)[0].setColorAt(c.i, _c.set(c.color ?? 0xffffff).multiplyScalar(k)); (c.meshes || this.meshes)[0].instanceColor.needsUpdate = true;
+    const k = 0.35 + 0.65 * Math.min(1, c.health / 70);
+    if (c.body) c.body.tint(k); else { (c.meshes || this.meshes)[0].setColorAt(c.i, _c.set(c.color ?? 0xffffff).multiplyScalar(k)); (c.meshes || this.meshes)[0].instanceColor.needsUpdate = true; }
     if (c.health < 55) this.burning.add(c);
   }
   explode(c) {
-    c.wreck = true; c.health = 0; c.speed = 0; this.burning.delete(c);
-    (c.meshes || this.meshes)[0].setColorAt(c.i, _c.set(0x1c1a18)); (c.meshes || this.meshes)[0].instanceColor.needsUpdate = true;
-    const at = new THREE.Vector3(c.x, c.y + 1, c.z);
-    if (this.fx) { for (let i = 0; i < 6; i++) this.fx.puff(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random(), (Math.random() - 0.5) * 2)), new THREE.Vector3(0, 2 + Math.random() * 2, 0), 3 + Math.random() * 2, 1.6, i < 3 ? 0xffa040 : 0x262220, 0.8); this.fx.sparks(at, 40, new THREE.Vector3(0, 1, 0), 9, 0xffb050, 0.9); }
-    if (this.sfx.boom) { this.sfx.boom(Math.hypot(c.x - this.player.pos.x, c.z - this.player.pos.z) * 0.3, 0); setTimeout(() => this.sfx.crash && this.sfx.crash(1), 60); }
-    if (this.rig) this.rig.shake = 1;
-    if (this.car === c) this.exit(true);
-    if (this.peds) { for (const pd of this.peds.peds) { if (pd.dead) continue; const g = pd.h.group.position, d = Math.hypot(g.x - c.x, g.z - c.z); if (d < 6) this.peds.damage(pd, { point: g.clone().setY(g.y + 1), dir: new THREE.Vector3(g.x - c.x, 1.2, g.z - c.z).normalize(), damage: 200, from: c, force: 9 }); } this.peds.alarm(c.x, c.z, 60); }
+    c.wreck = true; c.health = 0; this.burning.delete(c);
+    const b = this.bodyOf(c); if (b) b.char(); else { (c.meshes || this.meshes)[0].setColorAt(c.i, _c.set(0x1c1a18)); (c.meshes || this.meshes)[0].instanceColor.needsUpdate = true; }
+    const was = this.car === c; if (was) this.exit(true);
+    // thrown into the air, turning over
+    c.vy = 6 + Math.random() * 3; c.spin = (Math.random() - 0.5) * 5; c.air = true; c.speed *= 0.3; this.burning.add(c); c.smoke = 18;
+    this.blast(c.x, (c.y || 0) + 1, c.z, 1, c);
+    if (!c.obb && !was) c.obb = this.world.grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);
     if (c.ai && this.traffic) { c.ai = false; c.taken = true; }
-    if (!c.obb && this.car !== c) c.obb = this.world.grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);
+  }
+  // a blast at (x, y, z): the show, and everything nearby takes it
+  blast(x, y, z, size = 1, from = null) {
+    const at = new THREE.Vector3(x, y, z), P = this.player, dist = Math.hypot(x - P.pos.x, z - P.pos.z);
+    if (this.flash) { this.flash.position.set(x, y + 1, z); this.flash.visible = true; this.flashT = 0.4; }
+    if (this.fx) {
+      for (let i = 0; i < 10; i++) this.fx.puff(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3)), new THREE.Vector3((Math.random() - 0.5) * 3, 3 + Math.random() * 4, (Math.random() - 0.5) * 3), (4 + Math.random() * 3) * size, 1.1 + Math.random() * 0.6, [0xfff0a0, 0xffb040, 0xff7020][i % 3], 0.95);
+      for (let i = 0; i < 6; i++) this.fx.puff(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, 1 + Math.random() * 2, (Math.random() - 0.5) * 4)), new THREE.Vector3(0, 2.5 + Math.random() * 2, 0), (6 + Math.random() * 3) * size, 3, 0x1e1b19, 0.8);
+      this.fx.sparks(at, 70, new THREE.Vector3(0, 1, 0), 13, 0xffb050, 1.2);
+    }
+    const D = this.debris;
+    if (D) for (let n = 0; n < 16; n++) { const q = D.list[D.k++ % D.N]; q.p.copy(at); q.v.set((Math.random() - 0.5) * 16, 5 + Math.random() * 10, (Math.random() - 0.5) * 16); q.w.set(Math.random() * 12, Math.random() * 12, Math.random() * 12); q.life = 7; }
+    if (this.scorchMat) { const m = new THREE.Mesh(new THREE.CircleGeometry(3.2 + Math.random(), 12).rotateX(-Math.PI / 2), this.scorchMat); m.position.set(x, this.world.heightAt(x, z) + 0.07, z); m.renderOrder = 2; this.scene.add(m); this.scorches.push(m); if (this.scorches.length > 14) this.scene.remove(this.scorches.shift()); }
+    if (this.sfx.explosion) this.sfx.explosion(dist); else if (this.sfx.boom) this.sfx.boom(dist * 0.3, 0);
+    if (this.rig) { const k = Math.max(0, 1 - dist / 90); this.rig.shake = Math.max(this.rig.shake || 0, 2.2 * k); this.rig.recoil = (this.rig.recoil || 0) + 0.06 * k; }
+    // the people: you, the street
+    if (this.life && dist < 11) { const k = 1 - dist / 11; this.life.damage((this.driving ? 70 : 130) * Math.pow(k, 1.2), { point: at, dir: new THREE.Vector3(P.pos.x - x, 1.4, P.pos.z - z).normalize(), force: 10 * k, cause: "blast" }); }
+    if (this.peds) { for (const pd of this.peds.peds) { if (pd.dead) continue; const g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z); if (d < 9) this.peds.damage(pd, { point: g.clone().setY(g.y + 1), dir: new THREE.Vector3(g.x - x, 1.3, g.z - z).normalize(), damage: d < 6 ? 300 : 60, from: { x, z }, force: 10 * (1 - d / 9) + 2 }); } this.peds.alarm(x, z, 80); }
+    if (this.traffic) this.traffic.panic(x, z, 90);
+    // other cars take it (and may go up too); lamp posts go over
+    const cars = this.cars.concat(this.traffic ? this.traffic.cars.filter((o) => o.active || o.taken) : []);
+    for (const o of cars) { if (o === from || o.wreck) continue; const d = Math.hypot(o.x - x, o.z - z); if (d < 8) { const k = 1 - d / 8; this.impactCar(o, x, z, (o.x - x) / (d || 1), (o.z - z) / (d || 1), 14 * k + 3); this.hurt(o, 55 * k); } }
+    for (const L of this.props.lamps) { if (L.broken) continue; const d = Math.hypot(L.x - x, L.z - z); if (d < 5.5) this.breakLamp(L, L.x - x, L.z - z, 10); }
   }
   // smoke, then fire, then the bang, for any hurt car (driven or not)
   burn(dt) {
     for (const c of this.burning) {
-      c.smokeT = (c.smokeT || 0) - dt; if (c.wreck) { this.burning.delete(c); continue; }
+      c.smokeT = (c.smokeT || 0) - dt;
+      if (c.wreck) {   // a wreck: falls back down, then smokes for a while
+        if (c.air) { c.vy -= 9.8 * dt; c.y += c.vy * dt; c.flip = (c.flip || 0) + c.spin * dt; const g = this.world.heightAt(c.x, c.z); if (c.y <= g && c.vy < 0) { c.y = g; c.vy *= -0.25; c.spin *= 0.4; if (Math.abs(c.vy) < 1.2) { c.air = false; c.flip = Math.round((c.flip || 0) / Math.PI) * Math.PI * (Math.random() < 0.3 ? 1 : 0) + (c.flip % Math.PI) * 0.2; } if (this.sfx.crash) this.sfx.crash(0.6); } this.place(c); }
+        if ((c.smoke -= dt) <= 0 && !c.air) { this.burning.delete(c); continue; }
+        if (c.smokeT <= 0 && this.fx) { c.smokeT = 0.12; this.fx.puff(new THREE.Vector3(c.x + (Math.random() - 0.5), c.y + 1.2, c.z + (Math.random() - 0.5)), new THREE.Vector3((Math.random() - 0.5) * 0.4, 2 + Math.random(), (Math.random() - 0.5) * 0.4), 1.8, 2.6, Math.random() < 0.2 ? 0xff7a30 : 0x161412, 0.6); }
+        continue;
+      }
       if (c.health < 18) c.fire = (c.fire || 0) + dt;
       if (c.fire > 5) { this.explode(c); continue; }
       if (c.smokeT > 0 || !this.fx) continue;
@@ -126,7 +205,7 @@ export class Vehicles {
   liftAt(x, z) { let l = 0; for (const G of this.geysers) if (G.t > 0) { const d = Math.hypot(G.x - x, G.z - z); if (d < 1.8) l = Math.max(l, (1 - d / 1.8) * 0.9 * Math.min(1, G.t / 4)); } return l; }
 
   update(dt, input) {
-    this.burn(dt); this.fall(dt); this.geyser(dt);
+    this.burn(dt); this.fall(dt); this.geyser(dt); this.boomFx(dt);
     for (const c of this.burning) if (c !== this.car) this.place(c);
     if (!this.car) return this.onFoot(dt, input);
     return this.drive(dt, input);
@@ -200,18 +279,33 @@ export class Vehicles {
     const P = this.props, v0 = Math.abs(c.speed);
     for (const L of P.lamps) {
       if (L.broken || Math.abs(L.x - c.x) > 3.5 || Math.abs(L.z - c.z) > 3.5) continue;
-      for (const k of [1.45, 0, -1.45]) if (Math.hypot(L.x - (c.x + fx * k), L.z - (c.z + fz * k)) < 1.15) { if (v0 > 3.5) { this.breakLamp(L, fx * Math.sign(c.speed), fz * Math.sign(c.speed), v0); c.speed *= 0.72; this.hurt(c, v0 * 0.9); if (this.rig) this.rig.shake = 0.6; } break; }
+      if (this.touching(c, L.x, L.z, 0.45) && v0 > 3.5) { this.breakLamp(L, fx * Math.sign(c.speed), fz * Math.sign(c.speed), v0); c.speed *= 0.72; this.impactCar(c, L.x, L.z, (c.x - L.x), (c.z - L.z), v0 * 0.6); if (this.rig) this.rig.shake = 0.6; }
     }
     for (const H of P.hydrants) {
       if (H.broken || Math.abs(H.x - c.x) > 3 || Math.abs(H.z - c.z) > 3) continue;
-      for (const k of [1.45, 0, -1.45]) if (Math.hypot(H.x - (c.x + fx * k), H.z - (c.z + fz * k)) < 1.05) { if (v0 > 1.5) { this.breakHydrant(H); c.speed *= 0.85; this.hurt(c, 2); } break; }
+      if (this.touching(c, H.x, H.z, 0.45) && v0 > 1.2) { this.breakHydrant(H); c.speed *= 0.88; this.impactCar(c, H.x, H.z, c.x - H.x, c.z - H.z, Math.min(v0, 6)); }
     }
     // push out of the world: three circles down the car's length
-    let push = 0;
+    let push = 0, hx = 0, hz = 0, hk = 0;
     for (const k of [1.45, 0, -1.45]) {
       const q = { x: c.x + fx * k, z: c.z + fz * k }, bx = q.x, bz = q.z;
       W.grid.resolve(q, 1.0, c.y + 0.3, 1.2);
-      const dx = q.x - bx, dz = q.z - bz; if (dx || dz) { c.x += dx; c.z += dz; push = Math.max(push, Math.hypot(dx, dz)); }
+      const dx = q.x - bx, dz = q.z - bz; if (dx || dz) { c.x += dx; c.z += dz; const l = Math.hypot(dx, dz); if (l > push) { push = l; hx = dx / l; hz = dz / l; hk = k; } }
+    }
+    // where it struck: the side of the car facing the wall, at that circle
+    if (push > 0.01) { const v = Math.abs(c.speed); this.impactCar(c, c.x + fx * hk - hx * 1.0, c.z + fz * hk - hz * 1.0, hx, hz, v); }
+    // other traffic: both cars take it, theirs stops (and is abandoned if it was hard)
+    if (this.traffic) for (const o of this.traffic.cars) {
+      if (!o.active || o === c || Math.abs(o.x - c.x) > 6 || Math.abs(o.z - c.z) > 6) continue;
+      const ox2 = Math.sin(o.a), oz2 = Math.cos(o.a);
+      for (const k of [1.45, 0, -1.45]) for (const j of [1.4, 0, -1.4]) {
+        const ax = c.x + fx * k, az = c.z + fz * k, bx = o.x + ox2 * j, bz = o.z + oz2 * j, dx = ax - bx, dz = az - bz, d = Math.hypot(dx, dz);
+        if (d < 2 && d > 1e-4) {
+          const m = (2 - d) / 2; c.x += dx / d * m; c.z += dz / d * m; o.x -= dx / d * m * 0.5; o.z -= dz / d * m * 0.5;
+          const rel = Math.abs(c.speed - o.speed * (fx * ox2 + fz * oz2)); push = Math.max(push, m);
+          if (rel > 4) { const cx = (ax + bx) / 2, cz = (az + bz) / 2; this.impactCar(c, cx, cz, dx / d, dz / d, rel); this.impactCar(o, cx, cz, -dx / d, -dz / d, rel); o.stun = 3; if (rel > 11 && o.ai) { o.ai = false; o.taken = true; o.speed = 0; o.obb = this.world.grid.obb(o.x, o.z, 0.95, 2.2, -o.a, 1.5); } this.traffic.place(o); }
+        }
+      }
     }
     // other traffic: both cars take it, theirs stops (and is abandoned if it was hard)
     if (this.traffic) for (const o of this.traffic.cars) {

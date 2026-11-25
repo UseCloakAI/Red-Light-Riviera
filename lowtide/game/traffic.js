@@ -1,24 +1,36 @@
-/* Stage 5: traffic. Cars drive the street network on the right-hand side, a
-   lane each way down every road (offset from the centreline, so they follow its
-   curves). At the end of a lane they stop at the line if the signal's red or
-   the junction is busy, then turn onto another street on a smooth curve (rarely
-   straight back, unless it's a dead end, where they swing round the turning
-   circle). They keep their distance from whatever's ahead (other cars, yours,
-   you on foot, people in the road), and lean on the horn if you're the reason
-   they can't go. They're spawned out of sight round the player and recycled
-   when far behind.
+/* Stage 5: traffic. Marlowe Keys drives on the right.
 
-   The signals cycle: each junction alternates which of its roads has green.
-   Cars are instanced (three meshes); a car the player takes stops being traffic
-   and becomes a car like any parked one (vehicles.js). */
+   Every car is a little physical car (the same bicycle model as yours): it steers
+   toward a point a few metres up its lane (pure pursuit, looking further ahead
+   the faster it goes), so it follows the road's curves and swings wide or tight
+   through turns like a driver would, and it can be knocked off line and find its
+   way back. Speed comes from the Intelligent Driver Model, the standard model of
+   human car-following: each driver has their own cruising speed, following gap,
+   acceleration and braking, slows for bends, and brakes smoothly for whatever's
+   ahead: the car in front, a red light, a queue, you, people in the road.
+
+   Junctions: on the avenues the signals cycle (a green for each pair of roads,
+   then a moment of all-red to clear the box). Elsewhere drivers take turns: they
+   look for anyone already in the junction or arriving sooner, avenues before
+   side streets, and go when there's a gap; a driver who's waited too long edges
+   out. No queue-jamming, no clumping at the line.
+
+   Panic: gunfire or an explosion nearby and drivers floor it, ignore lights and
+   right of way, and stop braking for people: anyone in the road (you included)
+   gets run down. They calm down after a while.
+
+   Cars are spawned evenly across the network out of sight round the player and
+   recycled far behind; one stuck for a long time quietly leaves. They're
+   instanced; a damaged one swaps to its own dented body (vehicles.js). */
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { at } from "./city/roads.js?v=dev";
 
-const POOL = 40, NEAR_SPAWN = 70, FAR_SPAWN = 170, RECYCLE = 230, GREEN = 11;
-const CRUISE = { avenue: 13, ring: 8, street: 10, port: 8 };
+const POOL = 44, NEAR_SPAWN = 80, FAR_SPAWN = 190, RECYCLE = 245, WB = 2.6;
+const CRUISE = { avenue: 13.5, ring: 8.5, street: 10, port: 8.5 };
+const PHASE = 11, CLEAR = 2;   // green per group, all-red between
 const PAINTS = [0xC23B2A, 0x2F5D8C, 0xE8E2D6, 0x2a2a2e, 0x8a8d92, 0x3F7A4A, 0xD9A441, 0x6a2a4a, 0x7a9ab8, 0xa8a08a, 0x5a3a2a, 0xf0f0f0, 0xE0C030];
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _z = new THREE.Vector3(0, 0, 0), UP = new THREE.Vector3(0, 1, 0), _c = new THREE.Color();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _z = new THREE.Vector3(0, 0, 0), UP = new THREE.Vector3(0, 1, 0), _c = new THREE.Color(), _ax = new THREE.Vector3();
 
 function cumul(pts) { const c = [0]; for (let i = 1; i < pts.length; i++) c.push(c[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z)); return c; }
 function path(pts, extra = {}) { const cum = cumul(pts); return { pts, cum, L: cum[cum.length - 1], ...extra }; }
@@ -28,36 +40,43 @@ function pointOn(w, s) {
   const a = pts[i - 1], b = pts[i], seg = cum[i] - cum[i - 1] || 1, k = (s - cum[i - 1]) / seg;
   return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, dx: (b.x - a.x) / seg, dz: (b.z - a.z) / seg };
 }
+// along this path and on into the next, if there is one
+function chainPoint(c, s) { return s <= c.w.L || !c.next ? pointOn(c.w, s) : pointOn(c.next, s - c.w.L); }
+// how sharply the road bends over the next stretch (1/radius)
+function bend(c, s, ahead) {
+  const a = chainPoint(c, s), b = chainPoint(c, s + ahead);
+  const t = Math.atan2(Math.sin(Math.atan2(b.dx, b.dz) - Math.atan2(a.dx, a.dz)), Math.cos(Math.atan2(b.dx, b.dz) - Math.atan2(a.dx, a.dz)));
+  return Math.abs(t) / ahead;
+}
 
 export class Traffic {
   constructor(scene, world, opts = {}) {
-    this.world = world; this.R = Math.random; this.t = 0; this.limit = opts.count || 16; this.sfx = opts.sfx || {};
+    this.world = world; this.R = Math.random; this.t = 0; this.limit = opts.count || 18; this.sfx = opts.sfx || {}; this.onImpact = null; this.life = null;
     const roads = world.roads, N = Object.fromEntries(roads.nodes.map((n) => [n.id, n]));
-    this.N = N;
-    // lanes: one each way per road, on the right, from stop line to stop line
+    // lanes: one each way per road, on the right (roads.js's n points to the driver's right here), stop line to stop line
     this.lanes = [];
     for (const e of roads.edges) {
       const A = N[e.a], B = N[e.b], off = e.w / 4, s0 = A.deg > 1 ? A.r : 0, s1 = e.L - (B.deg > 1 ? B.r : 0);
       if (s1 - s0 < 4) continue;
       const fwd = [], back = [], n = Math.max(2, Math.ceil((s1 - s0) / 3));
-      for (let i = 0; i <= n; i++) { const p = at(e.pl, s0 + (s1 - s0) * i / n); fwd.push({ x: p.x - p.nx * off, z: p.z - p.nz * off }); back.push({ x: p.x + p.nx * off, z: p.z + p.nz * off }); }
+      for (let i = 0; i <= n; i++) { const p = at(e.pl, s0 + (s1 - s0) * i / n); fwd.push({ x: p.x + p.nx * off, z: p.z + p.nz * off }); back.push({ x: p.x - p.nx * off, z: p.z - p.nz * off }); }
       back.reverse();
-      const cruise = CRUISE[e.kind] || 10;
-      this.lanes.push(path(fwd, { e, from: A, to: B, cruise, endIdx: B.ends.findIndex((d) => d.e === e && !d.start) }));
-      this.lanes.push(path(back, { e, from: B, to: A, cruise, endIdx: A.ends.findIndex((d) => d.e === e && d.start) }));
+      const cruise = CRUISE[e.kind] || 10, major = e.kind === "avenue";
+      this.lanes.push(path(fwd, { e, from: A, to: B, cruise, major, endIdx: B.ends.findIndex((d) => d.e === e && !d.start) }));
+      this.lanes.push(path(back, { e, from: B, to: A, cruise, major, endIdx: A.ends.findIndex((d) => d.e === e && d.start) }));
     }
     for (const l of this.lanes) l.out = this.lanes.filter((m) => m.from === l.to && (m.e !== l.e || l.to.deg === 1));
-    // the cars: three instanced meshes like the parked ones
+    this.total = this.lanes.reduce((a, l) => a + l.L, 0);
+    // the cars: instanced like the parked ones
     const L = (o) => new THREE.MeshLambertMaterial(o);
     const geo = [mergeGeometries([new THREE.BoxGeometry(1.8, 0.62, 4.3).translate(0, 0.58, 0), new THREE.BoxGeometry(1.75, 0.2, 1.0).translate(0, 0.95, 1.55)]),
       new THREE.BoxGeometry(1.55, 0.55, 2.1).translate(0, 1.16, -0.25),
       mergeGeometries([[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]].map(([x, z]) => new THREE.CylinderGeometry(0.33, 0.33, 0.22, 8).rotateZ(Math.PI / 2).translate(x, 0.33, z)))];
     const mats = [L({ color: 0xffffff }), L({ color: 0x2a3644, emissive: 0x0c1218 }), L({ color: 0x18181a })];
     this.meshes = geo.map((g, k) => { const im = new THREE.InstancedMesh(g, mats[k], POOL); im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(im); return im; });
-    // tail lights: two little red quads per car, brighter when braking
     this.cars = [];
     for (let i = 0; i < POOL; i++) {
-      const c = { i, meshes: this.meshes, active: false, ai: false, x: 0, z: 0, y: 0, a: 0, speed: 0, steer: 0, roll: 0, color: PAINTS[(this.R() * PAINTS.length) | 0], health: 100, honk: 0, wait: 0, stun: 0 };
+      const c = { i, meshes: this.meshes, active: false, ai: false, x: 0, z: 0, y: 0, a: 0, speed: 0, steer: 0, roll: 0, color: PAINTS[(this.R() * PAINTS.length) | 0], health: 100 };
       this.meshes[0].setColorAt(i, _c.set(c.color)); this.hide(c); this.cars.push(c);
     }
     this.meshes[0].instanceColor.needsUpdate = true;
@@ -65,115 +84,209 @@ export class Traffic {
   }
   hide(c) { _m.compose(_z, _q.identity(), _z); for (const im of this.meshes) im.setMatrixAt(c.i, _m); }
   place(c) {
-    _q.setFromAxisAngle(UP, c.a); const r = new THREE.Quaternion().setFromAxisAngle(_p.set(Math.cos(c.a), 0, -Math.sin(c.a)), c.roll || 0); _q.premultiply(r);
-    _m.compose(_p.set(c.x, c.y, c.z), _q, _s); for (const im of this.meshes) im.setMatrixAt(c.i, _m);
+    _q.setFromAxisAngle(UP, c.a + (c.bend || 0) * 0.5); _r.setFromAxisAngle(_ax.set(Math.cos(c.a), 0, -Math.sin(c.a)), (c.roll || 0) + (c.bend || 0)); _q.premultiply(_r);
+    if (c.body) { c.body.group.position.set(c.x, c.y + (c.lift || 0), c.z); c.body.group.quaternion.copy(_q); return; }
+    _m.compose(_p.set(c.x, c.y + (c.lift || 0), c.z), _q, _s); for (const im of this.meshes) im.setMatrixAt(c.i, _m);
   }
-  // is this road's way into the junction green right now?
+  // signals: two groups of roads take turns, with a moment of all-red between
+  signalled(node) { return node.deg >= 3 && node.ends.some((d) => d.e.kind === "avenue"); }
   green(node, endIdx) {
-    if (node.deg < 3 || !node.ends.some((d) => d.e.kind === "avenue")) return true;
-    const phase = Math.floor((this.t + node.x * 0.37) / GREEN) % 2;
-    return endIdx % 2 === phase;
+    if (!this.signalled(node)) return true;
+    const t = (this.t + node.x * 0.37 + 1000) % (2 * (PHASE + CLEAR));
+    if (t < PHASE) return endIdx % 2 === 0;
+    if (t >= PHASE + CLEAR && t < 2 * PHASE + CLEAR) return endIdx % 2 === 1;
+    return false;
+  }
+  driver(c) {   // everyone drives a little differently
+    const R = this.R;
+    c.v0 = 0.85 + R() * 0.3; c.T = 1.0 + R() * 0.8; c.acc = 1.4 + R() * 1.2; c.brk = 2.2 + R() * 1.4; c.s0 = 2 + R() * 1.5;
   }
   spawn(c, near) {
-    for (let tries = 0; tries < 30; tries++) {
-      const l = this.lanes[(this.R() * this.lanes.length) | 0], s = this.R() * l.L, p = pointOn(l, s), d = Math.hypot(p.x - near.x, p.z - near.z);
+    for (let tries = 0; tries < 40; tries++) {
+      // a lane picked by length, so cars spread evenly over the network
+      let r = this.R() * this.total, l = this.lanes[0]; for (const m of this.lanes) { r -= m.L; if (r <= 0) { l = m; break; } }
+      const s = this.R() * l.L, p = pointOn(l, s), d = Math.hypot(p.x - near.x, p.z - near.z);
       if (d < NEAR_SPAWN || d > FAR_SPAWN) continue;
-      if (this.cars.some((o) => o.active && Math.hypot(o.x - p.x, o.z - p.z) < 14)) continue;
-      Object.assign(c, { active: true, ai: true, w: l, s, x: p.x, z: p.z, y: this.world.heightAt(p.x, p.z), a: Math.atan2(p.dx, p.dz), speed: l.cruise * 0.6, wait: 0, honk: 0, stun: 0, health: 100, wreck: false, inJunction: null });
+      if (this.cars.some((o) => o.active && Math.hypot(o.x - p.x, o.z - p.z) < 22)) continue;
+      Object.assign(c, { active: true, ai: true, w: l, next: null, s, x: p.x, z: p.z, y: this.world.heightAt(p.x, p.z), a: Math.atan2(p.dx, p.dz), speed: l.cruise * 0.7, steer: 0,
+        wait: 0, still: 0, honk: 0, stun: 0, panic: 0, health: 100, wreck: false, go: false, bend: 0, lift: 0, taken: false });
+      this.driver(c);
+      if (c.body) { c.body.group.visible = true; }
       return true;
     }
     return false;
   }
-  // pick the next street at a junction and the curve onto it
-  turn(c) {
-    const l = c.w.lane || c.w, outs = l.out; if (!outs.length) return null;
-    const a0 = Math.atan2(c.x - l.to.x, c.z - l.to.z);
-    // weight: straight on is likeliest, turns next, a U-turn only at a dead end
-    const ws = outs.map((m) => { const p = m.pts[0], q = m.pts[1]; const ang = Math.atan2(q.x - p.x, q.z - p.z), back = Math.atan2(-(l.pts[l.pts.length - 1].x - l.pts[l.pts.length - 2].x), -(l.pts[l.pts.length - 1].z - l.pts[l.pts.length - 2].z)); const d = Math.abs(Math.atan2(Math.sin(ang - back), Math.cos(ang - back))); return 0.2 + d; });
+  // choose the street after the junction and lay the curve onto it
+  chooseNext(c) {
+    const l = c.w, outs = l.out; if (!outs.length) return null;
+    const P = l.pts[l.pts.length - 1], P0 = l.pts[l.pts.length - 2], h = Math.atan2(P.x - P0.x, P.z - P0.z);
+    const ws = outs.map((m) => { const d = Math.abs(Math.atan2(Math.sin(Math.atan2(m.pts[1].x - m.pts[0].x, m.pts[1].z - m.pts[0].z) - h), Math.cos(Math.atan2(m.pts[1].x - m.pts[0].x, m.pts[1].z - m.pts[0].z) - h))); return d < 0.5 ? 3 : d < 2.4 ? 1.2 : 0.15; });
     let r = this.R() * ws.reduce((a, b) => a + b, 0), k = 0; while (r > ws[k] && k < ws.length - 1) r -= ws[k++];
-    const m = outs[k], P = l.pts[l.pts.length - 1], P0 = l.pts[l.pts.length - 2], Q = m.pts[0], Q1 = m.pts[1];
-    const t1 = { x: P.x - P0.x, z: P.z - P0.z }, t2 = { x: Q1.x - Q.x, z: Q1.z - Q.z };
+    const m = outs[k], Q = m.pts[0], Q1 = m.pts[1], t1 = { x: P.x - P0.x, z: P.z - P0.z }, t2 = { x: Q1.x - Q.x, z: Q1.z - Q.z };
     let C = null; const den = t1.x * t2.z - t1.z * t2.x;
     if (Math.abs(den) > 0.05) { const u = ((Q.x - P.x) * t2.z - (Q.z - P.z) * t2.x) / den; if (u > 0 && u < 60) C = { x: P.x + t1.x * u, z: P.z + t1.z * u }; }
     if (!C) C = { x: (P.x + Q.x) / 2 * 0.5 + l.to.x * 0.5, z: (P.z + Q.z) / 2 * 0.5 + l.to.z * 0.5 };
-    const pts = []; for (let i = 0; i <= 10; i++) { const t = i / 10, u = 1 - t; pts.push({ x: u * u * P.x + 2 * u * t * C.x + t * t * Q.x, z: u * u * P.z + 2 * u * t * C.z + t * t * Q.z }); }
-    void a0;
-    return path(pts, { lane: m, node: l.to, turn: true, cruise: 6.5 });
+    const pts = []; for (let i = 0; i <= 12; i++) { const t = i / 12, u = 1 - t; pts.push({ x: u * u * P.x + 2 * u * t * C.x + t * t * Q.x, z: u * u * P.z + 2 * u * t * C.z + t * t * Q.z }); }
+    return path(pts, { lane: m, node: l.to, turn: true, cruise: Math.min(l.cruise, m.cruise), major: l.major });
   }
-  // everything a car could run into, as points with a radius
+  // may this car go into the junction now?
+  mayEnter(c, all) {
+    const l = c.w, node = l.to, eta = (l.L - c.s) / Math.max(1, c.speed);
+    if (c.panic > 0) return true;
+    if (this.signalled(node)) {
+      if (!this.green(node, l.endIdx)) return false;
+      // green, but don't block the box: someone turning across us still in it
+      for (const o of all) if (o !== c && o.active && o.w && o.w.turn && o.w.node === node && Math.hypot(o.x - node.x, o.z - node.z) < 8 && o.w.lane.e !== (c.next && c.next.lane.e)) return c.wait > 3;
+      return true;
+    }
+    if (c.wait > 5) return true;   // edged out long enough
+    for (const o of all) {
+      if (o === c || !o.active || !o.w) continue;
+      // already in the junction (and not leaving our way)
+      if (o.w.turn && o.w.node === node && o.s < o.w.L * 0.8) return false;
+      // arriving from another road sooner, or with priority
+      if (!o.w.turn && o.w.to === node && o.w.e !== l.e && o.speed > 1) {
+        const oe = (o.w.L - o.s) / Math.max(1, o.speed);
+        if (oe < 4 && (oe < eta - 0.3 || (o.w.major && !l.major && oe < eta + 1.5))) return false;
+      }
+    }
+    return true;
+  }
+  // everything a driver might brake for: other cars, yours, you, people in the road
   obstacles(player, vehicles, peds) {
     const o = [];
-    for (const c of this.cars) if (c.active) o.push({ x: c.x, z: c.z, r: 1.3, car: c });
-    if (vehicles && vehicles.car) o.push({ x: vehicles.car.x, z: vehicles.car.z, r: 1.3, player: true });
-    else o.push({ x: player.pos.x, z: player.pos.z, r: 0.6, player: true });
-    if (peds) for (const pd of peds.peds) { if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position; if (this.world.mask.get(g.x, g.z) === 2) o.push({ x: g.x, z: g.z, r: 0.6 }); }
+    for (const c of this.cars) if (c.active) o.push({ x: c.x, z: c.z, r: 1.1, v: c.speed, a: c.a, car: c });
+    if (vehicles && vehicles.car) o.push({ x: vehicles.car.x, z: vehicles.car.z, r: 1.1, v: vehicles.car.speed, a: vehicles.car.a, player: true });
+    else if (!(this.life && this.life.dead)) o.push({ x: player.pos.x, z: player.pos.z, r: 0.5, v: 0, player: true, foot: true });
+    if (peds) for (const pd of peds.peds) { if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position; if (this.world.mask.get(g.x, g.z) === 2) o.push({ x: g.x, z: g.z, r: 0.5, v: 0, foot: true }); }
     return o;
   }
+  // something frightening at (x, z): drivers within r panic
+  panic(x, z, r = 70) { for (const c of this.cars) if (c.active && c.ai && Math.hypot(c.x - x, c.z - z) < r) { c.panic = 12 + this.R() * 8; if (this.R() < 0.4 && this.sfx.horn) this.sfx.horn(Math.hypot(c.x - x, c.z - z)); } }
+
   update(dt, player, vehicles, peds) {
     this.t += dt;
-    const P = player.pos, obs = this.obstacles(player, vehicles, peds);
-    // keep the right number on the road round the player
-    let n = this.cars.filter((c) => c.active && c.ai).length;
+    const P = player.pos, obs = this.obstacles(player, vehicles, peds), W = this.world;
+    let n = 0; for (const c of this.cars) if (c.active && c.ai) n++;
     for (const c of this.cars) {
-      if (c.active && c.ai && Math.hypot(c.x - P.x, c.z - P.z) > RECYCLE) { c.active = false; this.hide(c); n--; }
-      if (!c.active && !c.taken && n < this.limit && this.spawn(c, P)) n++;
+      if (c.active && c.ai && (Math.hypot(c.x - P.x, c.z - P.z) > RECYCLE || (c.still > 18 && Math.hypot(c.x - P.x, c.z - P.z) > 60))) { c.active = false; this.hide(c); if (c.body) c.body.group.visible = false; n--; }
+      if (!c.active && !c.taken && !c.wreck && n < this.limit && this.spawn(c, P)) n++;
     }
-    const busy = new Map();
-    for (const c of this.cars) if (c.active && c.ai && c.w.turn) busy.set(c.w.node, (busy.get(c.w.node) || 0) + 1);
     for (const c of this.cars) {
       if (!c.active || !c.ai) continue;
-      if (c.stun > 0) { c.stun -= dt; c.speed *= 1 - Math.min(1, dt * 3); this.place(c); continue; }
-      const fx = Math.sin(c.a), fz = Math.cos(c.a);
-      // what's ahead: the nearest obstacle in a cone in front
-      let gap = Infinity, byPlayer = false;
+      if (c.stun > 0) { c.stun -= dt; c.speed *= 1 - Math.min(1, dt * 2.5); this.move(c, dt, 0); continue; }
+      if (c.panic > 0) c.panic -= dt;
+      const panic = c.panic > 0;
+      // the next street, chosen in good time
+      if (!c.w.turn && !c.next && c.w.L - c.s < 25) c.next = this.chooseNext(c);
+      // steering: aim at a point up the lane
+      const Ld = 2.8 + Math.abs(c.speed) * 0.32, T = chainPoint(c, c.s + Ld), fx = Math.sin(c.a), fz = Math.cos(c.a);
+      const tx = T.x - c.x, tz = T.z - c.z, alpha = Math.atan2(tx * fz - tz * fx, tx * fx + tz * fz);
+      const want = Math.max(-0.6, Math.min(0.6, Math.atan(2 * WB * Math.sin(alpha) / Ld)));
+      c.steer += (want - c.steer) * Math.min(1, dt * 6);
+      // the speed we'd like: our own, less on bends, more in a panic
+      const k = Math.max(bend(c, c.s, 12), bend(c, c.s + 8, 14));
+      let v0 = c.w.cruise * c.v0 * (panic ? 1.7 : 1); v0 = Math.min(v0, Math.sqrt(4.2 / Math.max(1e-3, k)) * (panic ? 1.4 : 1));
+      // the leader: nearest thing ahead in our path
+      let gap = Infinity, lv = 0, byPlayer = false;
       for (const o of obs) {
-        if (o.car === c) continue;
+        if (o.car === c || (panic && o.foot)) continue;   // panicking: people in the road don't count
         const dx = o.x - c.x, dz = o.z - c.z, ahead = dx * fx + dz * fz, lat = Math.abs(-dx * fz + dz * fx);
-        if (ahead > 0 && ahead < 16 && lat < 1.4 + o.r) { const g = ahead - 2.4 - o.r; if (g < gap) { gap = g; byPlayer = !!o.player; } }
-      }
-      let target = c.w.cruise;
-      if (gap < 9) target = Math.min(target, Math.max(0, (gap - 1.2) * 1.3));
-      // the stop line: red light, or the junction already has two cars in it
-      if (!c.w.turn) {
-        const left = c.w.L - c.s, l = c.w;
-        if (left < 14) {
-          const stop = !this.green(l.to, l.endIdx) || (busy.get(l.to) || 0) >= 2;
-          if (stop && c.wait < 9) { target = Math.min(target, Math.max(0, (left - 0.5) * 0.9)); if (c.speed < 0.3) c.wait += dt; }
-          else target = Math.min(target, 7);
+        if (ahead > 0 && ahead < 45 && lat < 1.3 + o.r + ahead * 0.03) {
+          const g = ahead - 2.2 - o.r - (o.car || (o.player && !o.foot) ? 2.2 : 0);
+          if (g < gap) { gap = g; lv = o.v !== undefined && o.a !== undefined ? o.v * Math.cos(o.a - c.a) : 0; byPlayer = !!o.player; }
         }
       }
-      // horn: stuck behind the player for a while
-      if (byPlayer && c.speed < 0.5 && gap < 6) { c.honk += dt; if (c.honk > 2.2) { c.honk = -3; if (this.sfx.horn) this.sfx.horn(Math.hypot(c.x - P.x, c.z - P.z)); } } else if (c.honk > 0) c.honk = 0;
-      c.speed += Math.max(-8 * dt, Math.min(3.5 * dt, target - c.speed));
-      c.s += c.speed * dt;
+      // the stop line, if we may not go
+      if (!c.w.turn) {
+        const left = c.w.L - c.s;
+        if (left < 30) {
+          if (!c.go) c.go = this.mayEnter(c, this.cars);
+          if (!c.go) { const g = left - 1; if (g < gap) { gap = g; lv = 0; byPlayer = false; } if (c.speed < 0.4) c.wait += dt; }
+        }
+      }
+      // Intelligent Driver Model
+      const v = c.speed, dv = v - lv, sStar = c.s0 + Math.max(0, v * c.T + v * dv / (2 * Math.sqrt(c.acc * c.brk)));
+      let acc = c.acc * (panic ? 2 : 1) * (1 - Math.pow(Math.max(0, v) / Math.max(0.1, v0), 4) - (gap < Infinity ? (sStar / Math.max(0.1, gap)) ** 2 : 0));
+      acc = Math.max(-9, Math.min(c.acc * (panic ? 2 : 1), acc));
+      c.speed = Math.max(0, c.speed + acc * dt);
+      // the horn: stuck behind you
+      if (byPlayer && c.speed < 0.4 && gap < 8) { c.honk += dt; if (c.honk > 2.2) { c.honk = -4 - this.R() * 3; if (this.sfx.horn) this.sfx.horn(Math.hypot(c.x - P.x, c.z - P.z)); } } else if (c.honk > 0) c.honk = 0;
+      c.still = c.speed < 0.3 ? c.still + dt : 0;
+      this.move(c, dt, c.steer);
+      // progress along the path: how far we actually went toward it
+      c.s += Math.max(0, c.speed * dt * Math.cos(Math.min(1.2, Math.abs(alpha))));
       if (c.s >= c.w.L) {
         const over = c.s - c.w.L;
-        if (c.w.turn) { c.w = c.w.lane; c.s = over; c.wait = 0; }
-        else { const t = this.turn(c); if (t) { c.w = t; c.s = over; } else { c.active = false; this.hide(c); continue; } }
+        if (c.w.turn) { c.w = c.w.lane; c.next = null; c.go = false; c.wait = 0; c.s = over; }
+        else { const nx = c.next || this.chooseNext(c); if (!nx) { c.active = false; this.hide(c); continue; } c.w = nx; c.next = null; c.s = over; }
       }
-      const p = pointOn(c.w, c.s), na = Math.atan2(p.dx, p.dz);
-      let da = na - c.a; da = Math.atan2(Math.sin(da), Math.cos(da));
-      c.roll += (-da * c.speed * 0.02 - c.roll) * Math.min(1, dt * 5);
-      c.a += da * Math.min(1, dt * 10); c.x = p.x; c.z = p.z; c.y += (this.world.heightAt(c.x, c.z) - c.y) * Math.min(1, dt * 12);
-      this.place(c);
+      // running people down (a driver who's braking won't, unless they can't stop in time)
+      if (c.speed > 2.5) this.runOver(c, peds, vehicles);
     }
-    // the signal lamps: show red or green per road
-    if (this.signals.length && (this.st = (this.st || 0) + dt) > 0.4) {
-      this.st = 0; const props = this.world.props, m = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), zero = new THREE.Vector3(0, 0, 0), pos = new THREE.Vector3();
-      this.signals.forEach((sg, i) => {
-        const g = this.green(sg.node, sg.end); q.setFromAxisAngle(UP, sg.a); pos.set(sg.x, 0, sg.z);
-        m.compose(pos, q, g ? zero : one); props.redMesh.setMatrixAt(i, m); m.compose(pos, q, g ? one : zero); props.greenMesh.setMatrixAt(i, m);
-      });
-      props.redMesh.instanceMatrix.needsUpdate = props.greenMesh.instanceMatrix.needsUpdate = true;
+    // cars bumping each other (it happens in a panic): push apart, damage by closing speed
+    for (let i = 0; i < this.cars.length; i++) {
+      const a = this.cars[i]; if (!a.active || !a.ai) continue;
+      for (let j = i + 1; j < this.cars.length; j++) {
+        const b = this.cars[j]; if (!b.active || Math.abs(a.x - b.x) > 5 || Math.abs(a.z - b.z) > 5) continue;
+        const dx = a.x - b.x, dz = a.z - b.z, d = Math.hypot(dx, dz), m = 2.4 - d;
+        if (m > 0 && d > 1e-4) {
+          a.x += dx / d * m * 0.5; a.z += dz / d * m * 0.5; b.x -= dx / d * m * 0.5; b.z -= dz / d * m * 0.5;
+          const rel = Math.abs(a.speed - b.speed * Math.cos(a.a - b.a));
+          if (rel > 3 && this.onImpact) { this.onImpact(a, (a.x + b.x) / 2, (a.z + b.z) / 2, -dx / d, -dz / d, rel); this.onImpact(b, (a.x + b.x) / 2, (a.z + b.z) / 2, dx / d, dz / d, rel); }
+          const sp = Math.min(a.speed, b.speed); a.speed = sp * 0.6; b.speed = sp * 0.6;
+        }
+      }
     }
+    this.lights(dt);
     for (const im of this.meshes) im.instanceMatrix.needsUpdate = true;
+  }
+  // the bicycle model, and out of anything solid
+  move(c, dt, steer) {
+    const W = this.world, yawRate = c.speed / WB * Math.tan(steer);
+    c.a += yawRate * dt;
+    const fx = Math.sin(c.a), fz = Math.cos(c.a);
+    c.x += fx * c.speed * dt; c.z += fz * c.speed * dt;
+    let hit = 0, hx = 0, hz = 0;
+    for (const k of [1.45, 0, -1.45]) {
+      const q = { x: c.x + fx * k, z: c.z + fz * k }, bx = q.x, bz = q.z;
+      W.grid.resolve(q, 0.95, c.y + 0.3, 1.2);
+      const dx = q.x - bx, dz = q.z - bz; if (dx || dz) { c.x += dx; c.z += dz; const l = Math.hypot(dx, dz); if (l > hit) { hit = l; hx = -dx / l; hz = -dz / l; } }
+    }
+    if (hit > 0.02 && c.speed > 3 && this.onImpact) this.onImpact(c, c.x + hx * 1.5, c.z + hz * 1.5, hx, hz, c.speed);
+    if (hit > 0.02) c.speed *= 0.5;
+    c.y += (W.heightAt(c.x, c.z) - c.y) * Math.min(1, dt * 12);
+    c.roll += (-yawRate * c.speed * 0.01 - c.roll) * Math.min(1, dt * 5);
+    this.place(c);
+  }
+  runOver(c, peds, vehicles) {
+    const fx = Math.sin(c.a), fz = Math.cos(c.a), co = Math.cos(c.a), sn = Math.sin(c.a);
+    const inside = (x, z) => { const rx = x - c.x, rz = z - c.z, lx = rx * co - rz * sn, lz = rx * sn + rz * co; return Math.abs(lx) < 1.15 && lz > -2.3 && lz < 2.6; };
+    if (peds) for (const pd of peds.peds) {
+      if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position;
+      if (inside(g.x, g.z)) { peds.damage(pd, { point: new THREE.Vector3(g.x, g.y + 0.9, g.z), dir: new THREE.Vector3(fx, 0.35, fz).normalize(), damage: c.speed * 10, from: { x: c.x, z: c.z }, force: Math.min(10, c.speed * 0.75) }); c.speed *= 0.9; if (this.sfx.impact) this.sfx.impact("flesh", 0, 0); peds.alarm(c.x, c.z, 30); }
+    }
+    const L = this.life;
+    if (L && !L.dead && !(vehicles && vehicles.driving) && inside(L.player.pos.x, L.player.pos.z) && L.iframes <= 0) {
+      L.damage(c.speed * 7.5, { point: L.player.pos.clone().setY(L.player.pos.y + 1), dir: new THREE.Vector3(fx, 0.4, fz).normalize(), force: Math.min(10, c.speed * 0.8), cause: "car" });
+      L.iframes = Math.max(L.iframes, 0.6); c.speed *= 0.85; if (this.sfx.impact) this.sfx.impact("flesh", 0, 0);
+    }
+  }
+  lights(dt) {
+    if (!this.signals.length || (this.st = (this.st || 0) + dt) < 0.3) return;
+    this.st = 0; const props = this.world.props, m = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), zero = new THREE.Vector3(0, 0, 0), pos = new THREE.Vector3();
+    this.signals.forEach((sg, i) => {
+      const g = this.green(sg.node, sg.end); q.setFromAxisAngle(UP, sg.a); pos.set(sg.x, 0, sg.z);
+      m.compose(pos, q, g ? zero : one); props.redMesh.setMatrixAt(i, m); m.compose(pos, q, g ? one : zero); props.greenMesh.setMatrixAt(i, m);
+    });
+    props.redMesh.instanceMatrix.needsUpdate = props.greenMesh.instanceMatrix.needsUpdate = true;
   }
   // you on foot: don't walk through cars
   push(p, r) {
     for (const c of this.cars) {
       if (!c.active) continue;
       const fx = Math.sin(c.a), fz = Math.cos(c.a);
-      for (const k of [1.4, 0, -1.4]) { const cx = c.x + fx * k, cz = c.z + fz * k, dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz), m = r + 1.0; if (d < m && d > 1e-4) { p.x = cx + dx / d * m; p.z = cz + dz / d * m; } }
+      for (const k of [1.4, 0, -1.4]) { const cx = c.x + fx * k, cz = c.z + fz * k, dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz), m = r + 0.95; if (d < m && d > 1e-4) { p.x = cx + dx / d * m; p.z = cz + dz / d * m; } }
     }
   }
   // the player takes a car: it stops being traffic
