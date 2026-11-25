@@ -57,6 +57,14 @@ export class Gore {
     this.pools.push({ mesh, at, t: 0, size: 0.9 + Math.random() * 0.6 });
     if (this.pools.length > 24) { const o = this.pools.shift(); this.scene.remove(o.mesh); o.mesh.geometry.dispose(); }
   }
+  // wipe everything within r of (x, z): splats, pools, drops in the air
+  clearNear(x, z, r) {
+    const m = this._m, p = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < this.splats.count; i++) { this.splats.getMatrixAt(i, m); p.setFromMatrixPosition(m); if (Math.hypot(p.x - x, p.z - z) < r) this.splats.setMatrixAt(i, zero); }
+    this.splats.instanceMatrix.needsUpdate = true;
+    this.pools = this.pools.filter((P) => { const q = P.mesh.position; if (Math.hypot(q.x - x, q.z - z) < r) { this.scene.remove(P.mesh); P.mesh.geometry.dispose(); return false; } return true; });
+    for (const q of this.drops.list) if (Math.hypot(q.p.x - x, q.p.z - z) < r) { q.life = 0; q.p.y = -999; }
+  }
   update(dt) {
     const D = this.drops, pa = D.g.attributes.position;
     for (let i = 0; i < D.N; i++) {

@@ -35,6 +35,10 @@ function clutter(kit, F, R, u0, u1, v0, v1, y) {
 function parapet(kit, F, u0, u1, v0, v1, y, col) { F.box(kit.B.plain, kit.B.plain, u0, u1, v0, v0 + 0.3, y, y + 0.8, col, col, 8, 8); F.box(kit.B.plain, kit.B.plain, u0, u1, v1 - 0.3, v1, y, y + 0.8, col, col, 8, 8); }
 
 /* ---------- Tideline ---------- */
+// what's behind a shop sign
+export const SHOP_KIND = { "KEYS LIQUOR": "store", "LAVANDERIA": "laundry", "PHARMACY": "pharmacy", "TACOS EL FARO": "cafe", "SALT & PEPPER DELI": "cafe", "PAWN & LOAN": "pawn",
+  "CHECKS CASHED": "checks", "SURF SHOP": "surf", "SEABREEZE CAFE": "cafe", "BODEGA": "store", "HARDWARE": "hardware", "BARBER": "barber", "BAR OPEN": "bar", "DONUTS": "cafe", "SODA COLD 75c": "store" };
+const title = (s) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()).replace(" C", " c");
 export function decoHotel(kit, F, W, D, R, o = {}) {
   const B = kit.B, fl = o.floors || 3 + ((R() * 4) | 0), H = fl * 3.5, wall = C(pick(R, PALETTES.deco)), trim = C(pick(R, ["#FFFFFF", "#F4EFE6", "#E8E0D0"]));
   const rc = R() < 0.55 ? Math.min(5, W * 0.25) : 0;
@@ -47,14 +51,15 @@ export function decoHotel(kit, F, W, D, R, o = {}) {
   for (let f = 1; f < fl; f++) F.slab(B.plain, B.plain, rc, W, -0.55, 0, f * 3.5 + 2.75, f * 3.5 + 2.9, trim);
   const du = rc + (W - rc) * (0.3 + R() * 0.4);
   F.slab(B.plain, B.plain, du - 2.5, du + 2.5, -2.2, 0, 3.1, 3.35, trim);
+  const hotel = o.name || pick(R, SIGNS.hotel);
   // a stepped parapet at the centre, a fin with the hotel's name in neon
   const pm = (rc + W) / 2; F.box(B.plain, B.plain, pm - W * 0.18, pm + W * 0.18, 0, 1.2, H, H + 2.2, wall, wall, 8, 8);
   F.box(B.plain, B.plain, pm - W * 0.08, pm + W * 0.08, 0, 1.2, H + 2.2, H + 3.6, trim, trim, 8, 8);
   const fu = rc ? rc + 1.2 : W * (0.15 + R() * 0.2);
   F.box(B.plain, B.plain, fu - 0.25, fu + 0.25, -1.3, 0, 3.6, H + 3, trim, trim, 8, 8);
-  F.blade(B.signs, kit, sign(kit, o.name || pick(R, SIGNS.hotel)), fu, -0.02, H - 4.5, H + 2.6, 1.28, C("#ffffff"));
+  F.blade(B.signs, kit, sign(kit, hotel), fu, -0.02, H - 4.5, H + 2.6, 1.28, C("#ffffff"));
   clutter(kit, F, R, rc + 1, W - 1, 3, D - 1, H);
-  return { h: H + 3.6 };
+  return { h: H + 3.6, doors: [{ u: du, v: 0, kind: "hotel", name: title(hotel) }] };
 }
 export function motel(kit, F, W, D, R) {
   const B = kit.B, wall = C("#F2E6D0"), trim = C("#2F6E5A"), v0 = D - 11, H = 7;
@@ -68,7 +73,7 @@ export function motel(kit, F, W, D, R) {
   F.box(B.plain, B.plain, 2.6, 3.1, 1.5, 2.0, 0, 9, trim, trim, 8, 8);
   F.blade(B.signs, kit, sign(kit, "SEAGRAPE MOTOR INN"), 2.85, 0.6, 6.2, 8.8, -2.6, C("#ffffff"));
   F.blade(B.signs, kit, sign(kit, "MOTEL VACANCY"), 2.85, 0.6, 4.8, 5.9, -2.6, C("#ffffff"));
-  return { h: H + 1, lot: { u0: 0, u1: W, v0: 0.5, v1: v0 - 2 } };
+  return { h: H + 1, lot: { u0: 0, u1: W, v0: 0.5, v1: v0 - 2 }, doors: [{ u: 7, v: v0, kind: "motel", name: "Seagrape Motor Inn" }] };
 }
 export function diner(kit, F, W, D, R) {
   const B = kit.B, r = Math.min(4, D / 2), H = 4.2, wall = C("#E8EEF0");
@@ -80,7 +85,7 @@ export function diner(kit, F, W, D, R) {
   F.top(B.roof, r, W - r, 0, D, H, C("#8a8680"));
   F.box(B.plain, B.plain, W / 2 - 0.2, W / 2 + 0.2, 1, 1.4, H, H + 1.2, C("#3a3a3a"), C("#3a3a3a"), 8, 8);
   F.sign(B.signs, kit, sign(kit, "NITE OWL DINER"), W / 2 - 4, W / 2 + 4, 0.95, H + 1.0, H + 3.0, C("#ffffff"));
-  return { h: H + 3 };
+  return { h: H + 3, doors: [{ u: W / 2, v: 0, kind: "diner", name: "Nite Owl Diner" }] };
 }
 
 /* ---------- Midtown ---------- */
@@ -91,16 +96,18 @@ export function shopRow(kit, F, W, D, R, o = {}) {
   else F.wall(B.plain, 0, 0, W, 0, 3.6, H, wall, 8, 8);
   F.wall(B.stucco, W, 0, W, D, 0, H, wall); F.wall(B.stucco, W, D, 0, D, 0, H, wall); F.wall(B.stucco, 0, D, 0, 0, 0, H, wall);
   F.top(B.roof, 0, W, 0, D, H, C("#8a8680"));
-  // awnings and sign boards along the shopfronts
+  // awnings and sign boards along the shopfronts, a door under each
+  const doors = [];
   for (let u = 0; u < W - 2; u += 7 + R() * 5) {
-    const u1 = Math.min(W, u + 5 + R() * 3), col = C(pick(R, PALETTES.awning));
+    const u1 = Math.min(W, u + 5 + R() * 3), col = C(pick(R, PALETTES.awning)), name = pick(R, SIGNS.shop);
     if (R() < 0.75) F.awning(B.awning, u + 0.3, u1 - 0.3, 0, 3.3, 1.6, 0.7, col);
-    F.sign(B.signs, kit, sign(kit, pick(R, SIGNS.shop)), u + 0.5, u1 - 0.5, -0.06, 3.65, 4.35, C("#ffffff"));
+    F.sign(B.signs, kit, sign(kit, name), u + 0.5, u1 - 0.5, -0.06, 3.65, 4.35, C("#ffffff"));
+    if (u1 - u > 3) doors.push({ u: (u + u1) / 2, v: 0, kind: SHOP_KIND[name] || "store", name: title(name) });
   }
   parapet(kit, F, 0, W, 0, D, H, wall);
   if (R() < 0.3) F.blade(B.signs, kit, sign(kit, pick(R, SIGNS.shop)), 0.6, -0.02, 4.5, 6.3, 1.1, C("#ffffff"));
   clutter(kit, F, R, 0, W, 1, D, H);
-  return { h: H + 0.8 };
+  return { h: H + 0.8, doors };
 }
 export function apartment(kit, F, W, D, R, o = {}) {
   const B = kit.B, fl = o.floors || 3 + ((R() * 5) | 0), H = fl * 3.5, wall = C(pick(R, PALETTES.stucco), R() * 0.12), rail = C(pick(R, PALETTES.trim));
@@ -113,12 +120,16 @@ export function apartment(kit, F, W, D, R, o = {}) {
     F.slab(B.plain, B.plain, u, u + 3.2, -1.2, 0, f * 3.5, f * 3.5 + 0.18, C("#cfc9be"));
     F.slab(B.plain, B.plain, u, u + 3.2, -1.2, -1.1, f * 3.5 + 0.18, f * 3.5 + 1.1, rail);
   }
-  if (shop) for (let u = 0.5; u < W - 3; u += 9) F.sign(B.signs, kit, sign(kit, pick(R, SIGNS.shop)), u, u + 5, -0.06, 2.9, 3.45, C("#ffffff"));
+  const doors = [];
+  if (shop) for (let u = 0.5; u < W - 3; u += 9) { const name = pick(R, SIGNS.shop); F.sign(B.signs, kit, sign(kit, name), u, u + 5, -0.06, 2.9, 3.45, C("#ffffff")); doors.push({ u: u + 2.5, v: 0, kind: SHOP_KIND[name] || "store", name: title(name) }); }
+  // the residents' door: between the shops, or in the middle
+  const lu = shop ? (doors.length > 1 ? (doors[0].u + doors[1].u) / 2 : W - 1.6) : W / 2;
+  if (lu > 1 && lu < W - 1) doors.push({ u: lu, v: 0, kind: "apartment", name: "Apartments" });
   parapet(kit, F, 0, W, 0, D, H, wall);
   // a water tank on legs, a stair hut
   if (R() < 0.6) { const u = 2 + R() * (W - 6), v = 2 + R() * (D - 6); F.box(B.plain, null, u, u + 0.2, v, v + 0.2, H, H + 2, C("#555"), null, 8, 8); F.box(B.metal, B.roof, u - 0.6, u + 2.4, v - 0.6, v + 2.4, H + 2, H + 4.5, C("#9a8a70"), C("#6a5a48"), 8, 4); }
   F.box(B.concrete, B.roof, W - 4, W - 1, D - 4, D - 1, H, H + 2.6, wall, C("#8a8680"), 4, 4);
-  return { h: H + 4.5 };
+  return { h: H + 4.5, doors };
 }
 export function theatre(kit, F, W, D, R) {
   const B = kit.B, H = 13, wall = C("#D8B49A");
@@ -126,9 +137,10 @@ export function theatre(kit, F, W, D, R) {
   F.wall(B.shop, 2, -0.02, W - 2, -0.02, 0, 3.5, wall, 16, 3.5);
   F.slab(B.plain, B.plain, 1, W - 1, -3, 0, 3.6, 4.3, C("#F4EFE6"));
   F.sign(B.signs, kit, sign(kit, "PALM SQUARE THEATRE"), 2, W - 2, -3.02, 4.35, 6.2, C("#ffffff"));
+  const doors = [{ u: W / 2, v: 0, kind: "theatre", name: "Palm Square Theatre" }];
   F.box(B.plain, B.plain, W / 2 - 0.4, W / 2 + 0.4, -1.4, 0, 6.5, H + 4, C("#F4EFE6"), C("#F4EFE6"), 8, 8);
   F.blade(B.signs, kit, sign(kit, "PALM SQUARE THEATRE"), W / 2, -0.02, H - 5, H + 3.6, 1.45, C("#ffffff"));
-  return { h: H + 4 };
+  return { h: H + 4, doors };
 }
 export function gasStation(kit, F, W, D, R) {
   const B = kit.B, sh = 10;
@@ -141,7 +153,7 @@ export function gasStation(kit, F, W, D, R) {
   for (let u = 7; u < W - 6; u += 6) F.box(B.plain, B.plain, u, u + 0.8, (c0 + c1) / 2 - 0.4, (c0 + c1) / 2 + 0.4, 0, 1.7, C("#e0e0e0"), C("#C23B2A"), 8, 8);
   F.box(B.plain, B.plain, 0.6, 1.0, 0.6, 1.0, 0, 6, C("#3a3a3a"), C("#3a3a3a"), 8, 8);
   F.blade(B.signs, kit, sign(kit, "GAS OPEN 24"), 0.8, 0.8, 4.2, 6.2, -2.4, C("#ffffff"));
-  return { h: 5.3, lot: { u0: 1, u1: W - 1, v0: 1, v1: D - sh - 0.5 }, solid: [[2, W - 2, D - sh, D - 1, 3.8]] };
+  return { h: 5.3, lot: { u0: 1, u1: W - 1, v0: 1, v1: D - sh - 0.5 }, solid: [[2, W - 2, D - sh, D - 1, 3.8]], doors: [{ u: W / 2, v: D - sh, kind: "store", name: "Gas Open 24" }] };
 }
 
 /* ---------- Downtown ---------- */
@@ -160,7 +172,7 @@ export function tower(kit, F, W, D, R, o = {}) {
   if (R() < 0.5) F.box(B.glass ? kit.B.glass : B.plain, B.roof, ci, W - ci, ci, D - ci, H, H + 4, C("#ffffff"), C("#9aa"), 8, 8);
   else F.box(B.plain, B.plain, W / 2 - 0.3, W / 2 + 0.3, D / 2 - 0.3, D / 2 + 0.3, H, H + 10 + R() * 12, C("#d0d0d0"), C("#d0d0d0"), 8, 8);
   if (o.name) for (const [u0, u1, v] of [[ci, W - ci, s - 0.08]]) F.sign(B.signs, kit, sign(kit, o.name), u0, u1, v, H - 5, H - 1.5, C("#ffffff"));
-  return { h: H };
+  return { h: H, doors: [{ u: W / 2, v: 0, kind: "office", name: o.name ? title(o.name) : "Lobby" }] };
 }
 export function office(kit, F, W, D, R) {
   const B = kit.B, fl = 6 + ((R() * 9) | 0), H = fl * 3.5, brick = R() < 0.5, wall = C(brick ? pick(R, ["#C9806A", "#B87A62", "#D4A28A", "#E0D6C6"]) : pick(R, PALETTES.office));
@@ -169,7 +181,7 @@ export function office(kit, F, W, D, R) {
   F.top(B.roof, 0, W, 0, D, H, C("#8a8680"));
   F.slab(B.plain, B.plain, -0.4, W + 0.4, -0.8, D + 0.4, H, H + 0.9, C("#E8E2D6"));   // a cornice
   clutter(kit, F, R, 0, W, 0, D, H + 0.9);
-  return { h: H + 0.9 };
+  return { h: H + 0.9, doors: [{ u: W / 2, v: 0, kind: "office", name: "Lobby" }] };
 }
 export function garage(kit, F, W, D, R) {
   const B = kit.B, lv = 4, col = C("#BDB8AE");
@@ -177,7 +189,7 @@ export function garage(kit, F, W, D, R) {
   for (let u = 0; u <= W; u += W / 5) for (const v of [0, D]) F.box(B.concrete, null, Math.min(u, W - 0.5), Math.min(u, W - 0.5) + 0.5, Math.min(v, D - 0.5), Math.min(v, D - 0.5) + 0.5, 0, lv * 3, col, null, 4, 4);
   for (let k = 1; k <= lv; k++) F.slab(B.concrete, null, 0, W, -0.05, 0.2, k * 3 + 0.4, k * 3 + 1.2, col);
   F.sign(B.signs, kit, sign(kit, "PIER 9"), 1, 6, -0.3, 1.2, 2.4, C("#ffffff"));
-  return { h: lv * 3 + 1.2 };
+  return { h: lv * 3 + 1.2, doors: [{ u: W / 2, v: 0, kind: "garage", name: "Pier 9 Garage" }] };
 }
 
 /* ---------- Port Salt ---------- */
@@ -188,8 +200,9 @@ export function warehouse(kit, F, W, D, R) {
   else for (let u = 0; u < W - 0.1; u += 8) F.gable(B.metal, u, Math.min(W, u + 8), 0, D, H, 2.2, C("#9aa0a4"), false);   // sawtooth
   for (let u = 3; u < W - 4; u += 9) F.wall(B.door, u, -0.05, u + 4.5, -0.05, 0, 4.6, C("#ffffff"), 4.5, 4.6);
   F.slab(B.concrete, B.concrete, 0, W, -2.2, 0, 0, 1.1, C("#B0AA9E"));   // loading dock
+  const doors = [{ u: 5.25, v: -2.2, kind: "warehouse", name: "Warehouse", roller: true }];
   if (R() < 0.6) F.box(B.stucco, B.roof, W - 7, W, -4.5, 0, 0, 3.5, C(pick(R, PALETTES.stucco)), C("#8a8680"), 16, 14, "flr");
-  return { h: H + 2.5 };
+  return { h: H + 2.5, doors };
 }
 export function longshoreHall(kit, F, W, D, R) {
   const B = kit.B, H = 10.5;
@@ -198,7 +211,7 @@ export function longshoreHall(kit, F, W, D, R) {
   F.slab(B.plain, B.plain, W / 2 - 3, W / 2 + 3, -2.5, 0, 3.2, 3.5, C("#F4EFE6"));
   F.box(B.plain, null, 1, 1.15, -1, -0.85, 0, 12, C("#e8e8e8"), null, 8, 8);
   parapet(kit, F, 0, W, 0, D, H, C("#B87A62"));
-  return { h: H + 0.8 };
+  return { h: H + 0.8, doors: [{ u: W / 2, v: 0, kind: "hall", name: "Longshore Hall" }] };
 }
 // a ship-to-shore crane on the quay: legs, a boom out over the water, the cab
 export function crane(kit, F, R) {
@@ -231,5 +244,5 @@ export function house(kit, F, W, D, R) {
   if (R() < 0.7) for (const [a, b] of [[0, u0 + bw * 0.3 - 0.5], [u0 + bw * 0.7 + 0.5, W]]) if (b - a > 1) F.slab(B.plain, B.plain, a, b, -0.6, -0.5, 0, 1.0, C("#F4EFE6"));
   const pool = D - v0 - bd > 8 && R() < 0.45 ? { u0: u0 + 1, u1: u0 + Math.min(bw, 8), v0: v0 + bd + 2.5, v1: v0 + bd + 6 } : null;
   if (pool) F.top(B.water ? kit.B.water : B.plain, pool.u0, pool.u1, pool.v0, pool.v1, 0.06, C("#ffffff"), 4);
-  return { h: H + 2.2, pool, yard: true };
+  return { h: H + 2.2, pool, yard: true , doors: [{ u: u0 + bw / 2, v: v0, kind: "house", name: "House" }] };
 }

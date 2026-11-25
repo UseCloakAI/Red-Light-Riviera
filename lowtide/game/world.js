@@ -336,16 +336,22 @@ export async function buildWorld(scene, opts = {}) {
     if (r.pool) map.pools.push([F.p(r.pool.u0, r.pool.v0, 0), F.p(r.pool.u1, r.pool.v0, 0), F.p(r.pool.u1, r.pool.v1, 0), F.p(r.pool.u0, r.pool.v1, 0)].map((p) => ({ x: p[0], z: p[2] })));
     if (r.yard) lotsToPaint.push({ F, u0: 0, u1: W, v0: 0, v1: D, yard: true });
     occ.poly(corners4(F, W, D, 1.2), 1);
-    // the way in: a door on the front, and a note of where it is and what's behind it (interiors.js)
-    const SHOPS = ["store", "store", "cafe", "bar", "laundry", "barber"];
-    const DOOR = { deco: ["hotel", W / 2, 0], motel: ["motel", 4.5, D - 11], diner: ["diner", W / 2, 0], shop: [SHOPS[(R() * SHOPS.length) | 0], W / 2, 0], apt: ["apartment", W / 2, 0],
-      tower: ["office", W / 2, 0], ashby: ["office", W / 2, 0], office: ["office", W / 2, 0], garage: ["garage", W / 2, 0], ware: ["warehouse", W / 2, 0], hall: ["warehouse", W / 2, 0],
-      house: ["house", W / 2, 0.5], theatre: ["theatre", W / 2, 0], gas: ["store", W / 2, D - 10] }[c.t];
-    if (DOOR) {
-      const [kind, u, v] = DOOR;
-      F.wall(B.door, u - 0.7, v - 0.04, u + 0.7, v - 0.04, 0, 2.4, null, 1.4, 2.4);
+    // the ways in: the doors the building type made, drawn as real entrances, noted for interiors.js
+    const FALL = { tower: "office", ashby: "office" }[c.t];
+    const doors = r.doors || (FALL ? [{ u: W / 2, v: 0, kind: FALL, name: "Lobby" }] : []);
+    for (const dr of doors) {
+      const { u, v } = dr;
+      if (!dr.roller) {
+        const fc = new THREE.Color("#3a3430"), sc = new THREE.Color("#b8b2a6");
+        F.wall(B.entry, u - 0.6, v - 0.06, u + 0.6, v - 0.06, 0.06, 2.3, null, 1.2, 2.3);                     // the door, set in its frame
+        F.box(B.plain, B.plain, u - 0.78, u - 0.6, v - 0.2, v, 0, 2.48, fc, fc, 8, 8);                       // jambs
+        F.box(B.plain, B.plain, u + 0.6, u + 0.78, v - 0.2, v, 0, 2.48, fc, fc, 8, 8);
+        F.box(B.plain, B.plain, u - 0.78, u + 0.78, v - 0.22, v, 2.3, 2.48, fc, fc, 8, 8);                   // lintel
+        F.slab(B.concrete, B.concrete, u - 0.95, u + 0.95, v - 0.7, v, 0, 0.06, sc);                         // the step
+        F.box(B.lamp, B.lamp, u - 0.12, u + 0.12, v - 0.3, v - 0.04, 2.62, 2.8, null, null, 8, 8);           // a lamp over it
+      }
       const p = F.p(u, v - 1.3, 0);
-      entrances.push({ x: p[0], z: p[2], yaw: Math.atan2(F.n[0], F.n[2]), kind, W, D, seed: (R() * 2147483647) | 0 });
+      entrances.push({ x: p[0], z: p[2], yaw: Math.atan2(F.n[0], F.n[2]), kind: dr.kind, name: dr.name, W: Math.min(W, 16), D, seed: (R() * 2147483647) | 0 });
     }
   }
   // walk every street's frontage, both sides, placing parcels that fit

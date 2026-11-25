@@ -26,6 +26,7 @@ export class Travel {
     if (this.active) return "Already on the way";
     if (this.life && (this.life.dead || this.life.knock > 0)) return "Not while you're down";
     if (this.vehicles && this.vehicles.driving) return "Get out of the car first";
+    if (this.interiors && (this.interiors.inside || this.interiors.fadeT > 0)) return "Step outside first";
     if (this.police && this.police.wanted) return "Not while the police are after you";
     const c = this.cooldown; if (c > 0) return "Fast travel recharging " + Math.floor(c / 60) + ":" + String(Math.ceil(c % 60) % 60).padStart(2, "0");
     return null;

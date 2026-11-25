@@ -606,6 +606,37 @@
       var n = ctx.createBufferSource(); n.buffer = NZ.brown; n.playbackRate.value = 0.5; var nl = F("lowpass", 700, 1), ng = G(0); perc(ng, t, 0.005, 0.9, 1.0); chain(n, nl, ng, bus); n.start(t, rnd(), 1.2);
       var c = ctx.createBufferSource(); c.buffer = NZ.white; c.playbackRate.value = 0.4; var cb = F("bandpass", 1300, 2.5), cg = G(0); perc(cg, t, 0.003, 0.5, 0.35); chain(c, cb, cg, bus); c.start(t, rnd(), 0.5);
     },
+    /* inside: each place has its sound. A fridge hum and a radio for the shops, the jukebox in
+       the bar, the murmur and clink of a diner, the machines in a laundromat, lift music in a
+       lobby, a film through the wall at the theatre, the big hum of a warehouse */
+    roomTone: function (kind) {
+      if (!ctx) return { stop: function () {} };
+      var t = now(), bus = G(0), nodes = [], timers = []; bus.connect(B.under); send(bus, plate, 0.2);
+      bus.gain.setValueAtTime(0, t); bus.gain.linearRampToValueAtTime(1, t + 0.8);
+      var hum = function (f, v) { var o = O("sine", f, t), g = G(v); chain(o, g, bus); o.start(t); nodes.push(o); };
+      var bed = function (kind2, lo, hi, v) { var n = noise(kind2, t, 0, true), b = F("bandpass", (lo + hi) / 2, (lo + hi) / (hi - lo) * 0.5), g = G(v); chain(n, b, g, bus); nodes.push(n); return g; };
+      var every = function (ms, fn) { fn(); timers.push(setInterval(fn, ms)); };
+      var taps = []; var tap = function (src, dest) { src.connect(dest); taps.push([src, dest]); };   // the drums and bass play on the (muted) music bus: borrow them
+      var radio = function (lp, v) {   // a little music from somewhere: chords on the electric piano, through a small speaker
+        var spk = F("lowpass", lp, 1), hp = F("highpass", 300), g = G(v); chain(spk, hp, g, bus); tap(B.bass, spk); var prog = [[57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 55, 59]], k = 0;
+        every(2400, function () { var t2 = now() + 0.05, ch = prog[k++ % 4]; ch.forEach(function (m, i) { rhodes(m, t2 + i * 0.02, 0.5, 2.2, spk, 0); }); bass(ch[0] - 24, t2, 1.8, 0.5); });
+      };
+      if (kind === "store" || kind === "pharmacy") { hum(60, 0.02); hum(120, 0.012); bed("pink", 3000, 6000, 0.01); radio(2200, 0.5); }
+      else if (kind === "bar") {   // the jukebox: a slow groove
+        var jl = F("lowpass", 3200, 0.7), jg = G(0.7); chain(jl, jg, bus); tap(B.drums, jl); tap(B.bass, jl); var beat = 0;
+        every(60000 / 92 / 2, function () { var t2 = now() + 0.03, b = beat++ % 8; if (b % 4 === 0) kick(t2, 0.5); if (b % 4 === 2) clap(t2, 0.3); hat(t2, 0.12, b % 2 === 1); if (b % 8 === 0) { [55, 59, 62, 65].forEach(function (m, i) { rhodes(m, t2 + i * 0.03, 0.45, 2.4, jl, (i - 1.5) * 0.2); }); bass(43, t2, 1.2, 0.6); } if (b % 8 === 4) bass(46, t2, 1.2, 0.5); });
+        bed("pink", 300, 900, 0.03);
+      } else if (kind === "diner" || kind === "cafe") {
+        var mur = bed("pink", 250, 1100, 0.06), lfo = O("sine", 0.7, t), lg = G(0.03); chain(lfo, lg, mur.gain); lfo.start(t); nodes.push(lfo);
+        every(1700, function () { if (rnd() < 0.6) { var t2 = now(), o = O("sine", 2400 + rnd() * 1800, t2), g = G(0); perc(g, t2, 0.001, 0.04, 0.25); chain(o, g, bus); o.start(t2); o.stop(t2 + 0.3); } });
+        radio(1600, 0.35);
+      } else if (kind === "laundry") { hum(50, 0.03); var dr = bed("brown", 60, 260, 0.12), dl = O("sine", 0.9, t), dg = G(0.05); chain(dl, dg, dr.gain); dl.start(t); nodes.push(dl); }
+      else if (kind === "hotel" || kind === "office") { hum(60, 0.01); radio(4000, 0.45); bed("pink", 400, 2000, 0.01); }
+      else if (kind === "theatre") { var fm = bed("brown", 80, 500, 0.12), fl = O("sine", 0.15, t), fg = G(0.08); chain(fl, fg, fm.gain); fl.start(t); nodes.push(fl); bed("pink", 200, 700, 0.03); }
+      else if (kind === "warehouse" || kind === "garage") { hum(48, 0.03); bed("brown", 40, 180, 0.08); bed("pink", 1500, 4000, 0.008); }
+      else { hum(60, 0.008); bed("pink", 200, 800, 0.01); if (kind === "apartment" || kind === "house" || kind === "motel") radio(1200, 0.3); }
+      return { stop: function () { var t2 = now(); bus.gain.cancelScheduledValues(t2); bus.gain.setTargetAtTime(0, t2, 0.08); timers.forEach(clearInterval); setTimeout(function () { taps.forEach(function (q) { try { q[0].disconnect(q[1]); } catch (e) { /* */ } }); }, 600); nodes.forEach(function (n) { try { n.stop(t2 + 0.5); } catch (e) { /* */ } }); } };
+    },
     // melee: the air a fist or a bat moves
     swing: function (kind, dist) {
       if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 8); if (v < 0.06) return;
