@@ -14,6 +14,7 @@ import { Arsenal } from "./weapons.js?v=dev";
 import { Vehicles } from "./vehicles.js?v=dev";
 import { Traffic } from "./traffic.js?v=dev";
 import { Life } from "./life.js?v=dev";
+import { Gore } from "./gore.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
@@ -66,7 +67,8 @@ export async function start(o) {
   await step(0.82);
   // Stage 2: the people of Marlowe Keys
   let peds = null;
-  try { peds = await spawnPeds(scene, world, { count: o.peds || 18, near: player.pos, onSpeak: (t) => hud.subtitle(t), progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
+  const gore = new Gore(scene, world);
+  try { peds = await spawnPeds(scene, world, { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos, onSpeak: (t) => hud.subtitle(t), progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
   // Stage 3: weapons
@@ -76,7 +78,7 @@ export async function start(o) {
   const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
   // your health; cars and blasts take it
   const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
-  traffic.life = life; vehicles.life = life;
+  traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
   // gunfire: drivers panic, and cars take rounds (enough of them and they go up)
   arsenal.onShot = (pos, hit) => {
@@ -162,7 +164,7 @@ export async function start(o) {
     const dw = dt * arsenal.timeScale * life.timeScale;
     let inCar = false;
     traffic.update(dw, player, vehicles, peds);
-    life.update(dw);
+    life.update(dt, input, dw); gore.update(dw);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
     if (input.locked && !down) { const used = vehicles.update(dw, input); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
     else if (down) { vehicles.update(dw, { hit: () => false, down: () => false, keys: new Set() }); arsenal.tickFx(dw); player.aimYaw = null; rig.aim = 0; }

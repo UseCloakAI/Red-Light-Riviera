@@ -2,13 +2,13 @@
    blasts that catch you take health; hard enough hits throw you as a ragdoll
    even if you live. At zero: the body goes limp (the same ragdoll the street
    gets), the world slows, the picture drains to grey, and a line drops in, in
-   the spirit of the classic, but ours: DEAD, REALLY?, and worse. A few seconds
-   later you wake up outside Marlowe General with a bill. */
+   the spirit of the classic, but ours: DEAD, REALLY?, and worse. Three seconds
+   later (or sooner: Enter or Space) you wake outside Marlowe General with a bill. */
 import * as THREE from "three";
 import { findBones, Ragdoll } from "./rig.js?v=dev";
 import { lanePoint } from "./world.js?v=dev";
 
-const LINES = ["DEAD", "REALLY?", "WELL. THAT HAPPENED.", "TIDE'S OUT", "NOT LIKE THIS", "OOF", "SKILL ISSUE", "BETWEEN LICENSES. AND LIVES.", "HIGH WATER", "THAT'LL LEAVE A MARK", "SUNK", "WRITTEN OFF", "THE KNUCKLE CLAIMS ANOTHER"];
+const LINES = ["DEAD", "REALLY?", "WELL. THAT HAPPENED.", "TOTALED", "NOT LIKE THIS", "OOF", "SKILL ISSUE", "BETWEEN LICENSES. AND LIVES.", "BRUH", "THAT'LL LEAVE A MARK", "SUNK", "WRITTEN OFF", "FLATLINED", "CALL YOUR MOM"];
 const HOSPITAL = { x: -96, z: 14, yaw: Math.PI };   // Marlowe General, on Salt Street
 const BILL = 150;
 
@@ -22,6 +22,8 @@ export class Life {
   damage(amount, hit = {}) {
     if (this.dead || amount <= 0 || this.iframes > 0) return;
     this.health = Math.max(0, this.health - amount); this.sync();
+    if (this.gore && !(this.vehicles && this.vehicles.driving)) this.gore.hit(hit.point || this.player.pos.clone().setY(this.player.pos.y + 1.1), hit.dir || new THREE.Vector3(0, 0, 1), Math.min(2.5, 0.6 + amount / 30));
+    if (this.sfx.grunt && this.health > 0) this.sfx.grunt({ female: true, pitch: 1 }, 0);
     if (this.rig) this.rig.shake = Math.max(this.rig.shake || 0, Math.min(1, amount / 40));
     if (this.vehicles && this.vehicles.driving && this.health <= 0) this.vehicles.exit(true);
     if (this.health <= 0) return this.die(hit);
@@ -40,17 +42,20 @@ export class Life {
   die(hit) {
     this.dead = true; this.t = 0;
     if (!this.rag) this.ragdoll(hit);
+    if (this.gore) this.gore.pool(() => (this.rag ? this.rag.p[0] : null));
+    if (this.sfx.rattle) setTimeout(() => this.sfx.rattle({ female: true, pitch: 1 }, 0), 500);
     this.line = LINES[(Math.random() * LINES.length) | 0];
     if (this.el) { this.el.querySelector("b").textContent = this.line; this.el.classList.add("on"); }
     if (this.sfx.wasted) this.sfx.wasted();
   }
   // true while the body is on the floor (the game shouldn't drive the player then)
   get down() { return this.dead || this.knock > 0; }
-  update(dt) {
+  // dt: real time (timers); sim: the world's (slowed) time, for the body
+  update(dt, input, sim = dt) {
     this.iframes = Math.max(0, this.iframes - dt);
     const P = this.player;
     if (this.rag) {
-      if (this.rag.step(dt)) this.rag.pose();
+      if (this.rag.step(sim)) this.rag.pose();
       const h = this.rag.p[0]; P.pos.set(h.x, Math.max(this.world.heightAt(h.x, h.z), h.y - 0.9), h.z);
     }
     if (this.knock > 0 && !this.dead) {
@@ -61,7 +66,7 @@ export class Life {
     this.timeScale += ((this.dead ? 0.3 : 1) - this.timeScale) * Math.min(1, dt * 4);
     this.grey += ((this.dead ? 1 : 0) - this.grey) * Math.min(1, dt * 2.5);
     if (this.blit) this.blit.mat.uniforms.uGrey.value = this.grey;
-    if (this.dead) { this.t += dt; if (this.t > 6.5) this.respawn(); }
+    if (this.dead) { this.t += dt; if (this.t > 3.2 || (this.t > 1.1 && input && (input.hit("Enter") || input.hit("Space")))) this.respawn(); }
     // a little health back over time while nothing's hurting you
     if (!this.dead && this.health < 100 && this.iframes <= 0) { this.regen = (this.regen || 0) + dt; if (this.regen > 6) { this.health = Math.min(100, this.health + dt * 2); this.sync(); } }
     else this.regen = 0;

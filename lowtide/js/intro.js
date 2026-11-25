@@ -276,7 +276,7 @@
   var GAME = null, base = "title";
   var TIPS = [
     "Hold Shift to sprint. Let go before the corner, not after.",
-    "The tide comes in twice a day. So does the patrol on the causeway.",
+    "The causeway patrol changes at midnight. So do the rules.",
     "Port Salt runs on containers and nobody asks what's in them.",
     "Tideline Avenue looks best from the pier. Most things do.",
     "Press Esc for the map. Marlowe Keys is smaller than it acts."
@@ -284,12 +284,12 @@
   /* ---- the loading screen: the cast, pre-rendered in two layers (tools/loading) ---- */
   var LD = [
     { id: "hollis", name: "Hollis Vane", role: "Former Marlowe bar pilot", line: "I'm not a criminal. I'm between licenses." },
-    { id: "dez", name: "Dez Ruelas", role: "Ruelas Bait & Ice, Tideline Pier", line: "You're late. Tide's already turning." },
+    { id: "dez", name: "Dez Ruelas", role: "Ruelas Bait & Ice, Tideline Pier", line: "Take this. It's for showing people." },
     { id: "ashby", name: "Calvin and June Ashby", role: "Ashby Tidewater", line: "Port Salt gave this city its name. We're going to give it a future." },
     { id: "odette", name: "Det. Odette Pruitt", role: "Marine Recovery, Marlowe Keys Public Safety", line: "Bring me something that floats." },
     { id: "docks", name: "Bernie Szabo and Wade Purcell", role: "Longshore Hall · Purcell Salvage & Tow", line: "I lift what comes. I don't read labels." },
     { id: "seagrape", name: "Rafi Castellan and Lionel Pike", role: "Ashby Tidewater · The Seagrape Motor Inn", line: "I'll be honest with you, which I don't usually do." },
-    { id: "showdown", name: "Hollis Vane", role: "Port Salt", line: "High water's 12:18. After that, nobody's leaving." }
+    { id: "showdown", name: "Hollis Vane", role: "Port Salt", line: "I say yes. It's a problem." }
   ];
   var ldImg = {}, SHOW = { t: 0, i: -1, order: [] };
   function preloadSlides() {

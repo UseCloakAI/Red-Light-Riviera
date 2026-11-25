@@ -49,6 +49,10 @@ function laneWalk(le, s0) {
 export async function spawnPeds(scene, world, o = {}) {
   const D = await loadHumanData(), count = o.count || 18, R = Math.random;
   const lanes = world.lanes.filter((l) => l.L > 4);
+  // blood and voices (gore.js, the audio engine); the listener is the player
+  const gore = o.gore || null, sfx = o.sfx || {}; let ear = { x: 0, z: 0 }, lastScream = 0;
+  const distTo = (pd) => { const g = pd.h.group.position; return Math.hypot(g.x - ear.x, g.z - ear.z); };
+  const scream = (pd, force) => { const now = performance.now(); if (!force && now - lastScream < 900) return; lastScream = now; if (sfx.scream) sfx.scream(pd.voice, distTo(pd)); };
   const peds = [], tmp = { x: 0, z: 0, dx: 0, dz: 0 };
   let limit = count, quiet = 6;            // seconds until anyone may speak again
   const say = (text) => { quiet = 9 + R() * 8; if (o.onSpeak) o.onSpeak(text); };
@@ -122,6 +126,7 @@ export async function spawnPeds(scene, world, o = {}) {
     if (!pd.B) { pd.h.group.visible = false; return; }
     pd.h.group.updateMatrixWorld(true);
     pd.rag = new Ragdoll(pd.B, world, new THREE.Vector3(pd.vx, 0, pd.vz), hit);
+    if (gore) gore.pool(() => (pd.rag ? pd.rag.p[0] : null));
   }
   // done talking: walk on from where they stood, easing back onto the lane
   function breakUp(pd) {
@@ -140,7 +145,7 @@ export async function spawnPeds(scene, world, o = {}) {
     const mixer = new THREE.AnimationMixer(h.group), act = {};
     for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
-    const pd = { h, mixer, act, head, neck, w: null, s: 0, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
+    const pd = { voice: { female: p.sex < 0.5, pitch: 0.85 + R() * 0.35 }, h, mixer, act, head, neck, w: null, s: 0, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
       side: 0, look: 0, stagger: 0, st: null, gW: 0, gT: 0, gest: null };
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
@@ -184,7 +189,7 @@ export async function spawnPeds(scene, world, o = {}) {
     // in conversation: whoever's talking nods or shakes their head; the other mostly listens
     pd.gT -= dt;
     if (pd.gT <= 0) {
-      const talking = st.mate && (st.lead ? (st.turn = R() < 0.5) : !st.mate.st.turn);
+      const talking = st.mate && (st.lead ? (st.turn = R() < 0.5) : !(st.mate.st && st.mate.st.turn));
       const r = R();
       pd.gest = st.mate ? (talking ? (r < 0.65 ? "agree" : r < 0.9 ? "headShake" : null) : (r < 0.25 ? "agree" : null)) : (r < 0.1 ? "headShake" : null);
       pd.gT = 2 + R() * 3.5;
@@ -206,7 +211,7 @@ export async function spawnPeds(scene, world, o = {}) {
     set limit(n) { limit = Math.max(0, Math.min(count, n)); },
     get limit() { return limit; },
     update(dt, player) {
-      const px = player.pos.x, pz = player.pos.z, pv = player.speed || 0;
+      const px = player.pos.x, pz = player.pos.z, pv = player.speed || 0; ear = player.pos;
       quiet -= dt;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
@@ -283,9 +288,18 @@ export async function spawnPeds(scene, world, o = {}) {
     },
     // a round hit someone. hit: { point, dir, damage, head, from }. Returns "dead", "hurt" or "body"
     damage(pd, hit) {
+      if (gore && hit.point) gore.hit(hit.point, hit.dir || new THREE.Vector3(0, 0, 1), hit.head ? 2.8 : (hit.force || 0) > 6 ? 1.9 : 1.1, this.fx);
       if (pd.dead) { if (pd.rag) { pd.rag.impulse(hit.point, hit.dir, 2.5); pd.rag.sleep = 0; } return "body"; }
       pd.hp -= hit.head ? 1000 : hit.damage;
-      if (pd.hp <= 0) { die(pd, { point: hit.point, dir: hit.dir, force: hit.force || (hit.head ? 3 : 4.5) }); return "dead"; }
+      if (pd.hp <= 0) {
+        die(pd, { point: hit.point, dir: hit.dir, force: hit.force || (hit.head ? 3 : 4.5) });
+        // a scream cut short, then the rattle (a headshot is quiet)
+        if (!hit.head && Math.random() < 0.65) scream(pd, true);
+        if (sfx.rattle) setTimeout(() => sfx.rattle(pd.voice, distTo(pd)), hit.head ? 300 : 700 + Math.random() * 500);
+        return "dead";
+      }
+      if (sfx.grunt) sfx.grunt(pd.voice, distTo(pd));
+      if (Math.random() < 0.55) setTimeout(() => scream(pd, true), 180);
       if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
       pd.stagger = 0.7; pd.cower = 0; pd.pause = 0.4;
       pd.fear = { x: hit.from.x, z: hit.from.z, t: 20 }; pd.speed *= 0.8;   // hurt: they still run, a little slower
@@ -306,6 +320,8 @@ export async function spawnPeds(scene, world, o = {}) {
         if (d < nd) { nd = d; nearest = pd; }
       }
       if (shout && nearest && nd < 25) { quiet = 0; say(PANIC[(R() * PANIC.length) | 0]); quiet = 3 + R() * 3; }
+      // someone near it screams
+      if (nearest && nd < 30 && R() < 0.8) scream(nearest);
       return nearest;
     },
     // keep the player from walking through people; a sprinting player knocks them off their stride
