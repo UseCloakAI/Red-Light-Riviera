@@ -55,7 +55,7 @@ export async function spawnPeds(scene, world, o = {}) {
   const scream = (pd, force) => { const now = performance.now(); if (!force && now - lastScream < 900) return; lastScream = now; if (sfx.scream) sfx.scream(pd.voice, distTo(pd)); };
   const peds = [], tmp = { x: 0, z: 0, dx: 0, dz: 0 };
   let limit = count, quiet = 6;            // seconds until anyone may speak again
-  const say = (text, pd) => { quiet = 9 + R() * 8; if (o.onSpeak) o.onSpeak(text, pd); };
+  const say = (text, pd, mood) => { quiet = 9 + R() * 8; if (o.onSpeak) o.onSpeak(text, pd, mood); };
   const lineFor = (district) => { const a = AMBIENT.filter((l) => l.d === district || l.d === "any"); return a[(R() * a.length) | 0].t; };
 
   // somewhere on a pavement, at a fair distance from `near` (close is fine for the first crowd)
@@ -145,7 +145,7 @@ export async function spawnPeds(scene, world, o = {}) {
     const mixer = new THREE.AnimationMixer(h.group), act = {};
     for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
     const head = h.bones.find((b) => b.name === "head"), neck = h.bones.find((b) => b.name === "neck01");
-    const pd = { voice: { female: p.sex < 0.5, pitch: 0.85 + R() * 0.35 }, h, mixer, act, head, neck, w: null, s: 0, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
+    const pd = { voice: { female: p.sex < 0.5, pitch: 0.92 + R() * 0.16, age: p.age }, h, mixer, act, head, neck, w: null, s: 0, speed: 1.15 + R() * 0.45, run: 4.3 + R() * 1.4, pause: 0, wW: 1, rW: 0, cW: 0, first: true, fear: null, cower: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0,
       side: 0, look: 0, stagger: 0, st: null, gW: 0, gT: 0, gest: null };
     place(pd, near); pd.first = false;
     act.run.setEffectiveWeight(0); act.idle.setEffectiveWeight(0); act.walk.setEffectiveWeight(1);
@@ -319,7 +319,7 @@ export async function spawnPeds(scene, world, o = {}) {
         if (pd.w) { pointOn(pd.w, pd.s + 2, tmp); const a = Math.hypot(tmp.x - x, tmp.z - z); pointOn(pd.w, Math.max(0, pd.s - 2), tmp); if (a < Math.hypot(tmp.x - x, tmp.z - z)) reverse(pd); }
         if (d < nd) { nd = d; nearest = pd; }
       }
-      if (shout && nearest && nd < 25) { quiet = 0; say(PANIC[(R() * PANIC.length) | 0], nearest); quiet = 3 + R() * 3; }
+      if (shout && nearest && nd < 25) { quiet = 0; say(PANIC[(R() * PANIC.length) | 0], nearest, "scared"); quiet = 3 + R() * 3; }
       // someone near it screams
       if (nearest && nd < 30 && R() < 0.8) scream(nearest);
       return nearest;
@@ -331,7 +331,7 @@ export async function spawnPeds(scene, world, o = {}) {
         const g = pd.h.group.position, dx = p.x - g.x, dz = p.z - g.z, dd = Math.hypot(dx, dz), m = r + 0.3;
         if (dd < m && dd > 1e-4) {
           p.x = g.x + dx / dd * m; p.z = g.z + dz / dd * m;
-          if ((speed || 0) > 5 && pd.stagger <= 0) { pd.stagger = 1.2; pd.side += (dx > 0 ? -0.4 : 0.4); say(BUMP[(R() * BUMP.length) | 0], pd); if (o.onBump) o.onBump(pd); }
+          if ((speed || 0) > 5 && pd.stagger <= 0) { pd.stagger = 1.2; pd.side += (dx > 0 ? -0.4 : 0.4); say(BUMP[(R() * BUMP.length) | 0], pd, "angry"); if (o.onBump) o.onBump(pd); }
         }
       }
     }

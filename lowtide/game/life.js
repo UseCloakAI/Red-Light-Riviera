@@ -48,7 +48,6 @@ export class Life {
     if (this.sfx.rattle) setTimeout(() => this.sfx.rattle({ female: true, pitch: 1 }, 0), 500);
     this.line = LINES[(Math.random() * LINES.length) | 0];
     if (this.el) { const b = this.el.querySelector("b"); if (/[a-z]/i.test(this.line)) b.textContent = this.line; else b.innerHTML = emoji(this.line); this.el.classList.add("on"); }
-    if (this.voice && /[a-z]/i.test(this.line)) setTimeout(() => this.voice.narrate(this.line.toLowerCase()), 650);   // the narrator, deadpan (not for the emoji ones)
     if (this.sfx.wasted) this.sfx.wasted();
   }
   // true while the body is on the floor (the game shouldn't drive the player then)
@@ -83,6 +82,6 @@ export class Life {
     if (P.model) P.model.visible = true;
     if (this.rig) { this.rig.yaw = H.yaw + Math.PI; this.rig.cur = null; }
     if (this.el) this.el.classList.remove("on");
-    if (this.hud) { this.hud.cash = Math.max(0, this.hud.cash - BILL); this.hud.cashEl.textContent = "$" + this.hud.cash.toLocaleString("en-US"); this.hud.subtitle(`Marlowe General. The bill was $${BILL}. They kept your watch.`); if (this.voice) this.voice.narrate(`Marlowe General. The bill was ${BILL} dollars. They kept your watch.`); }
+    if (this.hud) { this.hud.cash = Math.max(0, this.hud.cash - BILL); this.hud.cashEl.textContent = "$" + this.hud.cash.toLocaleString("en-US"); this.hud.subtitle(`Marlowe General. The bill was $${BILL}. They kept your watch.`); }
   }
 }

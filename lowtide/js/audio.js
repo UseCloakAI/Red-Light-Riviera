@@ -112,8 +112,16 @@
     B.sfx = G(1); B.sfx.connect(out);
     B.seq = G(1); B.seq.connect(B.sfx);          // intro cues live here so a skip can cut them
     B.ui = G(0.75); B.ui.connect(out); send(B.ui, plate, 0.16);
-    B.amb = G(0); B.amb.connect(out);
+    B.amb = G(0);
     B.song = G(0); B.song.connect(out);           // the loading-screen song
+    // voices: their own bus (rumble cut, presence lift, a firm compressor) so people read over the street;
+    // while anyone speaks or screams, the beds under them (sea, wind, engines, hiss) duck out of the way
+    B.under = G(1); B.under.connect(out); B.amb.connect(B.under);
+    B.loop = G(1); B.loop.connect(B.under);       // engines, hydrant hiss
+    B.vox = G(1.15);
+    var vh = F("highpass", 120, 0.7), vp = F("peaking", 2600, 0.9), vc = ctx.createDynamicsCompressor(); vp.gain.value = 5;
+    vc.threshold.value = -22; vc.knee.value = 8; vc.ratio.value = 3.5; vc.attack.value = 0.004; vc.release.value = 0.18;
+    chain(B.vox, vh, vp, vc, out);
 
     // music: everything feeds a tone filter so the pause menu can muffle it
     B.mus = G(0); B.tone = F("lowpass", 18000, 0.6); chain(B.mus, B.tone, out);
@@ -303,6 +311,13 @@
     while (W.on && W.next < until) wave();
   }
 
+  // pull the beds down while a voice is heard, back up after
+  var duckEnd = 0;
+  function duck(dur, depth) {
+    if (!ctx || !B.under) return; var t = now(), g = B.under.gain, end = Math.max(duckEnd, t + dur); duckEnd = end;
+    g.cancelScheduledValues(t); g.setTargetAtTime(depth || 0.42, t, 0.04); g.setTargetAtTime(1, end, 0.35);
+  }
+
   /* ---------------- sound design ---------------- */
   function dst() { return B.seq; }
   var sfx = {
@@ -462,7 +477,7 @@
        v: { pitch (Hz), female } ; dist in metres */
     voice: function (o) {
       if (!ctx) return; var t = now(), d = o.dist || 0, att = 1 / (1 + d / 12); if (att < 0.04) return;
-      var dur = o.dur, f0 = o.f0, bus = G(o.gain * att), lp = F("lowpass", 9000 / (1 + d / 30), 0.5), pan = P(o.pan || 0); chain(bus, lp, pan, B.sfx); send(pan, street(), 0.15 + Math.min(0.4, d / 50));
+      var dur = o.dur, f0 = o.f0, bus = G(o.gain * att), lp = F("lowpass", 9000 / (1 + d / 30), 0.5), pan = P(o.pan || 0); chain(bus, lp, pan, B.vox); duck(dur + 0.2, 0.6); send(pan, street(), 0.15 + Math.min(0.4, d / 50));
       var src = G(1), a = O("sawtooth", f0, t), b = O("sawtooth", f0 * 1.012, t), vib = O("sine", 5.5 + rnd() * 2.5, t), vg = G(f0 * o.vib), rough = O("square", 30 + rnd() * 35, t), rg = G(o.rough), am = G(1);
       chain(vib, vg); vg.connect(a.frequency); vg.connect(b.frequency); chain(rough, rg, am.gain);
       a.connect(src); b.connect(src); chain(src, am);
@@ -474,12 +489,44 @@
       var env = [bus.gain]; env.forEach(function (gp) { var peak = gp.value; gp.setValueAtTime(0, t); gp.linearRampToValueAtTime(peak, t + o.attack); gp.setValueAtTime(peak, t + dur * 0.7); gp.exponentialRampToValueAtTime(0.0008, t + dur); });
       [a, b, vib, rough].forEach(function (x) { x.start(t); x.stop(t + dur + 0.05); });
     },
-    // a blood-curdling scream: high, rising, cracking, held, then falling away
+    /* a scream. What makes one alarming is roughness: the voice beating 30-150 times a second
+       (fast amplitude flutter, a chaotic subharmonic), on top of a pitch pushed far above
+       speech, a wide-open "aah" or a tight "eee", a crack where the voice breaks, and a lot
+       of breath. Sometimes a ragged gasp and a second, worse one. who: { female, pitch, age } */
     scream: function (who, dist, pan) {
-      var f = who && who.female, base = (f ? 560 : 330) * (who && who.pitch || 1) * (0.9 + rnd() * 0.25), dur = 0.9 + rnd() * 0.9;
-      sfx.voice({ f0: base, female: f, dur: dur, dist: dist, pan: pan, gain: 0.32, attack: 0.04, vib: 0.035, rough: 0.35, breath: 0.08,
-        formants: rnd() < 0.5 ? [850, 1250, 2900] : [620, 1700, 2700],
-        contour: [[0.1, 1.25], [0.35, 1.45 + rnd() * 0.2], [0.5, 1.3], [0.75, 1.38], [1, 0.75]] });
+      if (!ctx) return; who = who || {}; var t = now() + 0.01, d = dist || 0, att = 1 / (1 + d / 14); if (att < 0.04) return;
+      var f = !!who.female, k = who.pitch || 1, old = (who.age || 35) > 58;
+      var f0 = (f ? 940 : 520) * k * (0.88 + rnd() * 0.24) * (old ? 0.82 : 1) * (who.again ? 1.08 : 1), dur = who.again ? 0.7 + rnd() * 0.5 : 1.0 + rnd() * 0.9;
+      var bus = G(0.0001), lp = F("lowpass", 11000 / (1 + d / 30), 0.5), pn = P(pan || 0); chain(bus, lp, pn, B.vox); send(pn, street(), 0.2 + Math.min(0.45, d / 50));
+      duck(dur + 0.5, 0.35);
+      var a = O("sawtooth", f0, t), b = O("sawtooth", f0 * 1.006, t), sub = O("square", f0 / 2, t), src = G(0.6), subG = G(0.15);
+      a.connect(src); b.connect(src); chain(sub, subG, src);
+      var oscs = [[a, 1], [b, 1.006], [sub, 0.5]], end = t + dur + 0.45;
+      var fq = function (at, r, glide) { oscs.forEach(function (o) { var pr = o[0].frequency; if (glide) pr.linearRampToValueAtTime(f0 * r * o[1], at); else pr.setValueAtTime(f0 * r * o[1], at); }); };
+      fq(t, 0.6); fq(t + 0.07, 1.1, 1); fq(t + 0.17, 1, 1);                                   // the onset scoops up and overshoots
+      if (rnd() < 0.6) { var brk = t + dur * (0.35 + rnd() * 0.3); fq(brk - 0.02, 1.03, 1); fq(brk, 0.74); fq(brk + 0.11, 0.99, 1); }   // the voice cracks
+      fq(t + dur * 0.82, 0.96, 1); fq(t + dur + 0.2, 0.5, 1);                                  // and gives out
+      var jn = noise("white", t, dur + 0.5), jl = F("lowpass", 24, 0.7), jg = G(f0 * 0.06); chain(jn, jl, jg);   // jitter: nothing about it is steady
+      var vib = O("sine", 5 + rnd() * 3, t), vg = G(f0 * 0.022); chain(vib, vg);
+      oscs.forEach(function (o) { jg.connect(o[0].frequency); vg.connect(o[0].frequency); });
+      var sn = noise("pink", t, dur + 0.5), sl = F("lowpass", 7), sg = G(0.45); chain(sn, sl, sg, subG.gain);   // the subharmonic comes and goes: chaos
+      var am = G(1), rough = O("sine", 65 + rnd() * 55, t), rg = G(0.5); chain(rough, rg, am.gain); chain(src, am);   // roughness
+      var pre = G(3.2), dr = ctx.createWaveShaper(); dr.curve = SAT2; chain(am, pre, dr);     // a throat pushed past clean
+      var Fm = rnd() < 0.6 ? [f ? 1150 : 880, f ? 1700 : 1380, f ? 3200 : 2850] : [f ? 760 : 620, f ? 2350 : 2050, f ? 3400 : 3050];
+      var tract = F("lowpass", 6000, 0.5); tract.connect(bus);
+      Fm.forEach(function (fr, i) { var bp = F("bandpass", fr, [3.5, 5, 6][i]), g = G([1.5, 1.1, 0.7][i]); chain(dr, bp, g, tract); });
+      var br = noise("white", t, dur + 0.5), bh = F("bandpass", Fm[1], 0.9), bg = G(0); chain(br, bh, bg, bus);   // breath, more of it as it runs out
+      bg.gain.setValueAtTime(0.06, t); bg.gain.linearRampToValueAtTime(0.16, t + dur); bg.gain.linearRampToValueAtTime(0, t + dur + 0.35);
+      var pk = 1.1 * att, g = bus.gain;
+      g.setValueAtTime(0.0001, t); g.exponentialRampToValueAtTime(pk, t + 0.035); g.linearRampToValueAtTime(pk * 0.8, t + 0.3);
+      g.linearRampToValueAtTime(pk * (0.9 + rnd() * 0.25), t + dur * 0.6); g.linearRampToValueAtTime(pk * 0.7, t + dur * 0.92); g.exponentialRampToValueAtTime(0.0001, t + dur + 0.3);
+      [a, b, sub, vib, rough].forEach(function (x) { x.start(t); x.stop(end); });
+      if (!who.again && rnd() < 0.4) {   // a ragged gasp, then another
+        var gt = t + dur + 0.2, gn = noise("white", gt, 0.32), gb = F("bandpass", 900, 1.5), gg = G(0);
+        gb.frequency.exponentialRampToValueAtTime(2600, gt + 0.28); gg.gain.setValueAtTime(0, gt); gg.gain.linearRampToValueAtTime(0.18 * att, gt + 0.08); gg.gain.linearRampToValueAtTime(0, gt + 0.3); chain(gn, gb, gg, pn);
+        var again = Object.assign({}, who, { again: true });
+        setTimeout(function () { sfx.scream(again, d, pan); }, (dur + 0.5) * 1000);
+      }
     },
     // a hit: a short grunt of pain
     grunt: function (who, dist, pan) {
@@ -490,7 +537,7 @@
     // the last of it: a wet, choking rattle under a groan that sinks away
     rattle: function (who, dist) {
       if (!ctx) return; var t = now() + 0.15, d = dist || 0, att = 1 / (1 + d / 10); if (att < 0.05) return;
-      var bus = G(0.5 * att); bus.connect(B.sfx);
+      var bus = G(0.6 * att); bus.connect(B.vox); duck(2.2, 0.6);
       var n = noise("brown", t, 2.2), bp = F("bandpass", 420, 5), gg = G(0), lfo = O("square", 9 + rnd() * 6, t), lg = G(0.5);
       chain(n, bp, gg, bus); chain(lfo, lg, gg.gain); gg.gain.setValueAtTime(0.5, t); gg.gain.linearRampToValueAtTime(0.0, t + 2.1); lfo.start(t); lfo.stop(t + 2.2);
       bp.frequency.linearRampToValueAtTime(260, t + 2);
@@ -498,11 +545,18 @@
       o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 1.8); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.22, t + 0.2); og.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
       chain(o, ol, og, bus); o.start(t); o.stop(t + 2);
     },
-    // raw samples (the SAM voice renders to these): through the sfx bus, quieter and duller with distance
+    /* raw samples (the SAM voice renders to these). SAM's output sits off zero and jumps
+       between silences, which clicked like a far-off gunshot through the street reverb: take
+       the offset out with a DC blocker and fade the ends. Then the voice bus, duller and
+       quieter with distance, with the street under it ducked. */
     pcm: function (data, rate, gain, dist, pan) {
       if (!ctx || !data || !data.length) return; var t = now() + 0.02, d = dist || 0, att = 1 / (1 + d / 14); if (att < 0.05) return;
-      var buf = ctx.createBuffer(1, data.length, rate), src = ctx.createBufferSource(); buf.copyToChannel(data, 0); src.buffer = buf;
-      var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0); chain(src, g, lp, p, B.sfx); send(p, street(), 0.12 + Math.min(0.35, d / 60));
+      var n = data.length, x = new Float32Array(n), px = data[0], py = 0, fade = Math.min(n >> 2, Math.round(rate * 0.012));
+      for (var i = 0; i < n; i++) { py = data[i] - px + 0.995 * py; px = data[i]; x[i] = py; }
+      for (var j = 0; j < fade; j++) { var w = j / fade; x[j] *= w; x[n - 1 - j] *= w; }
+      var buf = ctx.createBuffer(1, n, rate), src = ctx.createBufferSource(); buf.copyToChannel(x, 0); src.buffer = buf;
+      var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0); chain(src, g, lp, p, B.vox); send(p, street(), 0.08 + Math.min(0.3, d / 60));
+      duck(n / rate + 0.1, 0.55);
       src.start(t);
     },
     // dying: a low thud and a long falling tone
@@ -525,7 +579,7 @@
     },
     // a burst hydrant: a steady hiss, set by strength and distance
     hiss: function () {
-      if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 2600, 0.6), g = G(0); chain(n, bp, g, B.sfx);
+      if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 2600, 0.6), g = G(0); chain(n, bp, g, B.loop);
       return { set: function (s, d) { g.gain.setTargetAtTime(0.06 * s / (1 + d / 10), now(), 0.1); }, stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.3); n.stop(t2 + 1.5); } };
     },
     // a car door: the latch and the thud
@@ -543,7 +597,7 @@
     // the engine: a low saw and a square an octave down through a filter that opens with the revs
     engine: function () {
       if (!ctx) return null; var t = now(), a = O("sawtooth", 40, t), b = O("square", 20, t), lp = F("lowpass", 300, 2), g = G(0), sub = G(0.5);
-      chain(a, lp); chain(b, sub, lp); chain(lp, g, B.sfx); a.start(t); b.start(t); g.gain.linearRampToValueAtTime(0.06, t + 0.3);
+      chain(a, lp); chain(b, sub, lp); chain(lp, g, B.loop); a.start(t); b.start(t); g.gain.linearRampToValueAtTime(0.06, t + 0.3);
       var rev = 0;
       return {
         set: function (speed, thr) {

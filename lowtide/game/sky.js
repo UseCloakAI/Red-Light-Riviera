@@ -43,6 +43,24 @@ export function buildSky(scene, renderer) {
   scene.fog = new THREE.FogExp2(PALETTE.haze.clone(), 0.0036);
   scene.background = PALETTE.hor.clone();
 
+  // the renderer keeps a logarithmic depth buffer; the hand-written shaders write it too
+  const LOGV = `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+varying float vFragDepth;
+#endif
+`, LOGF = `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+uniform float logDepthBufFC;varying float vFragDepth;
+#endif
+`, LOGW = `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+vFragDepth=1.+gl_Position.w;
+#endif
+`, LOGD = `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+gl_FragDepth=log2(vFragDepth)*logDepthBufFC*.5;
+#endif
+`;
   const uniforms = {
     uTop: { value: PALETTE.top }, uHigh: { value: PALETTE.high }, uMid: { value: PALETTE.mid }, uLow: { value: PALETTE.low },
     uHor: { value: PALETTE.haze }, uSun: { value: PALETTE.sun }, uSunDir: { value: SUN_DIR }, uTime: { value: 0 }
@@ -82,16 +100,16 @@ export function buildSky(scene, renderer) {
   seaG.computeBoundingSphere();
   const water = new THREE.Mesh(seaG, new THREE.ShaderMaterial({
     uniforms: wu, fog: false, transparent: true,
-    vertexShader: BEACH_GLSL + PS1 + SWELL + `uniform float uTime;varying vec3 vW;
+    vertexShader: LOGV + BEACH_GLSL + PS1 + SWELL + `uniform float uTime;varying vec3 vW;
     void main(){
       vec4 w=modelMatrix*vec4(position,1.);
       float depth=w.z>promenade(w.x)?(${SEA.toFixed(2)})-beachY(w.xz):8.;
       float amp=clamp(depth/1.4,.12,1.)*(1.-smoothstep(500.,1600.,distance(w.xz,cameraPosition.xz)));
       w.y=(${SEA.toFixed(2)})+swell(w.xz,uTime)*amp;
       if(land(w.xz))w.y-=4.;      // under the island: out of sight
-      vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,   // flat like the sand: unsnapped, so they never part
-    fragmentShader: SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;varying vec3 vW;
-    void main(){
+      vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;${LOGW}}`,   // flat like the sand: unsnapped, so they never part
+    fragmentShader: LOGF + SKY_FN + BEACH_GLSL + PS1 + `uniform vec3 uDeep,uFogC;uniform float uFogD;varying vec3 vW;
+    void main(){${LOGD}
       if(land(vW.xz))discard;
       vec3 N=normalize(cross(dFdx(vW),dFdy(vW)));if(N.y<0.)N=-N;                  // one normal per facet
       vec3 V=normalize(cameraPosition-vW);float dist=length(cameraPosition-vW);
@@ -121,10 +139,10 @@ export function buildSky(scene, renderer) {
   const swG = new THREE.PlaneGeometry(EDGE.e - EDGE.w + 60, 60, Math.ceil((EDGE.e - EDGE.w + 60) / 3), 80).rotateX(-Math.PI / 2);
   swG.translate((EDGE.w + EDGE.e) / 2, 0, 258);
   const swash = new THREE.Mesh(swG, new THREE.ShaderMaterial({
-    uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
-    vertexShader: BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);}`,
-    fragmentShader: BEACH_GLSL + PS1 + `uniform float uTime;uniform vec3 uFogC,uLow;uniform float uFogD;varying vec3 vW;
-    void main(){
+    uniforms: Object.assign({}, wu), fog: false, transparent: true, depthWrite: false, 
+    vertexShader: LOGV + BEACH_GLSL + PS1 + `varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);w.y=beachY(w.xz)+.03;vW=w.xyz;gl_Position=snap(projectionMatrix*viewMatrix*w);${LOGW}}`,
+    fragmentShader: LOGF + BEACH_GLSL + PS1 + `uniform float uTime;uniform vec3 uFogC,uLow;uniform float uFogD;varying vec3 vW;
+    void main(){${LOGD}
       if(vW.z<promenade(vW.x)+4.)discard;
       vec2 q=floor(vW.xz*4.)/4.+.125;float h=beachY(q);
       float ph=uTime/7.+.35*sin(q.x*.013+.5)+.2*sin(q.x*.041+2.);float set=floor(ph),p=fract(ph);

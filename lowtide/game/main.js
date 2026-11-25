@@ -42,7 +42,7 @@ export async function start(o) {
   await step(0.04);
 
   configure(innerWidth / innerHeight);   // before any material exists: the vertex snap goes into every shader
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", logarithmicDepthBuffer: true })   // log depth: the flat layers a few cm apart never fight, near or far;
   const ratio = 1;
   renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = false;
@@ -71,7 +71,7 @@ export async function start(o) {
   const gore = new Gore(scene, world);
   const voice = makeVoice(o.sfx);   // S.A.M. reads the lines
   const heard = (pd) => (pd ? Math.hypot(pd.h.group.position.x - player.pos.x, pd.h.group.position.z - player.pos.z) : 0);
-  try { peds = await spawnPeds(scene, world, { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos, onSpeak: (t, pd) => { hud.subtitle(t); voice.speak(t, pd && pd.voice, heard(pd)); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
+  try { peds = await spawnPeds(scene, world, { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos, onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) }); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
 
   // Stage 3: weapons
@@ -81,7 +81,7 @@ export async function start(o) {
   const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
   // your health; cars and blasts take it
   const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
-  arsenal.say = (t, pd) => voice.speak(t, pd && pd.voice, heard(pd)); life.voice = voice;
+  arsenal.say = (t, pd) => { if (pd) voice.speak(t, pd.voice, heard(pd), "scared"); };
   traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
   // gunfire: drivers panic, and cars take rounds (enough of them and they go up)

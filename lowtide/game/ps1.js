@@ -24,7 +24,10 @@ export function configure(aspect) {
 // the same snap for hand-written shaders
 export const snapGLSL = () => `vec4 snap(vec4 c){if(c.w<=0.)return c;vec2 g=vec2(${PS1.w.toFixed(1)},${PS1.h.toFixed(1)});c.xy=floor(c.xy/c.w*g+.5)/g*c.w;return c;}`;
 // flat ground layers: no snap, and a depth offset so they stack (lower factor = drawn over higher)
-export const flat = (offset = 0) => ({ defines: { PS1_NOSNAP: "" }, ...(offset ? { polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset } : {}) });
+// (built-in materials drop a `defines` passed to their constructor, so the opt-out goes in at compile time;
+// the depth buffer is logarithmic, so layers stack by real height gaps and the offset is only a fallback)
+const noSnap = (sh) => { sh.vertexShader = "#define PS1_NOSNAP\n" + sh.vertexShader; };
+export const flat = (offset = 0) => ({ onBeforeCompile: noSnap, ...(offset ? { polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset } : {}) });
 
 // the upscale: tone map, 15-bit colour with an ordered dither, nearest-neighbour onto the screen
 export function makeBlit() {
