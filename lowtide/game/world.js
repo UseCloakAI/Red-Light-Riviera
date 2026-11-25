@@ -216,7 +216,7 @@ export async function buildWorld(scene, opts = {}) {
       const a0 = [A.x + na[0] * o0, y, A.z + na[1] * o0], a1 = [A.x + na[0] * o1, y, A.z + na[1] * o1], b0 = [Bq.x + nb[0] * o0, y, Bq.z + nb[1] * o0], b1 = [Bq.x + nb[0] * o1, y, Bq.z + nb[1] * o1];
       push(Bf, a0, a1, b1, b0, [0, 1, 0], [[u0, va], [u1, va], [u1, vb], [u0, vb]], col);
       if (kerb) {   // the kerb face on the road side
-        const ko = kerb > 0 ? o0 : o1, k0 = [A.x + na[0] * ko, 0, A.z + na[1] * ko], k1 = [Bq.x + nb[0] * ko, 0, Bq.z + nb[1] * ko];
+        const ko = kerb > 0 ? o0 : o1, k0 = [A.x + na[0] * ko, GROUND_Y, A.z + na[1] * ko], k1 = [Bq.x + nb[0] * ko, GROUND_Y, Bq.z + nb[1] * ko];
         const kn = [na[0] * -kerb, 0, na[1] * -kerb];
         if (kerb > 0) push(Bf, k1, k0, [k0[0], y, k0[2]], [k1[0], y, k1[2]], kn, [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol);
         else push(Bf, k0, k1, [k1[0], y, k1[2]], [k0[0], y, k0[2]], kn, [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol);
@@ -224,6 +224,8 @@ export async function buildWorld(scene, opts = {}) {
     }
   };
   const COL = { avenue: 0, ring: 0, street: 1, port: 2 };
+  // the flat layers sit just under walking height (0), a real gap apart: blood, scorches and shadows laid at 0 and up sit over all of them
+  const GROUND_Y = -0.09, ROAD_Y = -0.06, DISC_Y = -0.045, ZEBRA_Y = -0.03;
   // each junction's asphalt patch reaches as far as its roads overlap (further where they meet at a sharp angle),
   // and the road ribbons stop just inside it, so no two road surfaces ever share the same patch of ground
   const discR = new Map();
@@ -240,7 +242,7 @@ export async function buildWorld(scene, opts = {}) {
   for (const e of roads.edges) {
     const c = COL[e.kind] ?? 1, A = roads.nodes.find((n) => n.id === e.a), Bn = roads.nodes.find((n) => n.id === e.b);
     const r0 = A.deg > 1 ? discR.get(A) - 0.6 : 0, r1 = Bn.deg > 1 ? discR.get(Bn) - 0.6 : 0;
-    if (e.L - r1 > r0 + 0.5) { const tr = trimmed(e, r0, e.L - r1); if (tr.pts.length > 1) strip(RB, tr, -e.w / 2, e.w / 2, 0.04, c / 3 + 0.001, (c + 1) / 3 - 0.001, 8, white); }
+    if (e.L - r1 > r0 + 0.5) { const tr = trimmed(e, r0, e.L - r1); if (tr.pts.length > 1) strip(RB, tr, -e.w / 2, e.w / 2, ROAD_Y, c / 3 + 0.001, (c + 1) / 3 - 0.001, 8, white); }
     if (e.s1 > e.s0 + 0.5) {
       const tr = trimmed(e, e.s0, e.s1);
       if (tr.pts.length > 1) { strip(WB, tr, e.w / 2, e.w / 2 + SIDEWALK, KERB, 0, 1, 3, white, 1); strip(WB, tr, -e.w / 2 - SIDEWALK, -e.w / 2, KERB, 0, 1, 3, white, -1); }
@@ -251,7 +253,7 @@ export async function buildWorld(scene, opts = {}) {
     for (let i = 1; i < inner.length; i++) {
       const a = [inner[i - 1].x, y, inner[i - 1].z], b = [inner[i].x, y, inner[i].z], c = [outer[i].x, y, outer[i].z], d = [outer[i - 1].x, y, outer[i - 1].z];
       push(WB, a, b, c, d, [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]], white); push(WB, a, d, c, b, [0, 1, 0], [[0, 0], [0, 1], [1, 1], [1, 0]], white);
-      push(WB, [a[0], 0, a[2]], [b[0], 0, b[2]], b, a, [0, 0, 0], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol); push(WB, [b[0], 0, b[2]], [a[0], 0, a[2]], a, b, [0, 0, 0], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol);
+      push(WB, [a[0], GROUND_Y, a[2]], [b[0], GROUND_Y, b[2]], b, a, [0, 0, 0], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol); push(WB, [b[0], GROUND_Y, b[2]], [a[0], GROUND_Y, a[2]], a, b, [0, 0, 0], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol);
     }
   };
   for (const c of roads.corners) fan(c.inner, c.outer, KERB);
@@ -261,14 +263,14 @@ export async function buildWorld(scene, opts = {}) {
   add(new THREE.Mesh(geometry(WB), walkMat), false, true);
   // junctions: plain asphalt discs over the ribbon ends
   const discs = [];
-  for (const n of roads.nodes) discs.push(new THREE.CircleGeometry(discR.get(n), 32).rotateX(-Math.PI / 2).translate(n.x, 0.05, n.z));   // the roadway only; kerb corners sit over the rest
+  for (const n of roads.nodes) discs.push(new THREE.CircleGeometry(discR.get(n), 32).rotateX(-Math.PI / 2).translate(n.x, DISC_Y, n.z));   // the roadway only; kerb corners sit over the rest
   const plainRoad = ptex(canvas(16, 16, (g) => { g.fillStyle = "#3d3e47"; g.fillRect(0, 0, 16, 16); for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${R() < .5 ? "0,0,0" : "255,255,255"},${0.12 * R()})`; g.fillRect((R() * 16) | 0, (R() * 16) | 0, 1, 1); } }));
   plainRoad.repeat.set(0.25, 0.25);
   const discGeo = mergeGeometries(discs); { const p = discGeo.attributes.position, uv = discGeo.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, p.getX(k) / 4, p.getZ(k) / 4); }
   add(new THREE.Mesh(discGeo, L({ map: plainRoad, ...flat(-1) })), false, true);
   // zebra crossings
   const zeb = [];
-  for (const z of roads.zebras) for (let k = -z.w / 2 + 0.8; k < z.w / 2 - 0.4; k += 1.2) zeb.push({ x: z.x + Math.cos(z.ang) * k, y: 0.07, z: z.z - Math.sin(z.ang) * k, a: z.ang });
+  for (const z of roads.zebras) for (let k = -z.w / 2 + 0.8; k < z.w / 2 - 0.4; k += 1.2) zeb.push({ x: z.x + Math.cos(z.ang) * k, y: ZEBRA_Y, z: z.z - Math.sin(z.ang) * k, a: z.ang });
   instanced(scene, new THREE.PlaneGeometry(0.6, 2.6).rotateX(-Math.PI / 2), L({ color: 0xd8d2c4, ...flat(-2) }), zeb);
   await breathe();
 
@@ -487,7 +489,7 @@ export async function buildWorld(scene, opts = {}) {
   });
   const groundT = ptex(groundC, false);
   const shape = new THREE.Shape(outline.map((p) => new THREE.Vector2(p.x, -p.z)));
-  const gg = new THREE.ShapeGeometry(shape); gg.rotateX(-Math.PI / 2);
+  const gg = new THREE.ShapeGeometry(shape); gg.rotateX(-Math.PI / 2); gg.translate(0, GROUND_Y, 0);
   { const p = gg.attributes.position, uv = gg.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, (p.getX(k) - X0) / (X1 - X0), 1 - (p.getZ(k) - Z0) / (Z1 - Z0)); }
   add(new THREE.Mesh(gg, L({ map: groundT, ...flat(2) })), false, true);   // pushed back: everything flat sits over it
   await breathe();

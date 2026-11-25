@@ -153,7 +153,7 @@ class Fx {
   }
   hole(pos, n) {
     this.q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); this.e.set(0, 0, Math.random() * 6.28); this.q.multiply(new THREE.Quaternion().setFromEuler(this.e));
-    const p = pos.clone().addScaledVector(n, 0.006), s = 0.7 + Math.random() * 0.6;
+    const p = pos.clone().addScaledVector(n, 0.02), s = 0.7 + Math.random() * 0.6;
     this.m.compose(p, this.q, new THREE.Vector3(s, s, s)); this.holes.setMatrixAt(this.hi % 48, this.m); this.hi++;
     this.holes.count = Math.min(48, this.hi); this.holes.instanceMatrix.needsUpdate = true;
   }
