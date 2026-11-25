@@ -167,6 +167,17 @@ export async function spawnPeds(scene, world, o = {}) {
       speed: 1.6, run: 5.2 + R() * 0.6, wW: 0, rW: 0, cW: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0, side: 0, stagger: 0, down: 0, free: null, anger: 0, bumpT: -9, brave: 1, fear: null, cower: 0, pause: 0 };
     h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
   }
+  // someone behind a counter: an ordinary person, kept off the street (interiors.js places them)
+  async function makeNpc() {
+    const p = randomPerson(R), h = new Human(D, p, { lod: p.sex < 0.5 ? "female1605" : "male1591" });
+    h.group.traverse((m) => { if (m.isMesh) m.receiveShadow = false; });
+    const mixer = new THREE.AnimationMixer(h.group), act = {};
+    for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
+    act.idle.setEffectiveWeight(1);
+    const pd = { npc: true, inUse: false, voice: { female: p.sex < 0.5, pitch: 0.92 + R() * 0.16, age: p.age }, h, mixer, act, head: h.bones.find((b) => b.name === "head"), neck: h.bones.find((b) => b.name === "neck01"),
+      speed: 1.3, run: 4.5, wW: 0, rW: 0, cW: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0, side: 0, stagger: 0, down: 0, free: null, anger: 0, bumpT: -9, brave: 0.2, fear: null, cower: 0, pause: 0 };
+    h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
+  }
   for (let i = 0; i < count; i++) {
     await make(o.near || world.spawn);
     if (o.progress) o.progress((i + 1) / count);
@@ -329,7 +340,7 @@ export async function spawnPeds(scene, world, o = {}) {
       quiet -= dt; clock += dt;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
-        if (pd.cop) { if (pd.dead && pd.rag && g.visible && pd.rag.step(dt)) pd.rag.pose(); return; }
+        if (pd.cop || pd.npc) { if (pd.dead && pd.rag && g.visible && pd.rag.step(dt)) pd.rag.pose(); return; }
         if (idx >= limit) { g.visible = false; return; }
         if (pd.dead) {   // a body: let it fall and settle; clear it away once nobody can see
           const dd = Math.hypot(g.position.x - px, g.position.z - pz);
@@ -443,7 +454,7 @@ export async function spawnPeds(scene, world, o = {}) {
       if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
-    knock, bumped, squareUp, makeCop,
+    knock, bumped, squareUp, makeCop, makeNpc,
     get cops() { return peds.filter((pd) => pd.cop); },
     get fighting() { return peds.filter((pd) => pd.free && pd.free.mode === "fight" && !pd.dead); },
     alarm(x, z, r = 40, shout = true, kind = "gun") {

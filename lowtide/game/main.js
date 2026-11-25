@@ -16,6 +16,7 @@ import { Traffic } from "./traffic.js?v=dev";
 import { Life, HOSPITAL } from "./life.js?v=dev";
 import { Travel } from "./travel.js?v=dev";
 import { BulletCam } from "./bulletcam.js?v=dev";
+import { Interiors } from "./interiors.js?v=dev";
 import { Police, STATION } from "./police.js?v=dev";
 import { Gore } from "./gore.js?v=dev";
 import { makeVoice } from "./voice.js?v=dev";
@@ -82,6 +83,8 @@ export async function start(o) {
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
   const cops = [];   // the Marlowe Keys PD: eight officers, kept out of sight until they're needed
   if (peds) try { for (let i = 0; i < 12; i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
+  const npcs = [];   // the people behind counters, three of them, reused room to room
+  if (peds) try { for (let i = 0; i < 3; i++) { npcs.push(await peds.makeNpc()); await frame(); } } catch (e) { console.warn("Lowtide: interior people failed to load", e); }
   let police = null;
 
   // Stage 3: weapons
@@ -163,8 +166,12 @@ export async function start(o) {
     const pd = hit.ped;
     return bulletcam.start({ from: muzzle, to: hit.point, dir, apply, body: () => (pd.rag ? pd.rag.p[0] : pd.h.group.position) });
   };
+  // interiors: nearly every building's door opens
+  const interiors = new Interiors({ scene, world, player, rig, hud, sfx: o.sfx || {}, npcs, police, vehicles, root: o.hud,
+    say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "calm"); } });
+  interiors.on = (e) => { if (e === "near-door") hud.tipOnce("door", "{E} goes in. Nearly every door on the island opens."); };
   // the police's hooks into everything else
-  hud.blips = () => police.blips(); travel.police = police; arsenal.targets = () => police.targets();
+  hud.blips = () => police.blips(); travel.police = police; interiors.police = police; arsenal.targets = () => police.targets();
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
   { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }
@@ -261,17 +268,20 @@ export async function start(o) {
     const dw = dt * arsenal.timeScale * life.timeScale;
     let inCar = false;
     const px0 = player.pos.x, pz0 = player.pos.z;
-    traffic.update(dw, player, vehicles, peds);
-    life.update(dt, input, dw); gore.update(dw);
+    const indoors = !!interiors.inside;   // inside, the street holds still until you come back out
+    if (!indoors) traffic.update(dw, player, vehicles, peds);
+    life.update(dt, input, dw); if (!indoors) gore.update(dw);
+    const usedDoor = input.locked && !life.down && !vehicles.driving && interiors.update(dt, input, camera);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
-    if (input.locked && !down) { const used = vehicles.update(dw, input); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    if (input.locked && !down) { const used = usedDoor || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
     else if (down) { vehicles.update(dw, { hit: () => false, down: () => false, keys: new Set() }); arsenal.tickFx(dw); player.aimYaw = null; rig.aim = 0; }
     if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
     if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down) player.animate(dw);
-    if (peds) peds.update(dw, player);
-    if (police) police.update(dw);
+    if (peds && !indoors) peds.update(dw, player);
+    if (police && !indoors) police.update(dw);
+    if (!input.locked || life.down || vehicles.driving) interiors.update(dt, { hit: () => false }, camera);
     rig.update(dt, input, player);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
