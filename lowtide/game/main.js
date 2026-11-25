@@ -79,7 +79,7 @@ export async function start(o) {
   try { peds = await spawnPeds(scene, world, Object.assign(pedHooks, { onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) })); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
   const cops = [];   // the Marlowe Keys PD: eight officers, kept out of sight until they're needed
-  if (peds) try { for (let i = 0; i < 8; i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
+  if (peds) try { for (let i = 0; i < 12; i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
   let police = null;
 
   // Stage 3: weapons
@@ -105,7 +105,7 @@ export async function start(o) {
     if (o.sfx && o.sfx.punch) o.sfx.punch("fist", 0);
   };
   // the police and the wanted level
-  police = new Police({ scene, world, player, peds, traffic, vehicles, life, hud, sfx: o.sfx || {}, fx: arsenal.fx, arsenal, cops,
+  police = new Police({ scene, world, player, peds, traffic, vehicles, life, hud, sfx: o.sfx || {}, fx: arsenal.fx, arsenal, cops, camera, rig,
     say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "angry"); } });
   traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
@@ -152,7 +152,7 @@ export async function start(o) {
   const setFog = (k) => { const d = FOG0 * (1 - 0.72 * k); scene.fog.density = d; for (const u of fogMats) u.value = d; };
   const travel = new Travel({ world, player, rig, camera, blit, sfx: o.sfx || {}, hud, vehicles, life, setFog, onArrive: (sp) => { stats.trips++; hud.area = null; } });
   // the police's hooks into everything else
-  hud.blips = () => police.blips(); travel.police = police;
+  hud.blips = () => police.blips(); travel.police = police; arsenal.targets = () => police.targets();
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
   { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }

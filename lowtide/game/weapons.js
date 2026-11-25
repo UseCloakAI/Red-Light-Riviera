@@ -545,6 +545,7 @@ export class Arsenal {
     // what it hit: people take every pellet; walls get a hole each
     let marked = null, sounds = 0;
     for (const [hit, to] of shots) {
+      if (hit.obj) { hit.obj.hit(w.damage, hit.point); this.fx.sparks(hit.point, 5, hit.normal, 3, 0xffc070, 0.2); marked = marked || "body"; continue; }
       if (hit.ped) {
         const fall = w.pellets > 1 ? THREE.MathUtils.clamp(1 - (hit.t - 8) / 40, 0.3, 1) : 1;
         const r = this.peds.damage(hit.ped, { point: hit.point, dir: to, damage: w.damage * fall * (hit.head && w.pellets > 1 ? 3 : 1), head: hit.head && w.pellets === 1,
@@ -599,7 +600,10 @@ export class Arsenal {
         if (t < best) { best = t; ped = pd; head = th <= tb; kind = "flesh"; normal.copy(d).negate(); }
       }
     }
-    return { t: best, point: o.clone().addScaledVector(d, best), normal, kind, ped, head };
+    // other targets (the police helicopter)
+    let obj = null;
+    if (this.targets) for (const tg of this.targets()) { const tt = raySphere(o, d, best, tg.c, tg.r); if (tt < best) { best = tt; obj = tg; ped = null; kind = "metal"; normal.copy(d).negate(); } }
+    return { t: best, point: o.clone().addScaledVector(d, best), normal, kind, ped, head, obj };
   }
 
   // after the clips: raise the arms onto the aim, seat the gun
