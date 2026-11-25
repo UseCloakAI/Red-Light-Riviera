@@ -569,6 +569,39 @@
       duck(n / rate + 0.1, 0.55);
       src.start(t);
     },
+    /* police: a siren (a wail that rises and falls, switching to a fast yelp now and then), heard
+       from where the car is; set(dist, on) each frame */
+    siren: function () {
+      if (!ctx) return { set: function () {}, stop: function () {} };
+      var t = now(), a = O("sawtooth", 700, t), b = O("square", 704, t), lfo = O("sine", 0.32, t), lg = G(380), bp = F("bandpass", 1100, 1.1), lp = F("lowpass", 6000), g = G(0), p = P(0);
+      chain(lfo, lg); lg.connect(a.frequency); lg.connect(b.frequency); chain(a, bp); var bg = G(0.4); chain(b, bg, bp); chain(bp, lp, g, p, B.under); send(g, street(), 0.35);
+      [a, b, lfo].forEach(function (x) { x.start(t); }); var yelp = 0;
+      return {
+        set: function (dist, on) {
+          var t2 = now(), v = on ? 0.09 / (1 + dist / 22) : 0;
+          g.gain.setTargetAtTime(v, t2, 0.12); lp.frequency.setTargetAtTime(6000 / (1 + dist / 40), t2, 0.2);
+          if ((yelp += 1) % 700 === 0) { lfo.frequency.setTargetAtTime(4.5, t2, 0.05); lfo.frequency.setTargetAtTime(0.32, t2 + 2.5, 0.1); }
+        },
+        stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.2); [a, b, lfo].forEach(function (x) { x.stop(t2 + 1); }); }
+      };
+    },
+    // the helicopter: the rotor's thump (noise chopped at the blade rate) and a turbine whine
+    heli: function () {
+      if (!ctx) return { set: function () {}, stop: function () {} };
+      var t = now(), n = noise("brown", t, 0, true), lp = F("lowpass", 500, 0.7), chop = G(0), lfo = O("square", 11, t), lg = G(0.5), g = G(0);
+      chain(lfo, lg, chop.gain); chop.gain.value = 0.5; chain(n, lp, chop, g, B.under); send(g, street(), 0.2);
+      var w = O("sawtooth", 1750, t), wl = F("bandpass", 1800, 6), wg = G(0.03); chain(w, wl, wg, g);
+      lfo.start(t); w.start(t);
+      return {
+        set: function (dist) { var t2 = now(); g.gain.setTargetAtTime(0.5 / (1 + dist / 30), t2, 0.2); lp.frequency.setTargetAtTime(500 / (1 + dist / 120), t2, 0.3); },
+        stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.5); n.stop(t2 + 2.5); lfo.stop(t2 + 2.5); w.stop(t2 + 2.5); }
+      };
+    },
+    // a star gained: a short, tense two-note sting
+    wantedUp: function (n) {
+      if (!ctx) return; var t = now();
+      [[52, 0], [55 + Math.min(4, n), 0.11]].forEach(function (k) { var o = O("sawtooth", mtof(k[0]), t + k[1]), lp = F("lowpass", 1400, 2), g = G(0); perc(g, t + k[1], 0.005, 0.1, 0.35); chain(o, lp, g, B.ui); o.start(t + k[1]); o.stop(t + k[1] + 0.5); });
+    },
     // melee: the air a fist or a bat moves
     swing: function (kind, dist) {
       if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 8); if (v < 0.06) return;

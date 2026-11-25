@@ -332,12 +332,12 @@ export class Vehicles {
     c.roll += (-yawRate * Math.abs(c.speed) * 0.004 - c.roll) * Math.min(1, dt * 6);
     this.place(c);
     // people in the way go down
-    if (this.peds && Math.abs(c.speed) > 2) for (let i = 0; i < Math.min(this.peds.limit, this.peds.peds.length); i++) {
-      const pd = this.peds.peds[i]; if (pd.dead) continue;
+    if (this.peds && Math.abs(c.speed) > 2) for (let i = 0; i < this.peds.peds.length; i++) {
+      const pd = this.peds.peds[i]; if (pd.dead || !pd.h.group.visible || (i >= this.peds.limit && !pd.cop)) continue;
       const g = pd.h.group.position, lx = (g.x - c.x) * Math.cos(c.a) - (g.z - c.z) * Math.sin(c.a), lz = (g.x - c.x) * fx + (g.z - c.z) * fz;
       if (Math.abs(lx) < 1.25 && Math.abs(lz) < 2.6) {
         const v = Math.abs(c.speed), dir = _v.set(fx * Math.sign(c.speed), 0.25, fz * Math.sign(c.speed)).normalize().clone();
-        this.peds.damage(pd, { point: new THREE.Vector3(g.x, g.y + 0.9, g.z), dir, damage: v * 9, head: false, from: { x: c.x, z: c.z }, force: Math.min(9, v * 0.7) });
+        this.peds.damage(pd, { point: new THREE.Vector3(g.x, g.y + 0.9, g.z), dir, damage: v * 9, head: false, from: { x: c.x, z: c.z }, force: Math.min(9, v * 0.7), byPlayer: true });
         c.speed *= 0.85; if (this.sfx.impact) this.sfx.impact("flesh", 0, 0);
         this.peds.alarm(c.x, c.z, 35, true, "car");
       }
