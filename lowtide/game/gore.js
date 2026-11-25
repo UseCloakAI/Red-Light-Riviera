@@ -57,6 +57,18 @@ export class Gore {
     this.pools.push({ mesh, at, t: 0, size: 0.9 + Math.random() * 0.6 });
     if (this.pools.length > 24) { const o = this.pools.shift(); this.scene.remove(o.mesh); o.mesh.geometry.dispose(); }
   }
+  // what's within r of (x, z), to put back later (an interior's blood stays with it)
+  snapshotNear(x, z, r) {
+    const m = this._m, p = new THREE.Vector3(), splats = [], pools = [];
+    for (let i = 0; i < this.splats.count; i++) { this.splats.getMatrixAt(i, m); p.setFromMatrixPosition(m); if (m.elements[0] !== 0 && Math.hypot(p.x - x, p.z - z) < r) splats.push(m.clone()); }
+    for (const P of this.pools) { const q = P.mesh.position; if (Math.hypot(q.x - x, q.z - z) < r) pools.push({ x: q.x, y: q.y, z: q.z, s: P.size }); }
+    return { splats, pools };
+  }
+  restore(snap) {
+    for (const m of snap.splats) { this.splats.setMatrixAt(this.si % 80, m); this.si++; }
+    this.splats.count = Math.min(80, this.si); this.splats.instanceMatrix.needsUpdate = true;
+    for (const q of snap.pools) { const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2), this.poolMat); mesh.position.set(q.x, q.y, q.z); mesh.scale.setScalar(q.s); mesh.renderOrder = 2; this.scene.add(mesh); this.pools.push({ mesh, at: null, t: 99, size: q.s }); }
+  }
   // wipe everything within r of (x, z): splats, pools, drops in the air
   clearNear(x, z, r) {
     const m = this._m, p = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);

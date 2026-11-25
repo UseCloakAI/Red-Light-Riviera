@@ -270,7 +270,7 @@ export async function start(o) {
     const px0 = player.pos.x, pz0 = player.pos.z;
     const indoors = !!interiors.inside;   // inside, the street holds still until you come back out
     if (!indoors) traffic.update(dw, player, vehicles, peds);
-    life.update(dt, input, dw); if (!indoors) gore.update(dw);
+    life.update(dt, input, dw); gore.update(dw);
     const usedDoor = input.locked && !life.down && !vehicles.driving && interiors.update(dt, input, camera);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
     if (input.locked && !down) { const used = usedDoor || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
