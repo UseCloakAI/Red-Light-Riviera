@@ -264,7 +264,7 @@ export async function start(o) {
     fpsCap = on ? 30 : 0; viewR = on ? 300 : Infinity;
     FOG0 = on ? FOG_HI * 1.9 : FOG_HI; setFog(0);
     camera.far = on ? 800 : 2600; camera.updateProjectionMatrix(); if (sky.sky) sky.sky.scale.setScalar(on ? 0.42 : 1);
-    ROOMS_ON.value = on ? 0 : 1; if (sky.seaDetail) sky.seaDetail(on);
+    ROOMS_ON.value = on ? 45 : 1e6;   // low: only nearby windows show their rooms, far ones are plain if (sky.seaDetail) sky.seaDetail(on);
     if (peds) peds.lod = on; if (window.LT && LT.lowAudio) LT.lowAudio(on);
     if (!on) for (const m of world.chunks) m.visible = true;
   };
@@ -311,12 +311,23 @@ export async function start(o) {
     if (perf.stage === 2) hud.tip("The game was running slow, so it switched to low quality. You can change that in Settings.");
     console.info("Lowtide quality step", perf.stage, "avg frame", (avg * 1000).toFixed(1), "ms");
   }
+  /* the FPS readout (Settings > Show FPS): frames counted over half a second, top-left */
+  const fpsEl = document.createElement("div");
+  fpsEl.style.cssText = "position:fixed;left:8px;top:8px;z-index:60;font:600 12px/1 ui-monospace,Menlo,monospace;color:#9effa0;background:rgba(0,0,0,.55);padding:4px 6px;border-radius:4px;pointer-events:none;display:none";
+  document.body.appendChild(fpsEl);
+  let fpsN = 0, fpsT0 = 0;
+  const fpsTick = (now) => {
+    if (fpsEl.style.display === "none") return;
+    fpsN++; if (!fpsT0) fpsT0 = now;
+    if (now - fpsT0 >= 500) { const f = fpsN * 1000 / (now - fpsT0); fpsEl.textContent = Math.round(f) + " FPS  " + (1000 / f).toFixed(1) + " ms"; fpsN = 0; fpsT0 = now; }
+  };
+  SET.on((k, v, S) => { if (k && k !== "fps") return; fpsEl.style.display = S.fps ? "block" : "none"; fpsN = 0; fpsT0 = 0; fpsEl.textContent = "-- FPS"; });
   function loop(now) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     if (fpsCap && last && now - last < 1000 / fpsCap - 3) return;   // low quality: a steady 30
     const dt = Math.min(fpsCap ? 0.07 : 0.05, (now - (last || now)) / 1000); last = now; t += dt;
-    cull(dt); const w0 = performance.now();
+    cull(dt); fpsTick(now); const w0 = performance.now();
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
     // a car first (it may take E for the door), then the gun, unless you're driving
     clockMin += dt / 2; stats.played += dt;

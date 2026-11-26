@@ -3,7 +3,7 @@
 (function () {
   "use strict";
   var KEY = "lowtide_settings";
-  var DEF = { master: 100, music: 70, sfx: 100, voices: 100, sens: 100, invert: false, fov: 70, shake: true, subtitles: true, pixels: 270, quality: "auto", ps1: true };
+  var DEF = { master: 100, music: 70, sfx: 100, voices: 100, sens: 100, invert: false, fov: 70, shake: true, subtitles: true, pixels: 270, quality: "auto", ps1: true, fps: false };
   var S = {}, subs = [];
   Object.keys(DEF).forEach(function (k) { S[k] = DEF[k]; });
   try { var saved = JSON.parse(localStorage.getItem(KEY) || "{}"); Object.keys(DEF).forEach(function (k) { if (saved[k] !== undefined) S[k] = saved[k]; }); } catch (e) { /* defaults */ }
