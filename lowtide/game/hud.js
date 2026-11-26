@@ -32,6 +32,12 @@ export function drawMap(world) {
   return { canvas: c, x0, z0 };
 }
 
+// a house mark: roof and walls, centred on 0,0, s = half width
+function house(g, s) {
+  g.fillStyle = "#19C3B1"; g.strokeStyle = "#0A0A0A"; g.lineWidth = 2.5;
+  g.beginPath(); g.moveTo(-s, -s * 0.1); g.lineTo(0, -s * 1.05); g.lineTo(s, -s * 0.1); g.lineTo(s * 0.75, -s * 0.1); g.lineTo(s * 0.75, s); g.lineTo(-s * 0.75, s); g.lineTo(-s * 0.75, -s * 0.1); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = "#0A0A0A"; g.fillRect(-s * 0.22, s * 0.3, s * 0.44, s * 0.7);
+}
 export class Hud {
   constructor(root, world) {
     this.root = root; this.world = world; this.map = drawMap(world);
@@ -145,6 +151,11 @@ export class Hud {
       g.fillStyle = ((b.x * 7 + b.z) | 0) % 2 === flash ? "#E5484D" : "#3C6EFF"; g.strokeStyle = "#0A0A0A"; g.lineWidth = 2 / k;
       g.beginPath(); if (b.heli) { g.rect(bx - rr, bz - rr, rr * 2, rr * 2); } else g.arc(bx, bz, rr, 0, Math.PI * 2); g.fill(); g.stroke();
     }
+    if (this.home) {   // home: a little house, held to the rim when it's off the radar
+      let hx = (this.home.x - player.pos.x) * S, hz = (this.home.z - player.pos.z) * S; const lim = (r - 16) / k, L = Math.hypot(hx, hz);
+      if (L > lim) { hx *= lim / L; hz *= lim / L; }
+      g.save(); g.translate(hx, hz); g.rotate(-camYaw); g.scale(1 / k, 1 / k); house(g, 9); g.restore();
+    }
     g.restore();
     // the player: a teal arrow pointing the way they face, relative to the camera
     g.save(); g.translate(r, r); g.rotate(camYaw + Math.PI - player.yaw);
@@ -176,6 +187,7 @@ export class Hud {
       ctx.fillStyle = "#3C6EFF"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.fillRect(sx - 10, sy - 10, 20, 20); ctx.strokeRect(sx - 10, sy - 10, 20, 20);
       ctx.fillStyle = "#fff"; ctx.font = "900 15px Archivo, sans-serif"; ctx.fillText("P", sx, sy + 1);
     }
+    if (opt.home) { ctx.save(); ctx.translate(X(opt.home.x), Y(opt.home.z)); house(ctx, 13); ctx.restore(); ctx.fillStyle = "#F7F2EA"; ctx.font = "800 13px Archivo, sans-serif"; ctx.fillText("HOME", X(opt.home.x), Y(opt.home.z) + 24); }
     if (opt.hospital) {   // Marlowe General
       const hx = X(opt.hospital.x), hy = Y(opt.hospital.z);
       ctx.fillStyle = "#E5484D"; ctx.strokeStyle = "#0A0A0A"; ctx.lineWidth = 3; ctx.fillRect(hx - 10, hy - 10, 20, 20); ctx.strokeRect(hx - 10, hy - 10, 20, 20);

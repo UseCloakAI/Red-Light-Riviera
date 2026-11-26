@@ -181,7 +181,7 @@ export async function start(o) {
     say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "calm"); } });
   interiors.on = (e) => { if (e === "near-door") hud.tipOnce("door", "{E} goes in. Nearly every door on the island opens."); };
   // the police's hooks into everything else
-  hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets();
+  hud.home = interiors.home || null; hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets();
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
   { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }
@@ -379,16 +379,17 @@ export async function start(o) {
     life.update(dt, input, dw); gore.update(dw);
     const usedDoor = input.locked && !life.down && !vehicles.driving && interiors.update(dt, input, camera);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
-    if (input.locked && !down) { const used = usedDoor || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    if (input.locked && !down) { const used = usedDoor || interiors.watching || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
     else if (down) { vehicles.update(dw, { hit: () => false, down: () => false, keys: new Set() }); arsenal.tickFx(dw); player.aimYaw = null; rig.aim = 0; }
     if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
-    if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
+    if (interiors.watching) { player.animate(dw); interiors.poseWatcher(dt); }
+    else if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);
     if (police && !indoors) police.update(dw);
     if (!input.locked || life.down || vehicles.driving) interiors.update(dt, { hit: () => false }, camera);
-    rig.update(dt, input, player);
+    rig.update(dt, input, player); interiors.watchCam(camera, dt);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
     { const m = Math.hypot(player.pos.x - px0, player.pos.z - pz0); if (m < 20) stats[inCar ? "drive" : "foot"] += m; }
@@ -401,10 +402,10 @@ export async function start(o) {
 
   const api = { interiors,
     input, hud, player,
-    resume() { if (running) return; running = true; last = 0; input.active = true; raf = requestAnimationFrame(loop); },
-    pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); },
+    resume() { if (running) return; running = true; last = 0; input.active = true; raf = requestAnimationFrame(loop); interiors.pauseTV(false); },
+    pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); interiors.pauseTV(true); },
     lock() { input.lock(); },
-    drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL, station: STATION }, opt)); },
+    drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL, station: STATION, home: interiors.home }, opt)); },
     get police() { return police; },
     // fast travel: check a map pick, why not now, go (done() once you've landed)
     travelCheck(x, z) { return travel.check(x, z); },
