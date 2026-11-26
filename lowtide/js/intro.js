@@ -223,8 +223,17 @@
   }
   // Lowtide is a desktop experience: keyboard, a wide screen, a real pointer
   function desktop() { return innerWidth >= 900 && !(matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches); }
+  /* full screen on the first key (it needs a key or click to be allowed). In Chrome the keyboard is
+     locked too, so Esc reaches the game (the pause menu) instead of leaving full screen: holding Esc still leaves */
+  function fullscreen() {
+    var d = document.documentElement;
+    if (document.fullscreenElement || !d.requestFullscreen) return;
+    var p = d.requestFullscreen({ navigationUI: "hide" });
+    if (p && p.then) p.then(function () { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(["Escape"]).catch(function () {}); }).catch(function () {});
+  }
   function begin() {
     if (state !== "gate") return;
+    fullscreen();
     state = "loading";
     LT.init();   // resume audio inside the gesture
     ready.then(function (ok) {
@@ -380,7 +389,7 @@
     if (locked) { clickToPlay(false); return; }
     if (state === "game") openPause(0);   // Esc releases the mouse: that's the pause button
   }
-  $(".clickplay").addEventListener("click", function (e) { e.stopPropagation(); if (GAME) GAME.lock(); });
+  $(".clickplay").addEventListener("click", function (e) { e.stopPropagation(); fullscreen(); if (GAME) GAME.lock(); });
   $("#gl").addEventListener("click", function () { if (GAME && state === "game") GAME.lock(); });
 
   /* ---- main menu ---- */
@@ -611,6 +620,7 @@
   /* ---- input ---- */
   document.addEventListener("keydown", function (e) {
     var k = e.key;
+    if (state !== "gate" && !document.fullscreenElement && !fullscreen.tried) { fullscreen.tried = true; fullscreen(); }
     if (state === "gate") { if (!e.repeat) begin(); return; }
     if (state === "title") { if (k === "Enter" || k === " ") openMenu(); return; }
     if (state === "menu") {
