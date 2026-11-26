@@ -9,9 +9,10 @@
    - the bar has someone round the pool table; the diner's waitress does her rounds
    - at home, whoever lives there is on the sofa with the TV on
 
-   Sitting is a pose laid over the idle clip: thighs forward, shins down, hips on the seat, hands in the
-   lap. Anything violent and they all stop and watch you. */
+   Sitting is a real move (body.js): walk up to the seat, turn, sit down with the weight going back over planted
+   feet, settle, breathe; stand up leaning into it. Anything violent and they all get up and watch you. */
 import * as THREE from "three";
+import { Body, ss, SIT_DOWN, STAND_UP } from "./body.js?v=dev";
 
 const CELL = 0.25, BODY = 0.3;
 const UP = new THREE.Vector3(0, 1, 0), X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
@@ -72,32 +73,6 @@ export class Nav {
   clear(p, q) { const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (CELL * 0.5)); for (let k = 1; k < n; k++) { const [i, j] = this.cell(p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n); if (!this.free(i, j)) return false; } return true; }
 }
 
-/* ---------------- posing over the clips ---------------- */
-function bones(pd) { if (!pd.rB) pd.rB = Object.fromEntries(pd.h.bones.map((b) => [b.name, b])); return pd.rB; }
-// turn a bone by ang about an axis in the person's own frame (x right, y up, z forward)
-function turn(pd, name, ax, ang) {
-  const b = bones(pd)[name]; if (!b || !ang) return;
-  _a.copy(ax).applyQuaternion(pd.h.group.quaternion).normalize();
-  b.parent.updateWorldMatrix(true, false); b.parent.getWorldQuaternion(_p); _pi.copy(_p).invert(); _q.setFromAxisAngle(_a, ang);
-  b.quaternion.premultiply(_p).premultiply(_q).premultiply(_pi); b.updateMatrixWorld(true);
-}
-export function hipHeight(pd) {
-  if (pd.hipH) return pd.hipH;
-  const g = pd.h.group, r = bones(pd).root; g.updateMatrixWorld(true); r.getWorldPosition(_v);
-  return (pd.hipH = Math.max(0.6, _v.y - g.position.y));
-}
-// seated: k 0..1 (standing up / sitting down blends through it)
-export function sitPose(pd, k, hands) {
-  if (k <= 0) return;
-  for (const s of ["L", "R"]) { turn(pd, "upperleg01_" + s, X, -1.5 * k); turn(pd, "lowerleg01_" + s, X, 1.45 * k); turn(pd, "foot_" + s, X, -0.1 * k); }
-  turn(pd, "spine03", X, 0.08 * k);
-  if (hands !== false) for (const s of ["L", "R"]) { turn(pd, "upperarm01_" + s, X, -0.35 * k); turn(pd, "lowerarm01_" + s, X, -0.85 * k); }
-}
-// a hand to the mouth (eating, drinking), lifted u 0..1
-function handUp(pd, u) { if (u <= 0) return; turn(pd, "upperarm01_R", X, -0.55 * u); turn(pd, "upperarm01_R", Z, -0.2 * u); turn(pd, "lowerarm01_R", X, -1.55 * u); }
-// reaching to a shelf, u 0..1, high or low
-function reach(pd, u, hi) { if (u <= 0) return; turn(pd, "upperarm01_R", X, -(hi ? 1.5 : 0.9) * u); turn(pd, "lowerarm01_R", X, -0.4 * u); turn(pd, "spine03", X, (hi ? -0.05 : 0.18) * u); }
-
 /* ---------------- the people ---------------- */
 const PAY = {
   store: ["That's four fifty.", "Six even.", "Need a bag?", "Two eighty. Have a good one."], pharmacy: ["Pickup's ready. Eleven twenty.", "Sign here."], hardware: ["Nine forty.", "Want the receipt?"],
@@ -108,33 +83,37 @@ const WAIT = { diner: ["More coffee, hon?", "Pie's fresh. Ish.", "You need a min
 export class Routines {
   /* o: { room: {w, d, door:[x,z]}, nav, acts, kind, R, ox, oz, say(text, pd), people: [{pd, role, act}] } */
   constructor(o) {
-    Object.assign(this, o); this.busy = new Set(); this.alarm = false; this.till = null;
+    Object.assign(this, o); this.busy = new Set(); this.alarm = false;
     for (const p of this.people) this.start(p);
   }
   pos(pd) { const g = pd.h.group.position; return [g.x - this.ox, g.z - this.oz]; }
   at(act) { return [act.x + (act.ox || 0), act.z + (act.oz || 0)]; }
+  // where you stand to sit on a seat: in front of it, by about a thigh (a stool: just off it)
+  stand(act) { const k = act.seat > 0.7 ? 0.2 : 0.47, [x, z] = this.at(act); return [x + Math.sin(act.face || 0) * k, z + Math.cos(act.face || 0) * k, k]; }
   free(type) { const L = this.acts.filter((a) => a.type === type && !this.busy.has(a)); return L.length ? L[(this.R() * L.length) | 0] : null; }
+  body(pd) { return pd.body || (pd.body = Body.of(pd.h.group, pd.h.bones)); }
   start(p) {
-    const pd = p.pd; pd.sitK = 0; pd.mode = "idle"; pd.wait = 0; pd.path = null; pd.gest = null; pd.gT = 0;
+    const pd = p.pd; pd.mode = "idle"; pd.wait = 0; pd.path = null; pd.gest = null; pd.gT = 0; pd.st = 0; pd.tSeat = Math.random() * 20;
+    pd.h.group.position.y = 0;
     if (p.act) { this.take(p, p.act, true); return; }
     this.next(p, true);
   }
-  // seat or spot now (teleport: the room starts mid-scene) or by walking there
+  // a seat or a spot: now (the room starts mid-scene) or by walking there, turning, and (for a seat) sitting down
   take(p, act, now) {
     if (p.act && p.act !== act) this.busy.delete(p.act);
-    p.act = act; this.busy.add(act); const pd = p.pd, [x, z] = this.at(act);
-    if (now) { pd.h.group.position.set(this.ox + x, 0, this.oz + z); pd.h.group.rotation.y = act.face ?? 0; this.arrive(p); }
-    else this.walk(p, x, z, () => this.arrive(p));
+    p.act = act; this.busy.add(act); const pd = p.pd, g = pd.h.group;
+    const [x, z] = act.type === "sit" ? this.stand(act) : this.at(act);
+    const settle = () => { if (act.type === "sit") { pd.mode = "sitdown"; pd.st = 0; } else this.arrive(p); };
+    if (now) { g.position.set(this.ox + x, 0, this.oz + z); g.rotation.y = act.face ?? 0; if (act.type === "sit") { pd.mode = "sit"; pd.st = 0; pd.wait = 25 + this.R() * 60; } else this.arrive(p); }
+    else this.walk(p, x, z, () => this.turnTo(p, act.face ?? g.rotation.y, settle));
   }
   walk(p, x, z, then) {
     const [sx, sz] = this.pos(p.pd), path = this.nav.path(sx, sz, x, z);
     if (!path) { p.pd.h.group.position.set(this.ox + x, 0, this.oz + z); then(); return; }
     p.pd.path = path; p.pd.pi = 1; p.pd.mode = "walk"; p.pd.then = then;
   }
-  arrive(p) {
-    const pd = p.pd, a = p.act; pd.mode = a.type === "sit" ? "sit" : "stand"; pd.wait = 4 + this.R() * 6;
-    if (a.type === "sit") pd.wait = 25 + this.R() * 60;
-  }
+  turnTo(p, yaw, then) { p.pd.mode = "turn"; p.pd.turnTo = yaw; p.pd.then = then; }
+  arrive(p) { const pd = p.pd, a = p.act; pd.mode = a && a.type === "sit" ? "sit" : "stand"; pd.wait = a && a.type === "sit" ? 25 + this.R() * 60 : 4 + this.R() * 6; }
   // what a person does after this
   next(p, now) {
     const pd = p.pd, R = this.R;
@@ -145,34 +124,32 @@ export class Routines {
     }
     if (p.role === "sitter") { const a = this.free("sit"); if (a) { this.take(p, a, now); return; } }
     if (p.role === "pool") { const a = this.free("pool"); if (a) { this.take(p, a, now); return; } }
-    if (p.role === "waiter") { p.pd.mode = "stand"; p.pd.wait = 8 + R() * 10; return; }
-    // nothing free: stand where you are a while
+    if (p.role === "waiter") { pd.mode = "stand"; pd.wait = 8 + R() * 10; return; }
     pd.mode = "stand"; pd.wait = 3 + R() * 4;
   }
   leave(p) {
-    if (p.act) this.busy.delete(p.act); p.act = null;
-    const [dx, dz] = this.room.door; this.walk(p, dx, dz + 0.4, () => { p.pd.h.group.visible = false; p.pd.mode = "away"; p.pd.wait = 8 + this.R() * 14; });
+    const go = () => { if (p.act) this.busy.delete(p.act); p.act = null; const [dx, dz] = this.room.door; this.walk(p, dx, dz + 0.4, () => { p.pd.h.group.visible = false; p.pd.mode = "away"; p.pd.wait = 8 + this.R() * 14; }); };
+    if (p.pd.mode === "sit" || p.pd.mode === "sitdown") this.standUp(p, go); else go();
   }
+  standUp(p, then) { const pd = p.pd; pd.mode = "standup"; pd.st = 0; pd.then = then; }
   tick(dt, player, alarm) {
-    this.alarm = this.alarm || alarm;
+    if (alarm && !this.alarm) { this.alarm = true; for (const p of this.people) if (!p.pd.dead && (p.pd.mode === "sit" || p.pd.mode === "sitdown")) this.standUp(p, () => { p.pd.mode = "watch"; }); }
     for (const p of this.people) {
       const pd = p.pd; if (pd.dead || !pd.h) continue;
       const g = pd.h.group;
-      if (this.alarm) { this.idle(pd, dt, player, true); continue; }
-      if (pd.mode === "away") { pd.wait -= dt; if (pd.wait <= 0) { const [dx, dz] = this.room.door; g.position.set(this.ox + dx, 0, this.oz + dz + 0.2); g.rotation.y = 0; g.visible = true; pd.mode = "idle"; this.next(p); } continue; }
-      if (pd.mode === "walk") { this.step(p, dt, player); continue; }
+      if (pd.mode === "away") { if (this.alarm) continue; pd.wait -= dt; if (pd.wait <= 0) { const [dx, dz] = this.room.door; g.position.set(this.ox + dx, 0, this.oz + dz + 0.2); g.rotation.y = 0; g.visible = true; pd.mode = "idle"; this.next(p); } continue; }
+      if (pd.mode === "walk") { if (this.alarm) { pd.mode = "watch"; } else { this.step(p, dt, player); continue; } }
+      if (pd.mode === "turn") { this.anim(pd, dt, 0); const d = wrap(pd.turnTo - g.rotation.y); g.rotation.y += Math.sign(d) * Math.min(Math.abs(d), dt * (1.2 + Math.abs(d) * 3)); if (Math.abs(d) < 0.02) { g.rotation.y = pd.turnTo; const t = pd.then; pd.then = null; t && t(); } continue; }
+      if (pd.mode === "sitdown" || pd.mode === "sit" || pd.mode === "standup") { this.sitting(p, dt, player); continue; }
+      if (this.alarm || pd.mode === "watch") { this.watch(pd, dt, player); continue; }
       pd.wait -= dt;
-      const act = p.act;
-      if (pd.mode === "sit") this.sitting(p, dt, player);
-      else this.standing(p, dt, player);
+      this.standing(p, dt, player);
       if (pd.wait <= 0) {
         if (pd.paying) { pd.paying = false; this.leave(p); continue; }
         if (p.role === "waiter") { this.rounds(p); continue; }
-        if (p.role === "sitter" && this.R() < 0.25 && this.room.leaves) { pd.mode = "rise"; this.leave(p); continue; }
-        if (pd.mode === "sit") { pd.wait = 20 + this.R() * 40; continue; }
         this.next(p);
       }
-      if (act && act.type === "pay" && pd.mode === "stand" && !pd.paid && pd.wait < 3) this.payUp(p);
+      if (p.act && p.act.type === "pay" && pd.mode === "stand" && !pd.paid && pd.wait < 3) this.payUp(p);
     }
   }
   payUp(p) {
@@ -185,8 +162,9 @@ export class Routines {
     const pd = p.pd, seated = this.people.filter((q) => q !== p && q.pd.mode === "sit" && !q.pd.dead);
     if (!seated.length || !this.home) { pd.wait = 10; return; }
     const q = seated[(this.R() * seated.length) | 0], [qx, qz] = this.pos(q.pd), [hx, hz] = this.home;
-    const back = () => this.walk(p, hx, hz, () => { pd.mode = "stand"; pd.wait = 12 + this.R() * 15; pd.h.group.rotation.y = this.homeFace || 0; });
-    this.walk(p, qx, qz + (qz > this.room.d / 2 ? -0.8 : 0.8), () => { pd.mode = "stand"; pd.wait = 3; this.gesture(pd, "agree", 1); const L = WAIT[this.kind]; if (L && this.say && this.near(pd, 7)) this.say(L[(this.R() * L.length) | 0], pd); pd.then = back; setTimeout(() => back(), 3000); });
+    const back = () => this.walk(p, hx, hz, () => this.turnTo(p, this.homeFace || 0, () => { pd.mode = "stand"; pd.wait = 12 + this.R() * 15; }));
+    const fy = q.pd.h.group.rotation.y;
+    this.walk(p, qx + Math.sin(fy) * 0.75, qz + Math.cos(fy) * 0.75, () => this.turnTo(p, fy + Math.PI, () => { pd.mode = "chat"; pd.wait = 99; this.gesture(pd, "agree", 1); const L = WAIT[this.kind]; if (L && this.say && this.near(pd, 7)) this.say(L[(this.R() * L.length) | 0], pd); setTimeout(back, 3200); }));
   }
   near(pd, r) { const g = pd.h.group.position, P = this.playerPos; return P && Math.hypot(P.x - g.x, P.z - g.z) < r; }
   gesture(pd, clip, sec) { if (pd.act && pd.act[clip]) { pd.gest = clip; pd.gT = sec; pd.act[clip].time = 0; } }
@@ -194,53 +172,64 @@ export class Routines {
   step(p, dt, player) {
     const pd = p.pd, g = pd.h.group, path = pd.path, tgt = path[pd.pi], tx = this.ox + tgt[0], tz = this.oz + tgt[1];
     const dx = tx - g.position.x, dz = tz - g.position.z, dist = Math.hypot(dx, dz), sp = 1.15;
-    pd.sitK = Math.max(0, pd.sitK - dt * 2.5);
-    // someone in the way (you): wait
     const blocked = Math.hypot(player.x - g.position.x, player.z - g.position.z) < 0.7 && (player.x - g.position.x) * dx + (player.z - g.position.z) * dz > 0;
     if (!blocked) {
-      if (dist < 0.12) { pd.pi++; if (pd.pi >= path.length) { pd.path = null; pd.mode = "idle"; const t = pd.then; pd.then = null; if (p.act) { g.rotation.y = p.act.face ?? g.rotation.y; } if (t) t(); return this.anim(pd, dt, 0, 1); } }
-      else { const k = Math.min(dist, sp * dt) / dist; g.position.x += dx * k; g.position.z += dz * k; g.rotation.y += wrap(Math.atan2(dx, dz) - g.rotation.y) * Math.min(1, dt * 8); }
+      if (dist < 0.06) { pd.pi++; if (pd.pi >= path.length) { pd.path = null; pd.mode = "idle"; const t = pd.then; pd.then = null; if (t) t(); return this.anim(pd, dt, 0); } }
+      else { const k = Math.min(dist, sp * dt) / dist; g.position.x += dx * k; g.position.z += dz * k; g.rotation.y += wrap(Math.atan2(dx, dz) - g.rotation.y) * Math.min(1, dt * 7); }
     }
-    this.anim(pd, dt, blocked ? 0 : 1, 0);
+    this.anim(pd, dt, blocked ? 0 : 1);
   }
   standing(p, dt, player) {
     const pd = p.pd, g = pd.h.group, a = p.act;
-    pd.sitK = Math.max(0, pd.sitK - dt * 2.5); g.position.y = 0;
     let want = a ? a.face ?? g.rotation.y : g.rotation.y;
     if (p.role === "waiter" || (this.near(pd, 2.2) && !a)) want = Math.atan2(player.x - g.position.x, player.z - g.position.z);
     g.rotation.y += wrap(want - g.rotation.y) * Math.min(1, dt * 3);
-    this.anim(pd, dt, 0, 1);
-    if (a && (a.type === "shelf" || a.type === "stand")) { const u = Math.max(0, Math.sin((pd.wait * 0.9) % 6.28)) ** 2; reach(pd, u * 0.8, a.hi); }
+    this.anim(pd, dt, 0);
+    const B = this.body(pd); if (!B || !B.ok) return;
+    B.reset();
+    if (a && (a.type === "shelf" || a.type === "stand")) {   // looking along the shelf, reaching for something now and then
+      const c = (pd.wait * 0.45) % 1, u = ss(0.0, 0.25, c) - ss(0.55, 0.85, c);
+      if (u > 0.001) { const { f, r } = B.dirs(), hand = B.pos("upperarm01_R").addScaledVector(f, 0.55).addScaledVector(r, 0.08).add(new THREE.Vector3(0, a.hi ? 0.35 : -0.45, 0)); B.arm("R", hand, B.armPole("R", 1), u); B.grip("R", u * 0.5); B.lean(a.hi ? -0.04 * u : 0.25 * u, 0.4); }
+    }
   }
+  // seated, and the moves in and out of the seat
   sitting(p, dt, player) {
-    const pd = p.pd, g = pd.h.group, a = p.act;
-    pd.sitK = Math.min(1, pd.sitK + dt * 2);
-    g.rotation.y += wrap((a.face ?? 0) - g.rotation.y) * Math.min(1, dt * 4);
-    this.anim(pd, dt, 0, 1);
-    sitPose(pd, pd.sitK, a.does !== "eat" && a.does !== "drink");
-    // hips onto the seat, a little back from its middle
-    const drop = (a.seat ?? 0.45) + 0.08 - hipHeight(pd), fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y), [sx, sz] = this.at(a);
-    g.position.set(this.ox + sx - fx * 0.12 * pd.sitK, drop * pd.sitK, this.oz + sz - fz * 0.12 * pd.sitK);
-    // what you do in a seat
-    const t = performance.now() / 1000 + (pd.voice ? pd.voice.pitch * 37 : 0);
-    if (a.does === "eat" || a.does === "drink") { for (const s of ["L"]) { turn(pd, "upperarm01_" + s, X, -0.45); turn(pd, "lowerarm01_" + s, X, -1.0); } turn(pd, "upperarm01_R", X, -0.45); turn(pd, "lowerarm01_R", X, -1.0); const c = (t % (a.does === "eat" ? 5 : 9)) / (a.does === "eat" ? 5 : 9); handUp(pd, c < 0.25 ? Math.sin(c / 0.25 * Math.PI) : 0); turn(pd, "head", X, a.does === "eat" ? 0.15 : 0); }
-    if (a.does === "watch") { const c = t % 23; if (c < 1.2) turn(pd, "spine03", X, Math.sin(c * 15) * 0.05 * (1.2 - c)); }   // something funny on
-    if (a.does === "wait") turn(pd, "head", X, 0.35);   // looking at nothing in their lap
+    const pd = p.pd, a = p.act, g = pd.h.group;
+    this.anim(pd, dt, 0);
+    const B = this.body(pd); if (!B || !B.ok || !a) { if (pd.mode !== "sit") { pd.mode = "stand"; } return; }
+    pd.st += dt; pd.tSeat += dt;
+    const back = this.stand(a)[2], phase = pd.mode === "sitdown" ? "down" : pd.mode === "standup" ? "up" : "seated";
+    const busyHands = a.does === "eat" || a.does === "drink";
+    B.reset();
+    B.sit({ phase, t: pd.st, seat: a.seat ?? 0.45, back, hands: busyHands ? 0.35 : 1, tSeated: pd.tSeat, recline: a.does === "watch" ? -0.1 : -0.04 });
+    // what you do in a seat: eat, drink, watch (and laugh now and then), wait
+    if (phase === "seated") {
+      if (busyHands) {   // the fork or the glass up to the mouth, back down to the table
+        const per = a.does === "eat" ? 5.5 : 9, c = (pd.tSeat % per) / per, u = ss(0.0, 0.12, c) - ss(0.2, 0.34, c);
+        const { f, r } = B.dirs(), rest = B.pos("upperleg01_R").lerp(B.pos("lowerleg01_R"), 0.9).add(new THREE.Vector3(0, 0.32, 0)).addScaledVector(f, 0.08);
+        B.arm("R", rest.lerp(B.mouth().addScaledVector(f, 0.06).addScaledVector(r, 0.04), u), B.armPole("R", 0.7), 1); B.grip("R", 0.7);
+        if (a.does === "eat") B.lean(0.12 * (1 - u), 0.5);
+      }
+      if (a.does === "watch") { const c = pd.tSeat % 23; if (c < 1.4) B.turn("spine03", new THREE.Vector3(1, 0, 0), Math.sin(c * 14) * 0.035 * (1.4 - c)); }
+      if (a.does === "wait") B.turn("head", new THREE.Vector3(1, 0, 0), 0.18 + 0.05 * Math.sin(pd.tSeat * 0.3));
+      pd.wait -= dt;
+      if (pd.wait <= 0) { if (p.role === "sitter" && this.R() < 0.25 && this.room.leaves && !this.alarm) this.leave(p); else pd.wait = 20 + this.R() * 40; }
+    }
+    if (pd.mode === "sitdown" && pd.st >= SIT_DOWN) { pd.mode = "sit"; pd.st = 0; if (!(pd.wait > 0)) pd.wait = 25 + this.R() * 60; }
+    if (pd.mode === "standup" && pd.st >= STAND_UP) { pd.mode = "idle"; pd.st = 0; const t = pd.then; pd.then = null; if (t) t(); else this.next(p); }
   }
   // the clips: walk / idle weights, plus a nod or a shake now and then
-  anim(pd, dt, walk, idle) {
+  anim(pd, dt, walk) {
     pd.wW = (pd.wW ?? 0) + (walk - (pd.wW ?? 0)) * Math.min(1, dt * 6);
     pd.act.walk.setEffectiveWeight(pd.wW); pd.act.walk.timeScale = 0.9; pd.act.idle.setEffectiveWeight(1 - pd.wW); pd.act.run.setEffectiveWeight(0);
     for (const c of ["agree", "headShake"]) if (pd.act[c]) pd.act[c].setEffectiveWeight(pd.gest === c && pd.gT > 0 ? Math.min(1, pd.gT * 2) * 0.8 : 0);
     if (pd.gT > 0) { pd.gT -= dt; if (pd.gT <= 0) pd.gest = null; }
     pd.mixer.update(dt);
   }
-  // trouble: everyone stands, turns and watches you
-  idle(pd, dt, player, look) {
-    const g = pd.h.group; pd.sitK = Math.max(0, pd.sitK - dt * 3); pd.mode = pd.mode === "away" ? "away" : "stand";
-    if (pd.mode === "away") return;
-    g.position.y *= 1 - Math.min(1, dt * 6);
-    if (look) g.rotation.y += wrap(Math.atan2(player.x - g.position.x, player.z - g.position.z) - g.rotation.y) * Math.min(1, dt * 4);
-    this.anim(pd, dt, 0, 1); sitPose(pd, pd.sitK);
+  // trouble: standing, turned to face you
+  watch(pd, dt, player) {
+    const g = pd.h.group; g.position.y = 0;
+    g.rotation.y += wrap(Math.atan2(player.x - g.position.x, player.z - g.position.z) - g.rotation.y) * Math.min(1, dt * 4);
+    this.anim(pd, dt, 0); const B = this.body(pd); if (B && B.ok) B.reset();
   }
 }

@@ -13,7 +13,8 @@
    quads shouldn't crawl), nothing laid flat on anything else. */
 import * as THREE from "three";
 import { flat } from "./ps1.js?v=dev";
-import { Nav, Routines, sitPose, hipHeight } from "./routines.js?v=dev";
+import { Nav, Routines } from "./routines.js?v=dev";
+import { Body, SIT_DOWN, STAND_UP } from "./body.js?v=dev";
 /* the island's channels: each a loop on one clock (see "television") */
 const CHANNELS = [{ n: 2, name: "WMK 6", list: ["news", "cola"] }, { n: 4, name: "SPIN CITY", list: ["spin", "lawyer"] }, { n: 6, name: "PIER PATROL", list: ["gull", "cola"] },
   { n: 11, name: "SEAGRAPE CLASSICS", list: ["movie"] }, { n: 13, name: "AFTER HOURS", list: ["lawyer", "cola"] }];
@@ -298,27 +299,30 @@ export class Interiors {
     }
     return best;
   }
+  /* sitting down to watch is a walk to the seat, a turn, the sit-down (body.js), and only then the camera easing onto
+     the screen; getting up is the camera easing back first, then the stand-up. Phases: walk, turn, down, seated, up. */
   startWatch(a) {
     const I = this.inside, sx = I.ox + a.x, sz = I.oz + a.z, fx = Math.sin(a.face || 0), fz = Math.cos(a.face || 0);
     let T = null, bs = -1; for (const t of this.tvs) { const dx = t.pos.x - sx, dz = t.pos.z - sz, d = Math.hypot(dx, dz) || 1, sc = (dx * fx + dz * fz) / d / (1 + d * 0.05); if (sc > bs) { bs = sc; T = t; } }
     if (!T) return;
     if (I.rout) I.rout.busy.add(a);
-    const P = this.player; P.vel.set(0, 0, 0); P.yaw = a.face || 0; P.pos.set(sx - fx * 0.12, 0, sz - fz * 0.12);
-    this.watch = { a, T, k: 0, out: false, from: this.camera.position.clone(), look: new THREE.Vector3() };
+    const off = a.seat > 0.7 ? 0.2 : 0.47, stand = new THREE.Vector3(sx + fx * off, 0, sz + fz * off);
+    const P = this.player; P.vel.set(0, 0, 0);
+    this.watch = { a, T, k: 0, out: false, look: new THREE.Vector3(), phase: P.pos.distanceTo(stand) > 0.12 ? "walk" : "turn", st: 0, stand, off, face: a.face || 0, tSeat: 0 };
     if (!this.bar) { this.bar = document.createElement("div"); this.bar.style.cssText = "position:absolute;left:50%;bottom:7%;transform:translateX(-50%);font:700 14px Archivo,sans-serif;color:#F7F2EA;background:rgba(10,10,10,.6);padding:8px 14px;border-radius:6px;white-space:nowrap;pointer-events:none;z-index:30;opacity:0;transition:opacity .3s"; this.root.appendChild(this.bar); }
-    this.bar.innerHTML = T.cinema ? "<kbd>E</kbd> Get up" : "<kbd>A</kbd> <kbd>D</kbd> Channel &nbsp;·&nbsp; <kbd>1</kbd>-<kbd>5</kbd> Pick one &nbsp;·&nbsp; <kbd>E</kbd> Get up"; this.bar.style.opacity = 1;
-    if (!T.cinema) this.osd(T);
-    if (this.sfx.sample) { this.sfx.sample("sofa", { vol: 0.55 }); if (!T.cinema) setTimeout(() => { this.sfx.sample("remote", { vol: 0.6 }); this.sfx.sample("tvon", { vol: 0.35, dist: 2 }); }, 700); }
+    this.bar.innerHTML = T.cinema ? "<kbd>E</kbd> Get up" : "<kbd>A</kbd> <kbd>D</kbd> Channel &nbsp;\u00b7&nbsp; <kbd>1</kbd>-<kbd>5</kbd> Pick one &nbsp;\u00b7&nbsp; <kbd>E</kbd> Get up";
   }
   endWatch(now) {
     const W = this.watch; if (!W) return;
-    if (now) { if (this.inside && this.inside.rout) this.inside.rout.busy.delete(W.a); this.watch = null; if (this.bar) this.bar.style.opacity = 0; this.player.pos.y = 0; return; }
+    if (now) { if (this.inside && this.inside.rout) this.inside.rout.busy.delete(W.a); this.watch = null; if (this.bar) this.bar.style.opacity = 0; this.player.speed = 0; return; }
+    if (W.phase === "walk" || W.phase === "turn") { this.endWatch(true); return; }   // not sat down yet: just don't
     W.out = true; if (this.bar) this.bar.style.opacity = 0;
   }
   get watching() { return !!this.watch; }
   // the controls while seated; true when a key was used
   watchKeys(input) {
-    const W = this.watch; if (!W || W.out) return true;
+    const W = this.watch; if (!W) return true;
+    if (W.out || W.phase !== "seated") { if (input.hit("KeyE") && (W.phase === "walk" || W.phase === "turn")) this.endWatch(); return true; }
     if (input.hit("KeyE") || input.hit("Space") || input.hit("KeyW") || input.hit("KeyS")) { this.endWatch(); return true; }
     let dir = 0; if (input.hit("KeyA") || input.hit("ArrowLeft")) dir = -1; if (input.hit("KeyD") || input.hit("ArrowRight")) dir = 1;
     if (input.wheel) { dir = Math.sign(input.wheel); input.wheel = 0; }
@@ -326,21 +330,45 @@ export class Interiors {
     for (let k = 1; k <= CHANNELS.length; k++) if (input.hit("Digit" + k)) this.tvChannel(W.T, k - 1);
     return true;
   }
-  // after the clips: Hollis on the seat
+  // before the clips: where she is and how fast she's going (the walk to the seat, the turn)
+  watchStep(dt) {
+    const W = this.watch; if (!W) return;
+    const P = this.player; P.vel.set(0, 0, 0);
+    if (W.phase === "walk") {
+      const d = new THREE.Vector3(W.stand.x - P.pos.x, 0, W.stand.z - P.pos.z), L = d.length(), sp = Math.min(1.25, 0.6 + L * 2);
+      if (L < 0.03) { P.pos.x = W.stand.x; P.pos.z = W.stand.z; W.phase = "turn"; P.speed = 0; }
+      else { const k = Math.min(L, sp * dt) / L; P.pos.x += d.x * k; P.pos.z += d.z * k; P.speed = sp; let dy = Math.atan2(d.x, d.z) - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); P.yaw += dy * Math.min(1, dt * 9); }
+    } else P.speed = 0;
+    if (W.phase === "turn") {
+      let dy = W.face - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      P.yaw += Math.sign(dy) * Math.min(Math.abs(dy), dt * (1.4 + Math.abs(dy) * 3.2));
+      if (Math.abs(dy) < 0.015) { P.yaw = W.face; W.phase = "down"; W.st = 0; }
+    }
+    P.pos.y = 0;
+  }
+  // after the clips: her body in the move or on the seat
   poseWatcher(dt) {
     const W = this.watch; if (!W) return;
     const P = this.player, model = P.model; if (!model) return;
-    if (!W.body) { const bones = []; model.traverse((o) => { if (o.isBone) bones.push(o); }); W.body = { h: { group: model, bones } }; }
-    W.sit = Math.max(0, Math.min(1, (W.sit || 0) + (W.out ? -dt * 2.5 : dt * 2.2)));
-    model.position.copy(P.pos); model.rotation.set(0, P.yaw, 0);
-    sitPose(W.body, W.sit);
-    model.position.y = ((W.a.seat ?? 0.45) + 0.08 - hipHeight(W.body)) * W.sit;
+    const B = Body.of(model); if (!B || !B.ok) { if (W.phase === "down") W.phase = "seated"; if (W.phase === "up") this.endWatch(true); return; }
+    model.position.copy(P.pos); model.rotation.set(0, P.yaw, 0); model.updateMatrixWorld(true);
+    B.reset();
+    if (W.phase === "walk" || W.phase === "turn") return;
+    W.st += dt; W.tSeat += dt;
+    if (W.phase === "down" && W.st > SIT_DOWN * 0.82 && !W.thud) { W.thud = true; if (this.sfx.sample) this.sfx.sample("sofa", { vol: 0.5 }); }
+    B.sit({ phase: W.phase === "down" ? "down" : W.phase === "up" ? "up" : "seated", t: W.st, seat: W.a.seat ?? 0.45, back: W.off, hands: 1, tSeated: W.tSeat, recline: -0.12 });
+    if (W.phase === "down" && W.st >= SIT_DOWN) {
+      W.phase = "seated"; W.st = 0; this.bar.style.opacity = 1;
+      if (!W.T.cinema) { this.osd(W.T); if (this.sfx.sample) setTimeout(() => { if (this.watch === W && !W.out) { this.sfx.sample("remote", { vol: 0.6 }); this.sfx.sample("tvon", { vol: 0.35, dist: 2 }); } }, 450); }
+    }
+    if (W.phase === "up" && W.st >= STAND_UP) this.endWatch(true);
   }
   // after the follow camera: ease in on the screen, room and all; ease back out when you get up
   watchCam(camera, dt) {
     const W = this.watch; if (!W) return;
-    W.k = Math.max(0, Math.min(1, W.k + (W.out ? -dt * 1.6 : dt * 0.9)));
-    if (W.out && W.k <= 0 && (W.sit || 0) <= 0) { this.endWatch(true); return; }
+    W.k = Math.max(0, Math.min(1, W.k + (W.out || W.phase !== "seated" ? -dt * 1.4 : dt * 0.7)));
+    if (W.out && W.phase === "seated" && W.k <= 0) { W.phase = "up"; W.st = 0; if (this.sfx.sample) this.sfx.sample("sofa", { vol: 0.35, rate: 1.1 }); }
+    if (W.k <= 0) return;
     const T = W.T, fov = THREE.MathUtils.degToRad(camera.fov), dist = Math.max(T.hv / 0.5, T.wv / 0.5 / camera.aspect) / (2 * Math.tan(fov / 2));
     const s = W.a, I = this.inside, sx = I.ox + s.x, sz = I.oz + s.z;
     const away = new THREE.Vector3(sx - T.pos.x, 0, sz - T.pos.z); if (away.lengthSq() < 0.01) away.copy(T.n); away.normalize();
@@ -720,7 +748,7 @@ const FURNISH = {
     // -- entry
     rug(o, 5.35, 6.65, 0.12, 1.1, "#6a4a32");
     legs(7.2, 8.4, 0.06, 0.46, 0.8); B(7.18, 8.42, 0.8, 0.85, 0.04, 0.48, "#6a4a32", { tex: "wooddark" }); B(7.4, 7.7, 0.85, 0.92, 0.15, 0.35, "#b8643a", nb);   // console, the key bowl (the keys are homelife's)
-    B(7.72, 8.28, 0.85, 1.62, 0.12, 0.2, "#6a4a32", nb); B(7.77, 8.23, 0.9, 1.57, 0.2, 0.205, "#9fb8c8", { glow: true, solid: false });   // a standing mirror
+    B(7.72, 8.28, 0.85, 1.62, 0.12, 0.2, "#6a4a32", nb); B(7.77, 8.23, 0.9, 1.57, 0.212, 0.218, "#9fb8c8", { glow: true, solid: false });   // a standing mirror
     B(8.7, 9.1, 0, 0.04, 0.2, 0.6, "#2a2018", nb); B(8.88, 8.92, 0.04, 1.78, 0.38, 0.42, "#4a3424", nb); for (const [dx, dz] of [[0.12, 0], [-0.12, 0], [0, 0.12]]) B(8.9 + dx - 0.015, 8.9 + dx + 0.015, 1.62, 1.66, 0.4 + dz - 0.015, 0.4 + dz + 0.015, "#c9a14a", nb);   // the coat stand
     B(8.76, 9.04, 1.66, 1.82, 0.27, 0.53, "#c8b898", nb);   // her cap on top
     o.act("use", 8.15, 0.95, { y: 0.02, face: Math.PI, does: "ready", label: "Get ready" });
@@ -737,7 +765,7 @@ const FURNISH = {
       for (let k = 0; k < 3; k++) { const za = z0 + 0.14 + k * (len - 0.28) / 3, zb = za + (len - 0.28) / 3 - 0.03; B(x0 + 0.04, x0 + 0.68, 0.3, 0.45, za, zb, c, { tex: "fabric", uvs: 3, shade: 1.05, solid: false }); B(x0 + 0.64, x0 + 0.86, 0.45, 0.88, za, zb, c, { tex: "fabric", uvs: 3, shade: 0.92, solid: false }); o.act("sit", x0 + 0.36, (za + zb) / 2, { y: 0.32, seat: 0.45, face: -Math.PI / 2, does: "watch" }); }
       B(x0 + 0.7, x0 + 0.9, 0.3, 0.95, z0, z0 + len, c, { tex: "fabric", uvs: 3, shade: 0.85, solid: false });
       for (const z of [z0, z0 + len - 0.14]) B(x0, x0 + 0.9, 0.3, 0.62, z, z + 0.14, c, { tex: "fabric", uvs: 3, shade: 0.95, solid: false });
-      B(x0 + 0.1, x0 + 0.5, 0.45, 0.72, z0 + 0.2, z0 + 0.5, "#c9a14a", { tex: "fabric", uvs: 4, solid: false });   // a cushion
+      B(x0 + 0.42, x0 + 0.68, 0.62, 0.86, z0 + 0.015, z0 + 0.13, "#c9a14a", { tex: "fabric", uvs: 4, solid: false });   // a cushion, propped in the corner against the arm
       B(x0 + 0.06, x0 + 0.12, 0, 0.08, z0 + 0.06, z0 + 0.12, "#2a2018", nb); B(x0 + 0.78, x0 + 0.84, 0, 0.08, z0 + len - 0.12, z0 + len - 0.06, "#2a2018", nb); }
     legs(1.6, 2.4, 2.8, 3.8, 0.38); B(1.56, 2.44, 0.38, 0.44, 2.76, 3.84, "#ffffff", { tex: "woodlight", solid: true });   // coffee table
     B(1.75, 1.97, 0.44, 0.46, 2.95, 3.25, "#c23b2a", nb); B(1.78, 1.98, 0.46, 0.475, 3.0, 3.28, "#2f5d8c", nb);   // magazines

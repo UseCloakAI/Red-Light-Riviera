@@ -386,7 +386,7 @@ export async function start(o) {
     if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
     if (homeLife.active) { player.animate(dw); homeLife.pose(dt); }
-    else if (interiors.watching) { player.animate(dw); interiors.poseWatcher(dt); }
+    else if (interiors.watching) { interiors.watchStep(dt); player.animate(dw); interiors.poseWatcher(dt); }
     else if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);

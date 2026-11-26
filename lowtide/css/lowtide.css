@@ -239,6 +239,8 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .hud.cine::before,.hud.cine::after{height:11vh}
 /* home cutscenes keep the notification box, below the top bar; a skip key bottom right */
 .hud.cine.keephelp>.help.on{opacity:1!important;translate:0 0;top:calc(11vh + 18px)}
+.hud.cine>.wardrobe-menu{opacity:1!important}
+.wardrobe-menu kbd{font:700 11px/1 var(--fu);padding:2px 5px;border:1px solid rgba(247,242,234,.5);border-radius:3px}
 .cs-skip{position:absolute;right:28px;bottom:calc(11vh + 16px);font:700 12px/1 var(--fu);letter-spacing:.1em;text-transform:uppercase;color:#F7F2EA;opacity:.8;z-index:8}
 /* the E over a car's door handle: a key cap on a little stem, following the handle */
 /* health: a bar under the radar; the death screen */
