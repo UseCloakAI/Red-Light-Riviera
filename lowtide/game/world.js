@@ -241,7 +241,7 @@ export async function buildWorld(scene, opts = {}) {
   const trimmed = (e, s0, s1, step = 3) => { const tr = { pts: [], cum: [0] }; for (let s = s0; ; s += Math.min(step, Math.max(0.5, s1 - s))) { const p = at(e.pl, Math.min(s, s1)); tr.pts.push({ x: p.x, z: p.z }); if (s >= s1) break; } for (let i = 1; i < tr.pts.length; i++) tr.cum.push(tr.cum[i - 1] + Math.hypot(tr.pts[i].x - tr.pts[i - 1].x, tr.pts[i].z - tr.pts[i - 1].z)); return tr; };
   for (const e of roads.edges) {
     const c = COL[e.kind] ?? 1, A = roads.nodes.find((n) => n.id === e.a), Bn = roads.nodes.find((n) => n.id === e.b);
-    const r0 = A.deg > 1 ? discR.get(A) - 0.6 : 0, r1 = Bn.deg > 1 ? discR.get(Bn) - 0.6 : 0;
+    const r0 = A.deg > 1 ? A.r - 0.3 : 0, r1 = Bn.deg > 1 ? Bn.r - 0.3 : 0;
     if (e.L - r1 > r0 + 0.5) { const tr = trimmed(e, r0, e.L - r1); if (tr.pts.length > 1) strip(RB, tr, -e.w / 2, e.w / 2, ROAD_Y, c / 3 + 0.001, (c + 1) / 3 - 0.001, 8, white); }
     if (e.s1 > e.s0 + 0.5) {
       const tr = trimmed(e, e.s0, e.s1);
@@ -249,11 +249,16 @@ export async function buildWorld(scene, opts = {}) {
     }
   }
   // corners and dead-end turning circles: pavement between an inner and an outer curve
+  // drawn once (the pavement is double-sided), textured in world space so the slabs run on from the straight
+  // pavements, and the kerb face lit as a wall facing the road (it was two copies fighting, and a face with no normal)
   const fan = (inner, outer, y) => {
+    const uv = (q) => [q[0] / 3, q[2] / 3];
     for (let i = 1; i < inner.length; i++) {
       const a = [inner[i - 1].x, y, inner[i - 1].z], b = [inner[i].x, y, inner[i].z], c = [outer[i].x, y, outer[i].z], d = [outer[i - 1].x, y, outer[i - 1].z];
-      push(WB, a, b, c, d, [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]], white); push(WB, a, d, c, b, [0, 1, 0], [[0, 0], [0, 1], [1, 1], [1, 0]], white);
-      push(WB, [a[0], GROUND_Y, a[2]], [b[0], GROUND_Y, b[2]], b, a, [0, 0, 0], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol); push(WB, [b[0], GROUND_Y, b[2]], [a[0], GROUND_Y, a[2]], a, b, [0, 0, 0], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol);
+      push(WB, a, b, c, d, [0, 1, 0], [uv(a), uv(b), uv(c), uv(d)], white);
+      const ex = b[0] - a[0], ez = b[2] - a[2], el = Math.hypot(ex, ez) || 1; let nx = -ez / el, nz = ex / el;
+      if (nx * ((c[0] + d[0]) / 2 - (a[0] + b[0]) / 2) + nz * ((c[2] + d[2]) / 2 - (a[2] + b[2]) / 2) > 0) { nx = -nx; nz = -nz; }   // toward the road
+      push(WB, [a[0], GROUND_Y, a[2]], [b[0], GROUND_Y, b[2]], b, a, [nx, 0, nz], [[0, 0], [1, 0], [1, 0.1], [0, 0.1]], kerbCol);
     }
   };
   for (const c of roads.corners) fan(c.inner, c.outer, KERB);
@@ -262,12 +267,28 @@ export async function buildWorld(scene, opts = {}) {
   const walkMat = L({ map: walkTex, vertexColors: true, side: THREE.DoubleSide, ...flat() });
   add(new THREE.Mesh(geometry(WB), walkMat), false, true);
   // junctions: plain asphalt discs over the ribbon ends
+  /* junctions: the asphalt between the kerb corners, exactly: out a little way along each road (under the
+     zebra), then round the next corner's kerb line. Dead ends keep a disc under the turning circle. */
   const discs = [];
-  for (const n of roads.nodes) discs.push(new THREE.CircleGeometry(discR.get(n), 32).rotateX(-Math.PI / 2).translate(n.x, DISC_Y, n.z));   // the roadway only; kerb corners sit over the rest
+  const cornersOf = new Map(); for (const c of roads.corners) { if (!cornersOf.has(c.n)) cornersOf.set(c.n, []); cornersOf.get(c.n).push(c); }
+  for (const n of roads.nodes) {
+    if (n.deg === 1) { discs.push(new THREE.CircleGeometry(discR.get(n), 24).rotateX(-Math.PI / 2).translate(n.x, DISC_Y, n.z).toNonIndexed()); continue; }
+    const cs = cornersOf.get(n) || [], ring = [];
+    n.ends.forEach((A, k) => {
+      const wa = A.e.w / 2, ox = A.dir.x * 0.4, oz = A.dir.z * 0.4;
+      ring.push([A.p.x - A.n.x * wa + ox, A.p.z - A.n.z * wa + oz], [A.p.x + A.n.x * wa + ox, A.p.z + A.n.z * wa + oz]);
+      const c = cs[k]; if (c) for (const q of c.inner) ring.push([q.x, q.z]);
+    });
+    const pos = [];
+    for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; pos.push(n.x, DISC_Y, n.z, b[0], DISC_Y, b[1], a[0], DISC_Y, a[1]); }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(pos.map((v, i) => (i % 3 === 1 ? 1 : 0)), 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2));
+    discs.push(g);
+  }
   const plainRoad = ptex(canvas(16, 16, (g) => { g.fillStyle = "#3d3e47"; g.fillRect(0, 0, 16, 16); for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${R() < .5 ? "0,0,0" : "255,255,255"},${0.12 * R()})`; g.fillRect((R() * 16) | 0, (R() * 16) | 0, 1, 1); } }));
-  plainRoad.repeat.set(0.25, 0.25);
-  const discGeo = mergeGeometries(discs); { const p = discGeo.attributes.position, uv = discGeo.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, p.getX(k) / 4, p.getZ(k) / 4); }
-  add(new THREE.Mesh(discGeo, L({ map: plainRoad, ...flat(-1) })), false, true);
+  plainRoad.repeat.set(1, 1);   // ~35 cm a texel, like the road ribbons
+  const discGeo = mergeGeometries(discs); { const p = discGeo.attributes.position, uv = discGeo.attributes.uv; for (let k = 0; k < p.count; k++) uv.setXY(k, p.getX(k) / 5.6, p.getZ(k) / 5.6); }
+  add(new THREE.Mesh(discGeo, L({ map: plainRoad, side: THREE.DoubleSide, ...flat(-1) })), false, true);
   // zebra crossings
   const zeb = [];
   for (const z of roads.zebras) for (let k = -z.w / 2 + 0.8; k < z.w / 2 - 0.4; k += 1.2) zeb.push({ x: z.x + Math.cos(z.ang) * k, y: ZEBRA_Y, z: z.z - Math.sin(z.ang) * k, a: z.ang });
@@ -473,7 +494,7 @@ export async function buildWorld(scene, opts = {}) {
   }
   // traffic signals on the avenues' junctions
   for (const n of roads.nodes) if (n.deg >= 3 && n.ends.some((d) => d.e.kind === "avenue")) for (const d of n.ends) {
-    const o = d.e.w / 2 + 0.7, x = d.p.x + d.n.x * o, z = d.p.z + d.n.z * o; signals.push({ x, z, a: Math.atan2(-d.dir.x, -d.dir.z), go: (n.ends.indexOf(d) % 2) === 0, node: n, end: n.ends.indexOf(d) }); grid.circle(x, z, 0.15, 6);
+    const o = d.e.w / 2 + 0.7, x = d.p.x + d.n.x * o, z = d.p.z + d.n.z * o; signals.push({ x, z, a: Math.atan2(-d.n.x, -d.n.z), go: (n.ends.indexOf(d) % 2) === 0, node: n, end: n.ends.indexOf(d) }); grid.circle(x, z, 0.15, 6);
   }
   for (const c of cars) c.obb = grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);   // a turn of a about y puts local x on angle -a
   for (const t of trees) grid.circle(t.x, t.z, 0.35, 8);
@@ -483,6 +504,13 @@ export async function buildWorld(scene, opts = {}) {
   const round = (x, z, r) => new Frame(x + r, z - r, 0, 1);   // a frame whose (r, r) is (x, z)
   TY.tank(kit, round(10, 10, 4.5), 4.5, 0.7, new THREE.Color("#d8d2c4")); TY.tank(kit, round(10, 10, 2), 2, 1.8, new THREE.Color("#d8d2c4")); TY.tank(kit, round(10, 10, 0.8), 0.8, 3, new THREE.Color("#e8e2d6"));
   grid.circle(10, 10, 4.6, 1.2);
+  { // the plaza: radial paving inside the ring road's inner pavement, a step down from it
+    const pave = ptex(canvas(64, 64, (g) => { g.fillStyle = "#cfc6b4"; g.fillRect(0, 0, 64, 64); speckle(g, 64, 64, 260, 0.1, R); g.fillStyle = "rgba(90,80,64,.35)"; for (let k = 0; k < 64; k += 16) { g.fillRect(k, 0, 1, 64); g.fillRect(0, k, 64, 1); } }));
+    const pg = new THREE.RingGeometry(4.5, 14.05, 48, 6).rotateX(-Math.PI / 2).translate(10, 0.004, 10);
+    { const q = pg.attributes.position, uv = pg.attributes.uv; for (let k = 0; k < q.count; k++) { const dx = q.getX(k) - 10, dz = q.getZ(k) - 10; uv.setXY(k, (Math.atan2(dz, dx) / (Math.PI * 2) + 0.5) * 24, Math.hypot(dx, dz) / 2.5); } }
+    add(new THREE.Mesh(pg, L({ map: pave, ...flat(1) })), false, true);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(14.02, 14.02, KERB + 0.02, 48, 1, true).translate(10, KERB / 2 - 0.005, 10), L({ color: kerbCol, side: THREE.DoubleSide })), false, true);
+  }
   add(new THREE.Mesh(new THREE.CircleGeometry(4.2, 16).rotateX(-Math.PI / 2).translate(10, 0.62, 10), kit.M.water));
   for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; palms.push([10 + Math.cos(a) * 11, 10 + Math.sin(a) * 11]); benches.push({ x: 10 + Math.cos(a + 0.3) * 8.2, z: 10 + Math.sin(a + 0.3) * 8.2, a: Math.atan2(-Math.cos(a + 0.3), -Math.sin(a + 0.3)) + Math.PI }); }
 
@@ -495,10 +523,20 @@ export async function buildWorld(scene, opts = {}) {
   { const pts = []; for (const [a, b, dy] of wires) for (let k = 0; k < 4; k++) { const t0 = k / 4, t1 = (k + 1) / 4, y = (t) => dy - Math.sin(t * Math.PI) * 0.7; pts.push(a[0] + (b[0] - a[0]) * t0, y(t0), a[1] + (b[1] - a[1]) * t0, a[0] + (b[0] - a[0]) * t1, y(t1), a[1] + (b[1] - a[1]) * t1); }
     if (pts.length) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)); scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x1a1a1e }))); } }
   // traffic signals: a pole, an arm out over the road, a head with one lamp lit
-  instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.08, 0.1, 5.5, 6).translate(0, 2.75, 0), new THREE.BoxGeometry(0.1, 0.1, 4).translate(0, 5.4, 2), new THREE.BoxGeometry(0.35, 1, 0.3).translate(0, 4.9, 3.6)]), dark, signals);
+  /* in each signal's frame: +z runs from the pole out over the road, the lamps face -x (up the road, at the
+     cars coming in). A tapered mast with a plinth, the arm and its brace, a hanger, the head on a backplate,
+     a visor over each lamp, and a small repeater head low on the pole for whoever stops at the line */
+  const SH = { y: [5.24, 4.92, 4.6], z: 4.1, x: -0.16 };
+  const sigGeo = [new THREE.CylinderGeometry(0.085, 0.12, 5.9, 8).translate(0, 2.95, 0), new THREE.BoxGeometry(0.34, 0.35, 0.34).translate(0, 0.17, 0),
+    new THREE.CylinderGeometry(0.05, 0.075, 4.6, 6).rotateX(Math.PI / 2).translate(0, 5.72, 2.3), new THREE.CylinderGeometry(0.025, 0.025, 1.6, 4).rotateX(-0.62).translate(0, 5.25, 0.65),
+    new THREE.BoxGeometry(0.05, 0.25, 0.05).translate(0, 5.62, SH.z), new THREE.BoxGeometry(0.28, 1.04, 0.36).translate(0, 4.92, SH.z), new THREE.BoxGeometry(0.03, 1.3, 0.62).translate(0.15, 4.92, SH.z),
+    new THREE.BoxGeometry(0.26, 0.68, 0.26).translate(0.03, 2.7, 0.25)];
+  for (const y of SH.y) sigGeo.push(new THREE.BoxGeometry(0.16, 0.03, 0.27).translate(SH.x - 0.07, y + 0.13, SH.z), new THREE.BoxGeometry(0.16, 0.16, 0.02).translate(SH.x - 0.07, y + 0.05, SH.z - 0.135), new THREE.BoxGeometry(0.16, 0.16, 0.02).translate(SH.x - 0.07, y + 0.05, SH.z + 0.135));
+  instanced(scene, mergeGeometries(sigGeo.map((g) => g.index ? g.toNonIndexed() : g)), dark, signals);
+  instanced(scene, new THREE.BoxGeometry(0.03, 0.2, 0.2).translate(SH.x, SH.y[1], SH.z), L({ color: 0x4a3410 }), signals);   // the amber, unlit
   // red and green lamps for every signal; traffic.js switches them by hiding one of each pair
-  const redMesh = instanced(scene, new THREE.BoxGeometry(0.2, 0.2, 0.05).translate(0, 5.2, 3.44), new THREE.MeshBasicMaterial({ color: 0xff3b2a }), signals);
-  const greenMesh = instanced(scene, new THREE.BoxGeometry(0.2, 0.2, 0.05).translate(0, 4.6, 3.44), new THREE.MeshBasicMaterial({ color: 0x3bff8a }), signals);
+  const redMesh = instanced(scene, new THREE.BoxGeometry(0.03, 0.2, 0.2).translate(SH.x, SH.y[0], SH.z), new THREE.MeshBasicMaterial({ color: 0xff3b2a }), signals);
+  const greenMesh = instanced(scene, new THREE.BoxGeometry(0.03, 0.2, 0.2).translate(SH.x, SH.y[2], SH.z), new THREE.MeshBasicMaterial({ color: 0x3bff8a }), signals);
   // round trees: a trunk and a low-poly canopy, two greens
   const treeTrunk = new THREE.CylinderGeometry(0.15, 0.22, 3, 6).translate(0, 1.5, 0), canopy = new THREE.IcosahedronGeometry(2.4, 0).scale(1, 0.85, 1).translate(0, 4.4, 0);
   instanced(scene, treeTrunk, L({ color: 0x6a5240 }), trees);
@@ -525,7 +563,7 @@ export async function buildWorld(scene, opts = {}) {
       const patch = Math.sin(x * 0.07) * Math.sin(z * 0.09) + Math.sin(x * 0.023 + z * 0.031) > 0.9;   // worn patches
       let c = b;
       if (d === "midtown" && patch) c = [104, 118, 72];
-      if (d === "park" && Math.hypot(x - 10, z - 10) < 17) c = ((Math.floor(x / 1.5) + Math.floor(z / 1.5)) % 2) ? [196, 186, 168] : [178, 166, 146];   // the plaza
+      if (d === "park" && Math.hypot(x - 10, z - 10) < 17) c = [196, 186, 168];   // under the plaza
       if (d === "port" && h > 0.985) c = [60, 58, 54];
       const k = (j * GW + i) * 4; D[k] = c[0] + n; D[k + 1] = c[1] + n; D[k + 2] = c[2] + n; D[k + 3] = 255;
     }
