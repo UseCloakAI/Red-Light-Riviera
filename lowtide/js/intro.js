@@ -1,4 +1,4 @@
-/* Lowtide intro: Cloak Studios slate, match cut, title, menus.
+/* Lowtide intro: Cloak Studios cold open, title, menus.
    Live, the slate and the opening ocean play as a pre-rendered film with a
    baked soundtrack (cheap on any device); the logo, menus and UI stay live.
    The same choreography below renders that film: ?render=intro|ocean puts
@@ -20,18 +20,23 @@
 
   var el = {
     gate: $("#gate"), film: $("#film"), studio: $("#studio"), creator: $("#creator"), loading: $("#loading"), game: $("#game"), title: $("#title"), pause: $("#pause"), iris: $("#iris"),
-    grid: $("#studio .grid"), orb: $("#studio .orb"), shadow: $("#studio .orb-shadow"),
-    railL: $("#studio .side.l .rail"), railR: $("#studio .side.r .rail"), lids: $("#studio .lids"), look: $("#studio .look"), sub: $("#studio .studio-sub"),
+    stage: $("#studio .st-stage"), glow: $("#studio .st-glow"), streak: $("#studio .st-streak"), cam: $("#studio .st-cam"), kick: $("#studio .st-kick"),
+    lockup: $("#studio .lockup"), wm: $("#studio .wm"), lids: $("#studio .lids"), sub: $("#studio .studio-sub"),
     sea: $("#sea"), wrap: $(".logo-wrap"), lt: $(".lt"), below: $(".lt-below"), refl: $(".lt-refl"), line: $(".lt-line"), tag: $(".lt-tag"),
     credit: $(".credit"), press: $(".press"), barT: $(".bar.t"), barB: $(".bar.b"), scrim: $(".scrim"),
     gateBtn: $("#start"), flash: $("#flash"), selBar: $(".sel-bar"), foot: $("#title .hud-foot"), ptop: $(".p-top"), pbody: $(".p-body"), ink: $(".p-ink")
   };
+  // the light sweep rides on two copies of the lockup, each masked to a moving band
+  el.glints = ["sharp", "soft"].map(function (k) {
+    var g = el.lockup.cloneNode(true); g.classList.add("glint", k); g.setAttribute("aria-hidden", "true");
+    el.kick.appendChild(g); return g;
+  });
   var items = $$(".main-menu li"), tabs = $$(".p-tabs button"), panels = $$(".p-panel");
   var layers = [$$(".lt-above span"), $$(".lt-below span"), $$(".lt-refl span")];
 
   var RENDER = new URLSearchParams(location.search).get("render"), VCLOCK = null, pending = [];
   function clock() { return VCLOCK === null ? performance.now() : VCLOCK; }
-  var T0 = clock(), live = [], timers = [], state = "gate", sel = 0, tab = 0, IR = {}, logoAnim = null, filmed = false;
+  var T0 = clock(), live = [], timers = [], state = "gate", sel = 0, tab = 0, logoAnim = null, filmed = false;
 
   /* ---- timeline helpers: all times are seconds on the cue sheet ---- */
   function cueNow() { return (clock() - T0) / 1000; }
@@ -70,83 +75,62 @@
     el.wrap.style.top = (horizonY() - (el.lt.offsetTop + el.line.offsetTop + 1)) + "px";
   }
 
-  /* ---- 1 · Cloak Studios ---- */
+  /* ---- 1 · Cloak Studios: a cold open ----
+     Black, a line of light gathering across the frame, then the boom and a
+     hard cut to the lockup. It pushes in slowly the whole time it holds, the
+     light rakes across it once, the orb blinks twice, and it all goes to black. */
   function slate() {
-    var c = C, apex = c.impact + 0.31;
-    play(el.grid, [{ opacity: 0 }, { opacity: 1 }], 1200, c.grid, E.out);
+    var c = C, s = c.slam, ease = "cubic-bezier(.45,0,.55,1)";
+    var r = el.wm.getBoundingClientRect();   // the streak runs through the middle of the letters
+    el.streak.style.top = (r.top + r.height * 0.52) + "px";
 
-    // falls asleep-eyed, stretched by speed; squash, one smaller bounce, settle
-    track(el.orb, [
-      { t: c.fall, transform: "translateY(-115vh) scale(.92,1.12)", easing: E.fall },
-      { t: c.impact, transform: "translateY(0) scale(.9,1.15)", easing: "ease-out" },
-      { t: c.impact + 0.06, transform: "translateY(0) scale(1.28,.74)", easing: E.lift },
-      { t: apex - 0.08, transform: "translateY(-21%) scale(.97,1.04)", easing: "cubic-bezier(.33,0,.67,1)" },
-      { t: apex, transform: "translateY(-23%) scale(1,1)", easing: "cubic-bezier(.5,0,1,.6)" },
-      { t: c.rebound, transform: "translateY(0) scale(.98,1.03)", easing: "ease-out" },
-      { t: c.rebound + 0.05, transform: "translateY(0) scale(1.1,.9)", easing: E.out },
-      { t: c.rebound + 0.18, transform: "translateY(0) scale(.97,1.03)", easing: "ease-in-out" },
-      { t: c.rebound + 0.32, transform: "translateY(0) scale(1,1)" }
-    ]);
-    track(el.shadow, [
-      { t: c.fall, transform: "scaleX(.2)", opacity: 0, easing: "ease-in" },
-      { t: c.impact, transform: "scaleX(1)", opacity: 0.16, easing: E.lift },
-      { t: c.impact + 0.06, transform: "scaleX(1.3)", opacity: 0.2, easing: "ease-out" },
-      { t: apex, transform: "scaleX(.78)", opacity: 0.08, easing: "ease-in" },
-      { t: c.rebound + 0.05, transform: "scaleX(1.12)", opacity: 0.17, easing: E.out },
-      { t: c.rebound + 0.32, transform: "scaleX(1)", opacity: 0.14 }
+    // in the dark: the line opens slowly, then races out to the edges and blows out on the hit
+    track(el.streak, [
+      { t: c.flare, opacity: 0, transform: "scale(.04,1)", easing: "cubic-bezier(.55,0,.85,.35)" },
+      { t: s - 0.03, opacity: 1, transform: "scale(1,1)", easing: "linear" },
+      { t: s, opacity: 1, transform: "scale(1.08,2.6)", easing: E.out },
+      { t: s + 0.6, opacity: 0, transform: "scale(1.2,.6)" }
     ]);
 
-    // the landing pushes the wordmark out from behind the orb; outer letters trail
-    play(el.railL, [{ transform: "translateX(102%)" }, { transform: "translateX(0)" }], 1050, c.unfurl, E.out);
-    play(el.railR, [{ transform: "translateX(-102%)" }, { transform: "translateX(0)" }], 1050, c.unfurl, E.out);
-    var bl = $$("b", el.railL), br = $$("b", el.railR);
-    [[bl[0], 30, 1250], [bl[1], 10, 1150], [br[0], -10, 1150], [br[1], -30, 1250]].forEach(function (x) {
-      play(x[0], [{ transform: "translateX(" + x[1] + "%)" }, { transform: "none" }], x[2], c.unfurl + 0.02, E.out);
+    // the hit: a hard cut in, over-exposed and split for a few frames, a small kick and shake
+    play(el.kick, [{ opacity: 0 }, { opacity: 1 }], 1, s, "linear");
+    track(el.kick, [
+      { t: s, transform: "scale(1.035)", filter: "brightness(2.3) blur(1.6px) drop-shadow(6px 0 0 rgba(255,70,40,.5)) drop-shadow(-6px 0 0 rgba(70,200,255,.42))", easing: E.out },
+      { t: s + 0.16, transform: "scale(1.012)", filter: "brightness(1.22) blur(0px) drop-shadow(1px 0 0 rgba(255,70,40,.12)) drop-shadow(-1px 0 0 rgba(70,200,255,.1))", easing: E.out },
+      { t: s + 0.8, transform: "scale(1)", filter: "brightness(1) blur(0px) drop-shadow(0px 0 0 rgba(255,70,40,0)) drop-shadow(0px 0 0 rgba(70,200,255,0))" }
+    ]);
+    track(el.kick, [
+      { t: s, translate: "0 4px" }, { t: s + 0.035, translate: "-3px -2px" }, { t: s + 0.07, translate: "2px 2px" },
+      { t: s + 0.11, translate: "-1px -1px" }, { t: s + 0.17, translate: "0 0" }
+    ]);
+    track(el.glow, [
+      { t: s - 0.01, opacity: 0, easing: E.out }, { t: s + 0.08, opacity: 1, easing: "ease-in-out" },
+      { t: s + 1.4, opacity: 0.62, easing: "ease-in-out" }, { t: c.fade, opacity: 0.7 }
+    ]);
+    // the slow push, the whole way through: Rockstar's patience
+    track(el.cam, [{ t: s, transform: "scale(1)" }, { t: c.dark, transform: "scale(1.075)" }]);
+    play(el.sub, [{ letterSpacing: ".78em", paddingLeft: ".78em" }, { letterSpacing: ".62em", paddingLeft: ".62em" }], (c.fade - s) * 1000, s, E.out);
+
+    // the light sweep, left to right; the soft bloom trails the sharp edge a touch
+    el.glints.forEach(function (g, i) {
+      play(g, [{ maskPosition: "100% 0" }, { maskPosition: "0% 0" }], 1150 + i * 120, c.sheen - i * 0.04, "cubic-bezier(.42,.05,.3,1)");
     });
 
-    // wakes up, looks around, blinks
-    play(el.lids, [{ transform: "scaleY(.12)" }, { transform: "scaleY(1.12)", offset: 0.6 }, { transform: "scaleY(1)" }], 240, c.eyesOpen, E.out);
-    play(el.look, [{ transform: "translate(0,0)" }, { transform: "translate(-2.4px,.4px)" }], 140, c.lookL, E.out);
-    play(el.look, [{ transform: "translate(-2.4px,.4px)" }, { transform: "translate(2.4px,.4px)" }], 190, c.lookR, E.io, "forwards");
-    play(el.look, [{ transform: "translate(2.4px,.4px)" }, { transform: "translate(0,0)" }], 150, c.lookC, E.out, "forwards");
-    blink(c.blink1, 200); blink(c.blink2, 160);
-    play(el.sub, [{ opacity: 0, letterSpacing: "1.15em", paddingLeft: "1.15em" }, { opacity: 0.9, letterSpacing: ".62em", paddingLeft: ".62em" }], 1300, c.studios, E.out);
+    // the blink: one, then a quicker second
+    blink(c.blink1, 190); blink(c.blink2, 150);
 
-    // exit: eyes shut, wind up, the orb swells over the whole frame
-    play(el.lids, [{ transform: "scaleY(1)" }, { transform: "scaleY(.12)" }], 90, c.eyesClose, E.in, "forwards");
-    play(el.orb, [{ transform: "scale(1,1)" }, { transform: "scale(1.07,.9)" }], 140, c.windup, E.out, "forwards");
-    play(el.railL, [{ transform: "translateX(0)" }, { transform: "translateX(-6%)" }], 560, c.iris, E.in, "forwards");
-    play(el.railR, [{ transform: "translateX(0)" }, { transform: "translateX(6%)" }], 560, c.iris, E.in, "forwards");
-    play(el.sub, [{ opacity: 0.9 }, { opacity: 0 }], 260, c.iris, E.in, "forwards");
-    cue(c.iris, irisOut);
+    // out: everything sinks to black
+    play(el.stage, [{ opacity: 1 }, { opacity: 0 }], (c.dark - c.fade) * 1000, c.fade, ease, "forwards");
   }
   function blink(s, ms) {
     play(el.lids, [{ transform: "scaleY(1)" }, { transform: "scaleY(.1)", offset: 0.35 }, { transform: "scaleY(.1)", offset: 0.5 }, { transform: "scaleY(1)" }], ms, s, "ease-in-out", "forwards");
   }
-  function irisOut() {
-    var r = el.orb.parentNode.getBoundingClientRect(), W = innerWidth, H = innerHeight;
-    IR.x = r.left + r.width / 2; IR.y = r.top + r.height / 2; IR.d = r.width * 0.92;
-    IR.D = 2 * Math.hypot(Math.max(IR.x, W - IR.x), Math.max(IR.y, H - IR.y)) + 80;
-    var st = el.iris.style;
-    st.left = IR.x + "px"; st.top = IR.y + "px"; st.width = st.height = IR.d + "px";
-    st.borderWidth = (r.width * 3.6 / 40) + "px"; st.display = "block";
-    el.orb.style.visibility = "hidden";
-    play(el.iris, [{ width: IR.d + "px", height: IR.d + "px" }, { width: IR.D + "px", height: IR.D + "px" }], (C.cover - C.iris) * 1000, C.iris, "cubic-bezier(.7,0,.25,1)", "forwards");
-    S.start(); S.exposure(0.5, 0);
-  }
 
-  /* ---- match cut: the orb becomes the sun ---- */
-  function matchCut() {
+  /* ---- the ocean comes up out of the black ---- */
+  function oceanUp() {
     show("title"); placeLogo();
-    S.exposure(1, 2600);
-    var s = S.sunRect();
-    play(el.iris, [
-      { left: IR.x + "px", top: IR.y + "px", width: IR.D + "px", height: IR.D + "px", backgroundColor: "#D44D2A", borderColor: "rgba(10,10,10,1)", opacity: 1 },
-      { borderColor: "rgba(10,10,10,0)", offset: 0.08 },
-      { opacity: 1, offset: 0.6 },
-      { left: s.x + "px", top: s.y + "px", width: s.r * 2 + "px", height: s.r * 2 + "px", backgroundColor: "#FFD6A2", borderColor: "rgba(10,10,10,0)", opacity: 0 }
-    ], (C.sunLand - C.cover) * 1000, C.cover, E.out, "forwards");
-    cue(C.sunLand + 0.05, function () { el.iris.style.display = "none"; });
+    S.start(); S.exposure(0.35, 0); S.exposure(1, 3600);
+    play(el.title, [{ opacity: 0 }, { opacity: 1 }], 2200, C.cover, "cubic-bezier(.45,0,.55,1)");
   }
 
   /* ---- 2 · Lowtide ---- */
@@ -188,10 +172,10 @@
     LT.cue.intro(ctx.currentTime + lead);
     show("studio");
     slate(); titleSeq();
-    cue(C.cover, matchCut);
+    cue(C.cover, oceanUp);
   }
   function reduced(Ta) {
-    show("studio"); LT.sfx.sting(Ta);
+    show("studio"); el.kick.style.opacity = 1; LT.sfx.slam(Ta);
     cue(2.6, function () { LT.cue.skip(); toTitle(); });
   }
   function toTitle() {
@@ -670,7 +654,7 @@
     VCLOCK = 0; T0 = 0; S.manual(clock, 0.03);
     window.__render = {
       ready: (document.fonts ? document.fonts.ready : Promise.resolve()).then(function () {
-        if (RENDER === "intro") { show("studio"); slate(); titleSeq(); cue(C.cover, matchCut); return { seconds: C.hit }; }
+        if (RENDER === "intro") { show("studio"); slate(); titleSeq(); cue(C.cover, oceanUp); return { seconds: C.hit }; }
         show("title"); placeLogo(); S.start(); S.exposure(1, 0); return { seconds: 12 };
       }),
       frame: function (t) {

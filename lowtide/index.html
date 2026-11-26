@@ -35,23 +35,29 @@
 <section id="film" class="scene"><video id="introVid" muted playsinline preload="auto"></video></section>
 
 <!-- the slate, live: used to render the film, and as a fallback if it can't load -->
+<!-- the on-dark lockup from the brand kit: CL(O)AK, the orb that blinks, STUDIOS -->
 <section id="studio" class="scene" aria-label="Cloak Studios">
-  <div class="grid"></div>
-  <div class="paper"></div>
-  <div class="lockup">
-    <div class="wm" aria-hidden="true">
-      <span class="side l"><span class="rail"><b>C</b><b>L</b></span></span>
-      <span class="orb-wrap">
-        <i class="orb-shadow"></i>
-        <span class="orb"><svg viewBox="0 0 40 40">
-          <path d="M20 3.5 C30 3 37 10.5 36.6 20.4 C36.2 30.4 29.4 36.8 19.6 36.5 C10 36.2 3.2 29.6 3.5 19.8 C3.8 10.6 10.6 4 20 3.5 Z" fill="#D44D2A" stroke="#0A0A0A" stroke-width="3.6" stroke-linejoin="round"/>
-          <g class="look"><g class="lids"><ellipse cx="14.2" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/><ellipse cx="25.8" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/></g></g>
-        </svg></span>
-      </span>
-      <span class="side r"><span class="rail"><b>A</b><b>K</b></span></span>
+  <div class="st-stage">
+    <div class="st-glow"></div>
+    <i class="st-streak"></i>
+    <div class="st-cam">
+      <div class="st-kick">
+        <div class="lockup">
+          <div class="wm" aria-hidden="true">
+            <span class="side">CL</span>
+            <span class="orb"><svg viewBox="0 0 40 40">
+              <path d="M20 3.5 C30 3 37 10.5 36.6 20.4 C36.2 30.4 29.4 36.8 19.6 36.5 C10 36.2 3.2 29.6 3.5 19.8 C3.8 10.6 10.6 4 20 3.5 Z" fill="#E5603E" stroke="#EDE8DF" stroke-width="3.6" stroke-linejoin="round"/>
+              <g class="lids"><ellipse cx="14.2" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/><ellipse cx="25.8" cy="19" rx="2.5" ry="3.6" fill="#0A0A0A"/></g>
+            </svg></span>
+            <span class="side">AK</span>
+          </div>
+          <div class="studio-sub">STUDIOS</div>
+        </div>
+      </div>
     </div>
-    <div class="studio-sub">STUDIOS</div>
   </div>
+  <div class="st-grain"></div>
+  <div class="st-vig"></div>
 </section>
 
 <!-- 2 · Lowtide title, main menu -->
@@ -178,7 +184,6 @@
   <footer class="hud-foot"><span class="by"><img src="assets/cloak-o.svg" alt="">Cloak Studios</span><span class="keys"><kbd>Q</kbd><kbd>E</kbd> Tabs <kbd>Esc</kbd> Back</span></footer>
 </section>
 
-<div id="iris" aria-hidden="true"></div>
 <div id="flash" aria-hidden="true"></div>
 
 <script src="js/settings.js?v=dev"></script>
