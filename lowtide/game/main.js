@@ -47,14 +47,15 @@ export async function start(o) {
 
   const SET = window.LT_SET || { get: () => undefined, on: () => {} };
   if ([200, 270, 360, 480].includes(SET.get("pixels"))) PS1.h = SET.get("pixels");   // the picture's line count (settings; read once)
-  configure(innerWidth / innerHeight);   // before any material exists: the vertex snap goes into every shader
+  const ps1Load = SET.get("ps1") !== false;
+  configure(innerWidth / innerHeight, ps1Load);   // before any material exists: the vertex snap goes into every shader
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", logarithmicDepthBuffer: true })   // log depth: the flat layers a few cm apart never fight, near or far;
   const ratio = 1;
   renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   o.mount.appendChild(renderer.domElement);
-  const rt = new THREE.WebGLRenderTarget(PS1.w, PS1.h, { type: THREE.HalfFloatType, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, depthBuffer: true });
+  const rt = new THREE.WebGLRenderTarget(PS1.w, PS1.h, { type: THREE.HalfFloatType, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, depthBuffer: true });   // the PS1 blit samples texel centres, so linear is exact there
   const blit = makeBlit(); blit.mat.uniforms.tSrc.value = rt.texture;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.3, 2600);
@@ -206,7 +207,7 @@ export async function start(o) {
   };
 
   // PS1: nearest-neighbour textures everywhere; a soft dark blob under each person instead of a real shadow
-  crunch(scene);
+  crunch(scene, SET.get("ps1") !== false);
   // people: sheen, clearcoat and the like are invisible at 270 lines and cost the biggest shaders; drop them so everyone shares a few small ones
   scene.traverse((m) => { const mt = m.material; if (mt && mt.isMeshPhysicalMaterial) { mt.sheen = 0; mt.clearcoat = 0; mt.iridescence = 0; mt.transmission = 0; mt.specularIntensity = 0.5; mt.needsUpdate = true; } });
   const blobGeo = new THREE.CircleGeometry(0.42, 10).rotateX(-Math.PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -234,15 +235,40 @@ export async function start(o) {
 
   let running = false, last = 0, t = 0, raf = 0;
   const perf = { n: 0, sum: 0, stage: 0 };
-  function adapt(dt) {   // after a warm-up, measure; if slow, step quality down
+  /* quality. High: everything. Low: the picture drawn smaller and fewer people and cars about.
+     Auto (the default): starts high and, if frames run slow after the warm-up, steps down (a smaller
+     crowd, then low, then smaller still) and says so. The PS1 look off: the picture at the screen's own
+     resolution, smooth textures, no colour cut (the vertex wobble goes on the next load). */
+  const PEDS0 = peds ? peds.limit : 0, CARS0 = traffic.limit;
+  let low = false, ps1 = SET.get("ps1") !== false;
+  const applyRes = () => {
+    let w, h;
+    if (ps1) { h = Math.round(PS1.h * (low ? 0.74 : 1)); w = Math.round(h * innerWidth / innerHeight / 2) * 2; }
+    else { const k = low ? 0.55 : Math.min(1.5, devicePixelRatio || 1); w = Math.round(innerWidth * k); h = Math.round(innerHeight * k); }
+    rt.setSize(w, h); blit.mat.uniforms.res.value.set(w, h); blit.mat.uniforms.uRetro.value = ps1 ? 1 : 0;
+  };
+  const crowd = (stage) => { const f = [1, 0.75, 0.55, 0.45][stage]; if (peds) peds.limit = Math.round(PEDS0 * f); traffic.limit = Math.round(CARS0 * f); };
+  const applyQuality = () => {
+    const q = SET.get("quality") || "auto";
+    if (q === "high") { perf.stage = 0; low = false; crowd(0); }
+    else if (q === "low") { low = true; crowd(2); }
+    else { low = perf.stage >= 2; crowd(perf.stage); }
+    applyRes();
+  };
+  SET.on((k, v, S) => {
+    if (k && k !== "quality" && k !== "ps1") return;
+    if (k === "ps1" || k === null) { const on = S.ps1 !== false; if (on !== ps1) { ps1 = on; crunch(scene, on); } }
+    if (k === "quality") perf.n = 0;
+    applyQuality();
+  });
+  function adapt(dt) {   // auto: after a warm-up, measure; if slow, step quality down
+    if ((SET.get("quality") || "auto") !== "auto" || perf.stage > 2) return;
     perf.n++; if (perf.n < 45) return;
     perf.sum += dt; if (perf.n < 135) return;
     const avg = perf.sum / 90; perf.n = 0; perf.sum = 0;
-    if (avg < 0.022 || perf.stage > 2) return;
-    perf.stage++;
-    if (perf.stage === 1) { if (peds) peds.limit = 14; traffic.limit = 12; }
-    else if (perf.stage === 2) { if (peds) peds.limit = 10; traffic.limit = 9; }
-    else { if (peds) peds.limit = 8; traffic.limit = 7; }
+    if (avg < 0.022) return;
+    perf.stage++; applyQuality();
+    if (perf.stage === 2) hud.tip("The game was running slow, so it switched to low quality. You can change that in Settings.");
     console.info("Lowtide quality step", perf.stage, "avg frame", (avg * 1000).toFixed(1), "ms");
   }
   function loop(now) {
@@ -290,7 +316,7 @@ export async function start(o) {
     adapt(dt);
   }
   addEventListener("resize", () => {
-    renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyRes();
   });
 
   const api = {
