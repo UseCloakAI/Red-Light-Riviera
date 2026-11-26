@@ -17,6 +17,7 @@ import { buildRoads, Mask, promenade, PROMENADE_GLSL, SIDEWALK, KERB, at, inPoly
 import { makeKit, Frame, geometry, ptex, canvas, speckle, setBuilding, ROOMS } from "./city/build.js?v=dev";
 import * as TY from "./city/types.js?v=dev";
 import { flat } from "./ps1.js?v=dev";
+import { pickHome, homeFront } from "./home.js?v=dev";
 export { lanePoint, linkPath, laneEndPos } from "./city/roads.js?v=dev";
 
 // the land's extent; the south edge is the promenade, which wanders
@@ -655,6 +656,8 @@ export async function buildWorld(scene, opts = {}) {
   map.parks.push(Array.from({ length: 24 }, (_, k) => ({ x: 10 + Math.cos(k / 24 * 6.283) * 17, z: 10 + Math.sin(k / 24 * 6.283) * 17 })));
   // start on the beach by the pier, facing the sunset
   const sx = PIER.x0 - 14, spawn = { x: sx, z: promenade(sx) + 3, yaw: -0.25 };
+  // Hollis's place: the nearest apartment, dressed so you can tell from the street (home.js)
+  const homeE = pickHome(entrances, spawn); if (homeE) homeFront(scene, grid, homeE);
   return { chunks, entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
     props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh } };
 }

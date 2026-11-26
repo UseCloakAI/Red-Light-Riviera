@@ -65,6 +65,7 @@ function tex(name) {
     case "brick": fill("#9a5a46"); for (let y = 0; y < 32; y += 4) { g.fillStyle = "rgba(220,210,200,.5)"; g.fillRect(0, y, 32, 1); for (let x = (y / 4 % 2) * 4; x < 32; x += 8) g.fillRect(x, y, 1, 4); } noise(0.1); break;
     case "metal": fill("#8a8c90"); for (let x = 0; x < 32; x += 4) { g.fillStyle = "rgba(0,0,0,.16)"; g.fillRect(x, 0, 1, 32); g.fillStyle = "rgba(255,255,255,.1)"; g.fillRect(x + 1, 0, 1, 32); } break;
     // packaged goods: a cap, a label band with print, the body; the box's colour tints it
+    case "cream": fill("#efe6d4"); for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(${r() < 0.5 ? "120,100,70" : "255,255,255"},${0.06 * r()})`; g.fillRect((r() * 32) | 0, (r() * 32) | 0, 2, 2); } break;   // fresh plaster
     case "pack": fill("#c4c4c4"); g.fillStyle = "#5a5a5a"; g.fillRect(0, 0, 32, 5); g.fillStyle = "#ffffff"; g.fillRect(0, 11, 32, 12); g.fillStyle = "#2a2a2a"; for (let x = 4; x < 28; x += 3 + ((r() * 3) | 0)) g.fillRect(x, 15 + ((r() * 2) | 0), 2, 1); g.fillRect(6, 19, 20, 1); g.fillStyle = "#e8e8e8"; g.fillRect(3, 26, 6, 3); break;
     case "bottle": fill("#b8b8b8"); g.fillStyle = "#ffffff"; g.fillRect(0, 12, 32, 10); g.fillStyle = "#3a3a3a"; g.fillRect(12, 0, 8, 6); g.fillRect(8, 16, 16, 2); g.fillStyle = "rgba(255,255,255,.5)"; g.fillRect(5, 6, 2, 24); break;
     case "fabric": fill("#d8d8d8"); for (let y = 0; y < 32; y += 2) for (let x = (y / 2) % 2; x < 32; x += 2) { g.fillStyle = "rgba(0,0,0,.08)"; g.fillRect(x, y, 1, 1); } noise(0.12); g.fillStyle = "rgba(0,0,0,.18)"; g.fillRect(0, 31, 32, 1); break;
@@ -92,9 +93,7 @@ export class Interiors {
     this.prompt = document.createElement("div"); this.prompt.className = "prompt doorp"; this.prompt.innerHTML = "<kbd>E</kbd><span></span>"; this.root.appendChild(this.prompt);
     this.mats = new Map(); this.people = []; this.fans = []; this.tvs = []; this.watch = null;
     // Hollis's place: the apartment (or house) nearest where she starts. On the map; nobody else lives there.
-    const sp = this.world.spawn; let hb = null, hd = Infinity;
-    for (const e of this.list) if (e.kind === "apartment" || e.kind === "house") { const dd = Math.hypot(e.x - sp.x, e.z - sp.z); if (dd < hd) { hd = dd; hb = e; } }
-    if (hb) { hb.home = true; hb.name = "Home"; this.home = hb; }
+    this.home = this.list.find((e) => e.home) || null;   // picked by the world (home.js)
   }
   // one unlit, unsnapped material per texture (or none)
   mat(key, map, glow) {
@@ -156,8 +155,9 @@ export class Interiors {
   enter(e) {
     const R = rng(e.seed), kind = e.home ? "home" : e.kind;
     // the room is the building: the unit's width along the street, its depth back from the front
-    const w = THREE.MathUtils.clamp(e.u1 - e.u0, 3.5, 30), d = THREE.MathUtils.clamp(e.depth, 4, 30);
-    this.inside = { e, w, d, kind, R, t: 0, greeted: false, doorX: THREE.MathUtils.clamp(e.u1 - e.door, 0.9, w - 0.9), ox: ORIGIN.x - w / 2, oz: ORIGIN.z };
+    let w = THREE.MathUtils.clamp(e.u1 - e.u0, 3.5, 30), d = THREE.MathUtils.clamp(e.depth, 4, 30), uR = e.u1;
+    if (e.home) { w = Math.min(w, 12); d = Math.min(d, 10); uR = THREE.MathUtils.clamp(e.door + w / 2, e.u0 + w, e.u1); }   // her unit, not the whole building
+    this.inside = { e, w, d, kind, R, t: 0, greeted: false, doorX: THREE.MathUtils.clamp(uR - e.door, 0.9, w - 0.9), ox: ORIGIN.x - w / 2, oz: ORIGIN.z, uL: uR - w, uR };
     const st = this.saved(e);
     this.build(this.inside, st);
     this.restore(st);
@@ -351,8 +351,8 @@ export class Interiors {
     const ox = ORIGIN.x - w / 2, oz = ORIGIN.z;
     const DX = I.doorX; I.exit = { x: ox + DX, z: oz + 0.9 };
     const lamps = []; for (let x = 2; x < w - 1; x += 4) for (let z = 2; z < d - 1; z += 4) lamps.push([x, z]);
-    const dim = { bar: 0.55, theatre: 0.45, warehouse: 0.72, garage: 0.72, hall: 0.85, motel: 0.75, apartment: 0.8, house: 0.8 }[kind] || 1;
-    const warm = { bar: C("#ffb070"), theatre: C("#ffa070"), motel: C("#ffd0a0"), apartment: C("#ffe0b8"), house: C("#ffe0b8"), hotel: C("#ffe4c0") }[kind] || C("#fff8ec");
+    const dim = { home: 0.82, bar: 0.55, theatre: 0.45, warehouse: 0.72, garage: 0.72, hall: 0.85, motel: 0.75, apartment: 0.8, house: 0.8 }[kind] || 1;
+    const warm = { home: C("#ffdcb0"), bar: C("#ffb070"), theatre: C("#ffa070"), motel: C("#ffd0a0"), apartment: C("#ffe0b8"), house: C("#ffe0b8"), hotel: C("#ffe4c0") }[kind] || C("#fff8ec");
     const light = (x, y, z) => { let l = 0.24; for (const [lx, lz] of lamps) { const q = (x - lx) ** 2 + (z - lz) ** 2 + (H - y) ** 2 * 0.6; l += 0.55 / (1 + q * 0.14); } return Math.min(0.92, l * dim) * (0.7 + 0.3 * Math.min(1, y / 1.2)); };
     const layer = (key, map, glow) => { let L = layers.get(key + (glow ? "g" : "")); if (!L) layers.set(key + (glow ? "g" : ""), L = { p: [], c: [], u: [], map, glow, key }); return L; };
     // a quad; uv in metres along it (or 0..1 for boards)
@@ -384,8 +384,8 @@ export class Interiors {
     };
     // the shell
     const isStore = STORES.includes(kind);
-    const FLOOR = { diner: "checker", cafe: "checker", barber: "checker", bar: "plank", laundry: "tile", hotel: "carpet", pawn: "tile", surf: "tile", motel: "bluecarpet", apartment: "plank", house: "plank", office: "tile", warehouse: "concrete", garage: "concrete", theatre: "carpet", hall: "plank", checks: "tile" }[kind] || "tile";
-    const WALL = { diner: "walltile", cafe: "stripe", bar: "wood", laundry: "walltile", barber: "walltile", hotel: "stripe", motel: "paint", apartment: "stripe", house: "stripe", office: "paint", warehouse: "metal", garage: "concrete", theatre: "damask", hall: "brick", pawn: "brick", surf: "wood" }[kind] || "paint";
+    const FLOOR = { diner: "checker", cafe: "checker", barber: "checker", bar: "plank", laundry: "tile", hotel: "carpet", pawn: "tile", surf: "tile", motel: "bluecarpet", apartment: "plank", house: "plank", home: "plank", office: "tile", warehouse: "concrete", garage: "concrete", theatre: "carpet", hall: "plank", checks: "tile" }[kind] || "tile";
+    const WALL = { diner: "walltile", cafe: "stripe", bar: "wood", laundry: "walltile", barber: "walltile", hotel: "stripe", motel: "paint", apartment: "stripe", house: "stripe", office: "paint", home: "cream", warehouse: "metal", garage: "concrete", theatre: "damask", hall: "brick", pawn: "brick", surf: "wood" }[kind] || "paint";
     const fs = FLOOR === "tile" ? 1 : 2;   // metres a texture repeat
     quad([0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d], C("#ffffff"), { tex: FLOOR, shade: 0.95, uv: [[0, 0], [w / fs, 0], [w / fs, d / fs], [0, d / fs]] });
     const wallCol = C("#ffffff");
@@ -393,7 +393,7 @@ export class Interiors {
       const L = Math.hypot(x1 - x0, z1 - z0), ix = inset[0], iz = inset[1];
       quad([x0, 0, z0], [x1, 0, z1], [x1, H, z1], [x0, H, z0], wallCol, { tex: WALL, shade: 0.88, uv: [[0, 0], [L / 2, 0], [L / 2, H / 2], [0, H / 2]] });
       quad([x0 + ix, 0, z0 + iz], [x1 + ix, 0, z1 + iz], [x1 + ix, 0.14, z1 + iz], [x0 + ix, 0.14, z0 + iz], C("#3a3430"));   // skirting, just proud of the wall
-      if (["diner", "cafe", "hotel", "apartment", "house", "bar", "hall"].includes(kind))   // a dado rail
+      if (["diner", "cafe", "hotel", "apartment", "house", "bar", "hall", "home"].includes(kind))   // a dado rail
         quad([x0 + ix, 0.95, z0 + iz], [x1 + ix, 0.95, z1 + iz], [x1 + ix, 1.02, z1 + iz], [x0 + ix, 1.02, z0 + iz], C(kind === "diner" ? "#c23b2a" : "#6a4a32"));
     };
     wall(0, 0, w, 0, [0, 0.02]); wall(w, 0, w, d, [-0.02, 0]); wall(w, d, 0, d, [0, -0.02]); wall(0, d, 0, 0, [0.02, 0]);
@@ -401,7 +401,7 @@ export class Interiors {
     const ceilTex = kind === "warehouse" || kind === "garage" ? "concrete" : "ceil";
     quad([0, H, 0], [w, H, 0], [w, H, d], [0, H, d], C("#ffffff"), { tex: ceilTex, shade: 0.75, uv: [[0, 0], [w / 1.2, 0], [w / 1.2, d / 1.2], [0, d / 1.2]] });
     for (const [lx, lz] of lamps) {
-      if (["bar", "apartment", "house", "motel", "hotel", "theatre"].includes(kind)) { box(lx - 0.18, lx + 0.18, H - 0.55, H - 0.3, lz - 0.18, lz + 0.18, warm.clone(), { glow: true, solid: false }); box(lx - 0.015, lx + 0.015, H - 0.3, H, lz - 0.015, lz + 0.015, "#222", { solid: false }); }   // hanging lamps
+      if (["bar", "apartment", "house", "motel", "hotel", "theatre", "home"].includes(kind)) { box(lx - 0.18, lx + 0.18, H - 0.55, H - 0.3, lz - 0.18, lz + 0.18, warm.clone(), { glow: true, solid: false }); box(lx - 0.015, lx + 0.015, H - 0.3, H, lz - 0.015, lz + 0.015, "#222", { solid: false }); }   // hanging lamps
       else quad([lx - 0.6, H - 0.02, lz - 0.25], [lx + 0.6, H - 0.02, lz - 0.25], [lx + 0.6, H - 0.02, lz + 0.25], [lx - 0.6, H - 0.02, lz + 0.25], C("#fff6e0"), { glow: true });   // panels
     }
     // the way in, and windows out to the night
@@ -414,7 +414,7 @@ export class Interiors {
     // the front windows, exactly where they are outside (each 4 m bay of the facade tile, from where the tile starts), dark glass and blinds from in here
     const FACE = { shop: [0.25, 3.75, 0.05, 2.7], stucco: [1, 3, 0.73, 2.48], siding: [1.125, 2.625, 0.75, 2.25], motel: [2.25, 3.75, 1.3, 2.33] }[I.e.face];
     if (FACE) {
-      const ws = I.e.ws || 0, u0 = I.e.u0, u1 = I.e.u1;
+      const ws = I.e.ws || 0, u0 = I.uL ?? I.e.u0, u1 = I.uR ?? I.e.u1;
       for (let b = ws; b < u1; b += 4) {
         let a = Math.max(b + FACE[0], u0), c = Math.min(b + FACE[1], u1);
         // not over the door
@@ -699,14 +699,94 @@ const FURNISH = {
     o.spots.worker = [2.5, d - 2.2, Math.PI];
   },
   house(o) { FURNISH.apartment(o); },
-  // Hollis's place: an apartment, plus her life on the walls (the tide table, the Ida May, her pilot's licence)
+  /* Hollis's place: a one-bedroom on the ground floor, lived in. In from the door: coats on hooks, keys in a
+     bowl. Left, the living room under the window: a sofa facing the TV on its console, a rug, a coffee table
+     with the remote and a mug, an armchair, a floor lamp, a bookcase, a plant, the Ida May over the TV.
+     Back left, the kitchen on its own tiles: fridge, counter, sink, stove and hood, cupboards, the kettle.
+     A table for two in the middle under the pendant. Back right, behind a wall, the bedroom: a made bed,
+     nightstands and lamps, a dresser. Front right, her corner: a desk with the inquiry papers spread on it,
+     a corkboard, rods and a tackle box, a life ring, her pilot's licence. */
   home(o) {
-    const { w, d } = o; FURNISH.apartment(o); o.spots.worker = null;
-    o.plaque("l", 2.2, 1.0, 0.7, 1.45, o.board(["TIDES", "HI 11:42P  LO 5:58A", "HI 12:10P  LO 6:31P"], { bg: "#f4e9d2", fg: "#1a2b3c", big: 12, small: 6 }));
-    o.plaque("l", 3.6, 0.8, 0.55, 1.55, o.board(["IDA MAY", "Pier 9, 2019"], { bg: "#3a5a7a", fg: "#f4e9d2", big: 11 }));
-    o.plaque("r", Math.max(4.5, d - 8), 0.7, 0.5, 1.6, o.board(["HARBOR PILOT", "H. VANE  (REVOKED)"], { bg: "#e8e2d6", fg: "#8a2a2a", big: 9, small: 6 }));
-    o.box(w - 0.12, w - 0.05, 2.05, 2.09, 1.4, 3.9, "#6a4a32", { solid: false }); o.box(w - 0.16, w - 0.12, 1.95, 2.1, 1.6, 1.64, "#2a2a2e", { solid: false }); o.box(w - 0.16, w - 0.12, 1.95, 2.1, 3.6, 3.64, "#2a2a2e", { solid: false });   // the rod on the wall
-    o.box(0.3, 0.9, 0, 0.35, d - 1.0, d - 0.45, "#8a6a44", { tex: "crate" }); o.box(0.32, 0.88, 0.35, 0.37, d - 0.98, d - 0.47, "#f4f0e6", { solid: false });   // a box of the inquiry papers
+    const { w, d, H, R } = o;
+    if (w < 11 || d < 9) { FURNISH.apartment(o); o.spots.worker = null; return; }   // (a smaller unit: the plain flat)
+    const B = (x0, x1, y0, y1, z0, z1, c, opt) => o.box(x0, x1, y0, y1, z0, z1, c, opt), nb = { solid: false };
+    const legs = (x0, x1, z0, z1, h, c = "#4a3424", t = 0.05) => { for (const [x, z] of [[x0, z0], [x1 - t, z0], [x0, z1 - t], [x1 - t, z1 - t]]) B(x, x + t, 0, h, z, z + t, c, nb); };
+    const lampTable = (x, z, y) => { B(x - 0.06, x + 0.06, y, y + 0.3, z - 0.06, z + 0.06, "#c9a14a", nb); B(x - 0.17, x + 0.17, y + 0.3, y + 0.55, z - 0.17, z + 0.17, "#ffe2a8", { glow: true, solid: false }); };
+    // -- entry
+    rug(o, 5.35, 6.65, 0.12, 1.1, "#6a4a32");
+    B(4.05, 4.95, 1.62, 1.7, 0.04, 0.1, "#6a4a32", nb); for (const x of [4.2, 4.5, 4.8]) B(x - 0.02, x + 0.02, 1.5, 1.66, 0.06, 0.16, "#c9a14a", nb);   // hooks
+    B(4.12, 4.48, 0.85, 1.55, 0.08, 0.26, "#3a4a5a", { tex: "fabric", uvs: 3, solid: false }); B(4.56, 4.86, 1.25, 1.5, 0.08, 0.2, "#c8b898", nb);   // her rain jacket, a cap
+    legs(7.2, 8.4, 0.06, 0.46, 0.8); B(7.18, 8.42, 0.8, 0.85, 0.04, 0.48, "#6a4a32", { tex: "wooddark" }); B(7.4, 7.7, 0.85, 0.92, 0.15, 0.35, "#b8643a", nb); B(7.5, 7.58, 0.92, 0.95, 0.22, 0.28, "#c9a14a", nb);   // console, key bowl, keys
+    o.plaque("f", 7.8, 0.7, 0.9, 1.25, o.board([""], { bg: "#9fb4c4", border: "#c9a14a", w: 32, h: 40 }));   // a mirror
+    // -- living room
+    rug(o, 1.0, 4.4, 1.5, 5.1, "#7a4a3a"); o.quad([1.2, 0.017, 1.7], [4.2, 0.017, 1.7], [4.2, 0.017, 4.9], [1.2, 0.017, 4.9], o.C("#a8704a"));   // a rug on a rug, a hair above it
+    B(0.06, 0.52, 0, 0.55, 2.2, 4.4, "#ffffff", { tex: "wooddark" }); B(0.08, 0.5, 0.12, 0.42, 2.4, 3.25, "#1a1410", nb); B(0.08, 0.5, 0.12, 0.42, 3.35, 4.2, "#1a1410", nb);   // the console, its shelves
+    B(0.2, 0.45, 0.42, 0.5, 2.55, 2.75, "#2a2a2e", nb); B(0.25, 0.4, 0.55, 0.57, 3.9, 4.1, "#c23b2a", nb);   // a VCR, a tape
+    tvSet(o, 0.14, 0.34, 0.62, 1.38, 2.65, 3.95, "+x");
+    o.plaque("l", 3.3, 1.1, 0.62, 1.7, o.board(["IDA MAY", "Pier 9  \u00b7  2019"], { bg: "#3a5a7a", fg: "#f4e9d2", border: "#c9a14a", big: 11 }));
+    // the sofa, its back to the room, facing the set
+    { const x0 = 2.85, z0 = 1.95, len = 2.5, c = "#556a7a";
+      B(x0, x0 + 0.9, 0.08, 0.3, z0, z0 + len, c, { tex: "fabric", uvs: 3 });
+      for (let k = 0; k < 3; k++) { const za = z0 + 0.14 + k * (len - 0.28) / 3, zb = za + (len - 0.28) / 3 - 0.03; B(x0 + 0.04, x0 + 0.68, 0.3, 0.45, za, zb, c, { tex: "fabric", uvs: 3, shade: 1.05, solid: false }); B(x0 + 0.64, x0 + 0.86, 0.45, 0.88, za, zb, c, { tex: "fabric", uvs: 3, shade: 0.92, solid: false }); o.act("sit", x0 + 0.36, (za + zb) / 2, { y: 0.32, seat: 0.45, face: -Math.PI / 2, does: "watch" }); }
+      B(x0 + 0.7, x0 + 0.9, 0.3, 0.95, z0, z0 + len, c, { tex: "fabric", uvs: 3, shade: 0.85, solid: false });
+      for (const z of [z0, z0 + len - 0.14]) B(x0, x0 + 0.9, 0.3, 0.62, z, z + 0.14, c, { tex: "fabric", uvs: 3, shade: 0.95, solid: false });
+      B(x0 + 0.1, x0 + 0.5, 0.45, 0.72, z0 + 0.2, z0 + 0.5, "#c9a14a", { tex: "fabric", uvs: 4, solid: false });   // a cushion
+      B(x0 + 0.06, x0 + 0.12, 0, 0.08, z0 + 0.06, z0 + 0.12, "#2a2018", nb); B(x0 + 0.78, x0 + 0.84, 0, 0.08, z0 + len - 0.12, z0 + len - 0.06, "#2a2018", nb); }
+    legs(1.6, 2.4, 2.8, 3.8, 0.38); B(1.56, 2.44, 0.38, 0.44, 2.76, 3.84, "#ffffff", { tex: "woodlight", solid: true });   // coffee table
+    B(1.75, 1.97, 0.44, 0.46, 2.95, 3.25, "#c23b2a", nb); B(1.78, 1.98, 0.46, 0.475, 3.0, 3.28, "#2f5d8c", nb);   // magazines
+    B(2.12, 2.22, 0.44, 0.55, 3.45, 3.55, "#f4f0e6", nb); B(2.0, 2.06, 0.44, 0.47, 3.1, 3.26, "#1a1a1e", nb);   // a mug, the remote
+    legs(3.0, 3.55, 1.38, 1.88, 0.55); B(2.98, 3.57, 0.55, 0.6, 1.36, 1.9, "#ffffff", { tex: "wooddark" }); lampTable(3.28, 1.63, 0.6);   // side table, its lamp
+    { const c = "#8a5a3a"; B(2.55, 3.35, 0.1, 0.42, 4.95, 5.75, c, { tex: "fabric", uvs: 3 }); B(3.15, 3.35, 0.42, 1.0, 4.95, 5.75, c, { tex: "fabric", uvs: 3, shade: 0.9, solid: false }); for (const z of [4.95, 5.6]) B(2.55, 3.35, 0.42, 0.66, z, z + 0.15, c, { tex: "fabric", uvs: 3, shade: 0.95, solid: false }); B(2.6, 3.1, 0.42, 0.54, 5.1, 5.6, c, { tex: "fabric", uvs: 3, shade: 1.05, solid: false }); o.act("sit", 2.85, 5.35, { y: 0.3, seat: 0.5, face: -Math.PI / 2, does: "watch" }); }   // armchair
+    B(4.22, 4.38, 0, 0.04, 5.52, 5.68, "#2a2622", nb); B(4.28, 4.32, 0.04, 1.55, 5.58, 5.62, "#2a2622", nb); B(4.15, 4.45, 1.55, 1.82, 5.45, 5.75, "#e8c890", { glow: true, solid: false }); B(4.13, 4.47, 1.82, 1.85, 5.43, 5.77, "#6a4a32", nb);   // floor lamp
+    B(0.06, 0.4, 0, 2.0, 4.75, 6.15, "#ffffff", { tex: "wooddark" });   // the bookcase, stocked
+    for (let y = 0.1; y < 1.9; y += 0.45) { B(0.4, 0.42, y, y + 0.03, 4.75, 6.15, "#3a2414", nb); for (let z = 4.8; z < 6.08;) { const bw = 0.04 + R() * 0.05, bh = 0.24 + R() * 0.14; if (R() < 0.12) { z += 0.12; continue; } B(0.1, 0.38, y + 0.03, y + 0.03 + bh, z, z + bw, ["#6a1a1a", "#1a3a6a", "#2a4a2a", "#8a6a2a", "#4a3a5a", "#d8d0c0"][(R() * 6) | 0], nb); z += bw + 0.008; } }
+    plant(o, 0.45, 0.55); plant(o, 4.6, 0.5);
+    o.fan(2.6, 3.3);
+    // -- the table, in the middle
+    legs(5.6, 6.6, 5.6, 6.6, 0.74); B(5.55, 6.65, 0.74, 0.79, 5.55, 6.65, "#ffffff", { tex: "woodlight", solid: true });
+    for (const [za, zb, back] of [[4.95, 5.35, 4.95], [6.85, 7.25, 7.2]]) { legs(5.85, 6.35, za, zb, 0.45, "#4a3424", 0.04); B(5.83, 6.37, 0.45, 0.5, za, zb, "#6a4a32", nb); B(5.83, 6.37, 0.5, 0.95, back, back + 0.05, "#6a4a32", nb); }
+    B(5.95, 6.25, 0.79, 0.86, 5.95, 6.25, "#e8e2d6", nb); for (const [x, z, c] of [[6.0, 6.0, "#d9772a"], [6.12, 6.08, "#c23b2a"], [6.05, 6.15, "#e0b040"]]) B(x, x + 0.08, 0.86, 0.94, z, z + 0.08, c, nb);   // a fruit bowl
+    // -- the kitchen, on its own tiles
+    o.quad([0.01, 0.008, 7.15], [4.7, 0.008, 7.15], [4.7, 0.008, d - 0.01], [0.01, 0.008, d - 0.01], o.C("#ffffff"), { tex: "checker", uv: [[0, 0], [4.7, 0], [4.7, d - 7.16], [0, d - 7.16]] });
+    B(0.06, 0.88, 0, 1.9, d - 0.95, d - 0.05, "#e8e8e4"); B(0.06, 0.88, 1.2, 1.22, d - 0.96, d - 0.94, "#9a9aa0", nb); B(0.8, 0.84, 0.9, 1.15, d - 0.99, d - 0.96, "#9a9aa0", nb); B(0.8, 0.84, 1.3, 1.7, d - 0.99, d - 0.96, "#9a9aa0", nb);   // fridge
+    B(0.9, 4.6, 0.1, 0.88, d - 0.62, d - 0.04, "#ffffff", { tex: "woodlight" }); B(0.92, 4.58, 0, 0.1, d - 0.56, d - 0.06, "#2a2018", nb);   // base cupboards
+    for (let x = 0.9; x < 4.6; x += 0.6) B(x + 0.28, x + 0.32, 0.5, 0.56, d - 0.64, d - 0.62, "#c9a14a", nb);   // handles
+    B(0.88, 4.62, 0.88, 0.93, d - 0.66, d - 0.03, "#e8e2d6", { tex: "steel" });   // the counter top
+    B(1.25, 1.85, 0.9, 0.935, d - 0.55, d - 0.15, "#5a5e66", { tex: "steel", solid: false }); B(1.5, 1.56, 0.93, 1.2, d - 0.14, d - 0.1, "#c8c8cc", nb); B(1.5, 1.56, 1.16, 1.2, d - 0.3, d - 0.1, "#c8c8cc", nb);   // sink, tap
+    B(2.4, 3.05, 0.93, 0.95, d - 0.58, d - 0.08, "#1a1a1e", nb); for (const [x, z] of [[2.55, 0.45], [2.88, 0.45], [2.55, 0.2], [2.88, 0.2]]) B(x - 0.07, x + 0.07, 0.95, 0.96, d - z - 0.07, d - z + 0.07, "#3a3a40", nb);   // stove top
+    B(2.42, 3.03, 0.3, 0.78, d - 0.64, d - 0.62, "#1a1a1e", nb); B(2.5, 2.95, 0.72, 0.75, d - 0.67, d - 0.64, "#c8c8cc", nb);   // oven door, handle
+    B(2.35, 3.1, 1.65, 2.05, d - 0.55, d - 0.04, "#c8c8cc", { tex: "steel", solid: false }); B(2.55, 2.9, 2.05, H, d - 0.3, d - 0.08, "#c8c8cc", { tex: "steel", solid: false });   // hood
+    for (const [x0, x1] of [[0.9, 2.3], [3.15, 4.6]]) { B(x0, x1, 1.5, 2.25, d - 0.36, d - 0.04, "#ffffff", { tex: "woodlight", solid: false }); for (let x = x0 + 0.3; x < x1; x += 0.6) B(x - 0.02, x + 0.02, 1.55, 1.75, d - 0.38, d - 0.36, "#c9a14a", nb); }   // wall cupboards
+    B(3.4, 3.6, 0.93, 1.13, d - 0.45, d - 0.25, "#c23b2a", nb); B(3.45, 3.55, 1.13, 1.17, d - 0.4, d - 0.3, "#2a2a2e", nb);   // kettle
+    B(3.9, 4.25, 0.93, 1.12, d - 0.45, d - 0.22, "#c8c8cc", nb); B(1.95, 2.15, 0.93, 1.25, d - 0.3, d - 0.15, "#3f7a4a", nb);   // toaster, a bottle of something
+    o.plaque("b", 0.5, 0.45, 0.6, 2.05, o.board(["TIDE", "COLA"], { bg: "#c8202e", fg: "#fff", big: 9, w: 32, h: 48 }));   // a calendar off a bottle cap
+    // -- the bedroom, behind its wall
+    B(7.92, 8.08, 0, H, 6.4, d - 0.02, "#ffffff", { tex: "cream" }); B(7.92, 8.08, 0, H, 4.3, 5.2, "#ffffff", { tex: "cream" }); B(7.92, 8.08, 2.25, H, 5.2, 6.4, "#ffffff", { tex: "cream", solid: false });
+    B(8.08, w - 0.02, 0, H, 4.3, 4.45, "#ffffff", { tex: "cream" });
+    rug(o, 8.8, 11.3, 6.0, 9.3, "#5a6a8a");
+    B(w - 0.2, w - 0.05, 0, 1.15, 6.5, 8.5, "#ffffff", { tex: "wooddark" });   // headboard
+    B(9.5, w - 0.2, 0, 0.35, 6.55, 8.45, "#ffffff", { tex: "wooddark" }); B(9.52, w - 0.22, 0.35, 0.55, 6.6, 8.4, "#f2ede2", nb);   // the bed, the mattress
+    B(9.48, w - 0.75, 0.55, 0.64, 6.56, 8.44, "#2f5d8c", { tex: "fabric", uvs: 3, solid: false }); B(9.48, 9.52, 0.25, 0.64, 6.56, 8.44, "#2f5d8c", { tex: "fabric", uvs: 3, solid: false });   // the duvet, over the end
+    for (const z of [6.7, 7.55]) B(w - 0.72, w - 0.25, 0.55, 0.72, z, z + 0.72, "#f4f0e6", { tex: "fabric", uvs: 4, solid: false });   // pillows
+    for (const z of [5.9, 8.6]) { B(w - 0.55, w - 0.06, 0, 0.55, z, z + 0.48, "#ffffff", { tex: "wooddark" }); lampTable(w - 0.3, z + 0.24, 0.55); }
+    B(8.4, 9.9, 0, 0.95, d - 0.55, d - 0.05, "#ffffff", { tex: "wooddark" }); for (let y = 0.2; y < 0.9; y += 0.25) B(8.45, 9.85, y, y + 0.02, d - 0.57, d - 0.55, "#2a1a10", nb);   // dresser
+    o.plaque("b", 9.15, 0.8, 0.9, 1.15, o.board([""], { bg: "#9fb4c4", border: "#6a4a32", w: 32, h: 40 }));   // its mirror
+    o.plaque("r", 7.5, 0.9, 0.6, 1.4, o.board(["PORT SALT", "1998"], { bg: "#d8c8a8", fg: "#3a2a1e", border: "#6a4a32", big: 9 }));   // over the bed: the old crew
+    // -- her corner: the desk, the case, the gear
+    legs(w - 0.75, w - 0.06, 1.1, 2.9, 0.75); B(w - 0.78, w - 0.04, 0.75, 0.8, 1.08, 2.92, "#ffffff", { tex: "woodlight", solid: true });
+    for (const [z, a] of [[1.3, 0.04], [1.7, 0.07], [2.15, 0.02], [2.45, 0.05]]) B(w - 0.66, w - 0.3, 0.8, 0.81, z, z + 0.28 + a, "#f4f0e6", nb);   // papers
+    lampTable(w - 0.25, 2.7, 0.8); B(w - 0.68, w - 0.48, 0.8, 0.92, 1.12, 1.25, "#2a2a2e", nb);   // lamp, a radio
+    B(w - 1.35, w - 0.95, 0.45, 0.5, 1.75, 2.15, "#4a3a2a", nb); legs(w - 1.35, w - 0.95, 1.75, 2.15, 0.45, "#2a2018", 0.04); B(w - 1.35, w - 1.3, 0.5, 0.95, 1.75, 2.15, "#4a3a2a", nb);   // her chair
+    o.plaque("r", 2.0, 1.4, 0.95, 1.25, o.board(["OTTOLINE", "11 BOXES?  WHO PAID PURCELL", "BRASK - LEFT THE COUNTRY"], { bg: "#b88a5a", fg: "#1a1410", border: "#5a3a22", big: 10, small: 5 }));   // the corkboard
+    o.plaque("r", 3.6, 0.55, 0.42, 1.55, o.board(["HARBOR PILOT", "H. VANE", "REVOKED"], { bg: "#e8e2d6", fg: "#8a2a2a", big: 7, small: 6 }));
+    B(8.95, 9.55, 0, 0.36, 3.6, 4.2, "#8a6a44", { tex: "crate" }); B(8.97, 9.53, 0.36, 0.38, 3.62, 4.18, "#f4f0e6", nb);   // the box of inquiry papers
+    for (const [x, c] of [[8.3, "#2a2a2e"], [8.42, "#6a4a32"]]) B(x, x + 0.03, 0, 2.5, 4.18, 4.21, c, nb);   // rods against the wall
+    B(8.55, 9.0, 0, 0.25, 3.85, 4.2, "#3f7a4a", { tex: "steel" });   // tackle box
+    { const lr = o.board([""], { bg: "#e8e2d6", w: 32, h: 32 }), g = lr.image.getContext("2d"); g.fillStyle = "#e8e2d6"; g.fillRect(0, 0, 32, 32);
+      for (let k = 0; k < 8; k++) { g.strokeStyle = k % 2 ? "#f4f0e6" : "#c23b2a"; g.lineWidth = 7; g.beginPath(); g.arc(16, 16, 11, k / 8 * Math.PI * 2, (k + 1) / 8 * Math.PI * 2); g.stroke(); }
+      g.fillStyle = "#1a1a1a"; g.font = "bold 4px Arial"; g.textAlign = "center"; g.fillText("IDA MAY", 16, 30); lr.needsUpdate = true;
+      o.plaque("r", 0.6, 0.62, 0.62, 1.45, lr); }   // the Ida May's life ring
+    o.spots.worker = null;
   },
   office(o) {
     const { w, d } = o;
