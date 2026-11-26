@@ -12,9 +12,9 @@ import * as THREE from "three";
 export const PS1 = { h: 270, w: 480 };
 let patched = false;
 // call once, before any material is built, with the screen's aspect
-export function configure(aspect) {
+export function configure(aspect, snap = true) {
   PS1.w = Math.round(PS1.h * aspect / 2) * 2;
-  if (patched) return; patched = true;
+  if (patched || !snap) return; patched = true;   // the PS1 look off: no wobble
   // every built-in material: snap clip-space xy to the low-res pixel grid
   THREE.ShaderChunk.project_vertex = THREE.ShaderChunk.project_vertex + `
   #ifndef PS1_NOSNAP
@@ -32,13 +32,13 @@ export const flat = (offset = 0) => ({ onBeforeCompile: noSnap, ...(offset ? { p
 // the upscale: tone map, 15-bit colour with an ordered dither, nearest-neighbour onto the screen
 export function makeBlit() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tSrc: { value: null }, res: { value: new THREE.Vector2(PS1.w, PS1.h) }, uGrey: { value: 0 }, uFlash: { value: 0 }, uAb: { value: 0 }, uDesat: { value: 0 }, uVig: { value: 0 } },
+    uniforms: { tSrc: { value: null }, res: { value: new THREE.Vector2(PS1.w, PS1.h) }, uGrey: { value: 0 }, uRetro: { value: 1 }, uFlash: { value: 0 }, uAb: { value: 0 }, uDesat: { value: 0 }, uVig: { value: 0 } },
     vertexShader: "varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}",
-    fragmentShader: `uniform sampler2D tSrc;uniform vec2 res;uniform float uGrey,uFlash,uAb,uDesat,uVig;varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tSrc;uniform vec2 res;uniform float uGrey,uRetro,uFlash,uAb,uDesat,uVig;varying vec2 vUv;
       float bayer(vec2 p){ivec2 q=ivec2(mod(p,4.));int i=q.x+q.y*4;
         float m[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);return m[i]/16.-.47;}
       void main(){
-        vec2 px=floor(vUv*res);vec4 c=texture2D(tSrc,(px+.5)/res);
+        vec2 px=floor(vUv*res);vec4 c=uRetro>.5?texture2D(tSrc,(px+.5)/res):texture2D(tSrc,vUv);   // PS1: hard pixels; off: smooth
         // fast-travel cuts: the lens splits colour toward the edges, a flash, the sky drained and closed in
         vec2 dc=vUv-.5;
         if(uAb>.001){vec2 o=floor(dc*uAb*14.+.5);c.r=texture2D(tSrc,(px+o+.5)/res).r;c.b=texture2D(tSrc,(px-o+.5)/res).b;}
@@ -49,7 +49,7 @@ export function makeBlit() {
         gl_FragColor=vec4(c.rgb,1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
-        gl_FragColor.rgb=floor(gl_FragColor.rgb*31.+bayer(px)*.95+.5)/31.;
+        if(uRetro>.5) gl_FragColor.rgb=floor(gl_FragColor.rgb*31.+bayer(px)*.95+.5)/31.;   // 15-bit colour, dithered
       }`,
     depthTest: false, depthWrite: false
   });
@@ -57,14 +57,14 @@ export function makeBlit() {
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
   return { mat, scene, cam };
 }
-// every texture in the scene to nearest-neighbour
-export function crunch(root) {
+// every texture in the scene to nearest-neighbour (or back to smooth, with the PS1 look off)
+export function crunch(root, nearest = true) {
   const seen = new Set();
   root.traverse((o) => {
     const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
     for (const m of ms) for (const k of ["map", "emissiveMap", "normalMap", "roughnessMap", "alphaMap"]) {
       const t = m[k]; if (!t || seen.has(t)) continue; seen.add(t);
-      t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapLinearFilter; t.anisotropy = 1; t.needsUpdate = true;
+      t.magFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter; t.minFilter = nearest ? THREE.NearestMipmapLinearFilter : THREE.LinearMipmapLinearFilter; t.anisotropy = nearest ? 1 : 4; t.needsUpdate = true;
     }
   });
 }
