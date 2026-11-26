@@ -54,7 +54,9 @@ export async function start(o) {
      which turns off the GPU's early depth test), a shorter view, a smaller pool of people */
   const weakGPU = (() => { try { const c = document.createElement("canvas"), gl = c.getContext("webgl2") || c.getContext("webgl"); const ext = gl && gl.getExtension("WEBGL_debug_renderer_info"); const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : ""; gl && gl.getExtension("WEBGL_lose_context") && gl.getExtension("WEBGL_lose_context").loseContext();
     return /Intel|Iris|HD Graphics|Radeon (HD|R[579] M|Pro [45]\d\d)|GeForce (GT|9\d\d|[3-7]\d\dM)|Mali|Adreno|PowerVR|SwiftShader|llvmpipe/i.test(name) && !/Apple M|Radeon Pro [5-9]\d{3}/i.test(name) || (navigator.hardwareConcurrency || 8) <= 2; } catch (e) { return false; } })();
-  const lowLoad = SET.get("quality") === "low" || (SET.get("quality") !== "high" && weakGPU);
+  // a machine Auto already found slow is remembered (Safari calls every Mac GPU "Apple GPU", so the name can't tell)
+  let slowSeen = false; try { slowSeen = localStorage.getItem("lowtide_slow") === "1"; } catch (e) { /* private window */ }
+  const lowLoad = SET.get("quality") === "low" || (SET.get("quality") !== "high" && (weakGPU || slowSeen));
   configure(innerWidth / innerHeight, ps1Load);   // before any material exists: the vertex snap goes into every shader
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", logarithmicDepthBuffer: !lowLoad, stencil: false })   // log depth: the flat layers a few cm apart never fight, near or far;
   const ratio = 1;
@@ -62,7 +64,7 @@ export async function start(o) {
   renderer.shadowMap.enabled = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   o.mount.appendChild(renderer.domElement);
-  const rt = new THREE.WebGLRenderTarget(PS1.w, PS1.h, { type: THREE.HalfFloatType, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, depthBuffer: true });   // the PS1 blit samples texel centres, so linear is exact there
+  const rt = new THREE.WebGLRenderTarget(PS1.w, PS1.h, { type: lowLoad ? THREE.UnsignedByteType : THREE.HalfFloatType, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, depthBuffer: true });   // the PS1 blit samples texel centres, so linear is exact there
   const blit = makeBlit(); blit.mat.uniforms.tSrc.value = rt.texture;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, lowLoad ? 0.5 : 0.3, 2600);
@@ -255,6 +257,27 @@ export async function start(o) {
     if (ps1) { h = Math.round(PS1.h * (low ? 0.62 : 1)); w = Math.round(h * innerWidth / innerHeight / 2) * 2; }
     else { const k = low ? 0.45 : Math.min(1.5, devicePixelRatio || 1); w = Math.round(innerWidth * k); h = Math.round(innerHeight * k); }
     rt.setSize(w, h); blit.mat.uniforms.res.value.set(w, h); blit.mat.uniforms.uRetro.value = ps1 ? 1 : 0;
+    /* low: the final pass draws only as many pixels as the picture has (tens of thousands, not millions on a
+       big screen) and the browser stretches the canvas: hard pixels with the PS1 look, smooth without */
+    const cv = renderer.domElement;
+    if (low) { renderer.setSize(w, h, false); cv.style.imageRendering = ps1 ? "pixelated" : "auto"; }
+    else { renderer.setSize(innerWidth, innerHeight, false); cv.style.imageRendering = ""; }
+    cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+  };
+  /* low: people in a plain lit material (no physical skin, normal or AO maps); the skin's own tone blend kept */
+  const liteMat = (m) => {
+    if (m.userData.lite) return m.userData.lite;
+    const l = new THREE.MeshLambertMaterial({ map: m.map, color: m.color ? m.color.clone() : 0xffffff, alphaTest: m.alphaTest, transparent: m.transparent, depthWrite: m.depthWrite, side: m.side, polygonOffset: m.polygonOffset, polygonOffsetFactor: m.polygonOffsetFactor });
+    if (m.onBeforeCompile && m.userData.u) { l.onBeforeCompile = m.onBeforeCompile; l.customProgramCacheKey = () => "liteskin"; }
+    l.userData.hi = m; m.userData.lite = l; return l;
+  };
+  const liteHumans = (on) => {
+    scene.traverse((o) => {
+      if (!o.isSkinnedMesh || Array.isArray(o.material)) return;
+      const m = o.material;
+      if (on && !m.isMeshLambertMaterial && (m.isMeshStandardMaterial)) { const l = liteMat(m); if (m.color && l.color) l.color.copy(m.color); o.material = l; }
+      else if (!on && m.userData.hi) { if (m.color && m.userData.hi.color) m.userData.hi.color.copy(m.color); o.material = m.userData.hi; }
+    });
   };
   /* low quality, everything that can change live: 30 frames a second steady (not 60 dropping to 20), a thicker
      haze and a shorter view (the far chunks of the city simply aren't drawn, and the sky dome comes in to fit),
@@ -264,7 +287,9 @@ export async function start(o) {
     fpsCap = on ? 30 : 0; viewR = on ? 300 : Infinity;
     FOG0 = on ? FOG_HI * 1.9 : FOG_HI; setFog(0);
     camera.far = on ? 800 : 2600; camera.updateProjectionMatrix(); if (sky.sky) sky.sky.scale.setScalar(on ? 0.42 : 1);
-    ROOMS_ON.value = on ? 45 : 1e6;   // low: only nearby windows show their rooms, far ones are plain if (sky.seaDetail) sky.seaDetail(on);
+    ROOMS_ON.value = on ? 45 : 1e6;   // low: only nearby windows show their rooms, far ones are plain
+    if (sky.seaDetail) sky.seaDetail(on);
+    if (!on) liteHumans(false);
     if (peds) peds.lod = on; if (window.LT && LT.lowAudio) LT.lowAudio(on);
     if (!on) for (const m of world.chunks) m.visible = true;
   };
@@ -276,11 +301,12 @@ export async function start(o) {
   scene.traverse((o) => { if (o.isInstancedMesh && !dynamic.has(o) && o.count > 8) { const n = o.count, m = new THREE.Matrix4(), c = new Float32Array(n * 2); for (let i = 0; i < n; i++) { o.getMatrixAt(i, m); c[i * 2] = m.elements[12]; c[i * 2 + 1] = m.elements[14]; } statics.push({ o, all: o.instanceMatrix.array.slice(), c, n }); } });
   const cull = (dt) => {   // the chunks past the view, hidden (checked a few times a second)
     if ((cullT -= dt) > 0) return; cullT = 0.25;
+    if (viewR !== Infinity && (cull.k = (cull.k || 0) + 1) % 4 === 0) liteHumans(true);   // new people get the plain material within a second
     const cx = camera.position.x, cz = camera.position.z, R = viewR;
     if (R === Infinity) { if (cull.on) { cull.on = false; for (const S of statics) { S.o.instanceMatrix.array.set(S.all); S.o.count = S.n; S.o.instanceMatrix.needsUpdate = true; } } return; }
     cull.on = true;
     for (const m of world.chunks) { const sp = m.geometry.boundingSphere; m.visible = Math.hypot(sp.center.x - cx, sp.center.z - cz) - sp.radius < R; }
-    const R2 = (R * 0.75) ** 2;   // small things go a little sooner
+    const R2 = (R * 0.55) ** 2;   // small things go a little sooner
     for (const S of statics) {
       const arr = S.o.instanceMatrix.array; let k = 0;
       for (let i = 0; i < S.n; i++) { const dx = S.c[i * 2] - cx, dz = S.c[i * 2 + 1] - cz; if (dx * dx + dz * dz < R2) { if (k !== i) arr.set(S.all.subarray(i * 16, i * 16 + 16), k * 16); k++; } }
@@ -290,7 +316,7 @@ export async function start(o) {
   const crowd = (stage) => { const f = [1, 0.75, 0.55, 0.45][stage]; if (peds) peds.limit = Math.round(PEDS0 * f); traffic.limit = Math.round(CARS0 * f); };
   const applyQuality = () => {
     const q = SET.get("quality") || "auto";
-    if (q === "high") { perf.stage = 0; low = false; crowd(0); }
+    if (q === "high") { perf.stage = 0; low = false; crowd(0); try { localStorage.removeItem("lowtide_slow"); } catch (e) { /* */ } }
     else if (q === "low") { low = true; crowd(2); }
     else { low = perf.stage >= 2; crowd(perf.stage); }
     applyRes(); lowKit(low);
@@ -308,6 +334,7 @@ export async function start(o) {
     const avg = perf.sum / 90; perf.n = 0; perf.sum = 0;
     if (avg < 0.022) return;
     perf.stage++; applyQuality();
+    if (perf.stage === 2) try { localStorage.setItem("lowtide_slow", "1"); } catch (e) { /* not kept */ }
     if (perf.stage === 2) hud.tip("The game was running slow, so it switched to low quality. You can change that in Settings.");
     console.info("Lowtide quality step", perf.stage, "avg frame", (avg * 1000).toFixed(1), "ms");
   }
@@ -369,7 +396,7 @@ export async function start(o) {
     adapt(dt);
   }
   addEventListener("resize", () => {
-    renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyRes();
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyRes();
   });
 
   const api = {
