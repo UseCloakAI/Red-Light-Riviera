@@ -25,17 +25,17 @@ export const MODELS = [
   { id: "marlin", name: "Marlin", kind: "saloon", L: 4.66, W: 1.84, wheelR: 0.34, axle: [1.42, -1.36], track: 1.56, clear: 0.24, doors: 4,
     outline: [[2.33, 0.32], [2.36, 0.52], [2.3, 0.7], [2.1, 0.8], [1.6, 0.88], [1.0, 0.95], [-1.25, 0.96], [-1.75, 0.96], [-2.2, 0.9], [-2.33, 0.74], [-2.35, 0.5], [-2.3, 0.32]],
     cab: { zr: -1.25, zf: 1.0, zrr: -0.62, zrf: 0.3, belt: 0.95, roof: 1.44, zB: -0.12, inset: 0.17 },
-    lamps: { head: [2.3, 0.66, 0.62], tail: [-2.33, 0.76, 0.66] }, seat: [0.38, 0.58, -0.1], wheelAt: [0.38, 1.02, 0.36],
+    lamps: { head: [2.3, 0.66, 0.62], tail: [-2.33, 0.76, 0.66] }, seat: [0.38, 0.58, 0.1], wheelAt: [0.38, 1.02, 0.5],
     phys: { mass: 1450, power: 150, top: 52, grip: 1.0, cg: 0.52, drag: 0.36, brake: 1.0 } },
   { id: "skiff", name: "Skiff", kind: "hatchback", L: 3.92, W: 1.74, wheelR: 0.31, axle: [1.22, -1.2], track: 1.48, clear: 0.22, doors: 4,
     outline: [[1.96, 0.3], [1.99, 0.5], [1.92, 0.68], [1.7, 0.8], [1.2, 0.88], [0.86, 0.93], [-1.55, 0.95], [-1.9, 0.92], [-1.98, 0.7], [-1.97, 0.46], [-1.92, 0.3]],
     cab: { zr: -1.62, zf: 0.86, zrr: -1.45, zrf: 0.12, belt: 0.93, roof: 1.46, zB: -0.3, inset: 0.15, hatch: true },
-    lamps: { head: [1.95, 0.66, 0.58], tail: [-1.95, 0.86, 0.66] }, seat: [0.36, 0.56, -0.22], wheelAt: [0.36, 1.0, 0.2],
+    lamps: { head: [1.95, 0.66, 0.58], tail: [-1.95, 0.86, 0.66] }, seat: [0.36, 0.56, -0.06], wheelAt: [0.36, 1.0, 0.34],
     phys: { mass: 1080, power: 90, top: 46, grip: 0.98, cg: 0.5, drag: 0.34, brake: 1.0 } },
   { id: "heron", name: "Heron", kind: "estate", L: 4.82, W: 1.84, wheelR: 0.34, axle: [1.48, -1.4], track: 1.56, clear: 0.24, doors: 4,
     outline: [[2.41, 0.32], [2.44, 0.52], [2.38, 0.7], [2.18, 0.8], [1.68, 0.88], [1.08, 0.95], [-2.2, 0.97], [-2.4, 0.9], [-2.43, 0.5], [-2.38, 0.32]],
     cab: { zr: -2.22, zf: 1.08, zrr: -2.1, zrf: 0.36, belt: 0.95, roof: 1.47, zB: -0.06, zB2: -1.15, inset: 0.16, hatch: true },
-    lamps: { head: [2.38, 0.66, 0.62], tail: [-2.41, 0.84, 0.68] }, seat: [0.38, 0.58, -0.04], wheelAt: [0.38, 1.02, 0.42],
+    lamps: { head: [2.38, 0.66, 0.62], tail: [-2.41, 0.84, 0.68] }, seat: [0.38, 0.58, 0.16], wheelAt: [0.38, 1.02, 0.56],
     phys: { mass: 1560, power: 140, top: 50, grip: 0.97, cg: 0.55, drag: 0.37, brake: 1.0 } },
   { id: "tarpon", name: "Tarpon", kind: "pickup", L: 5.2, W: 1.96, wheelR: 0.39, axle: [1.66, -1.62], track: 1.68, clear: 0.34, doors: 2,
     outline: [[2.6, 0.42], [2.64, 0.66], [2.58, 0.92], [2.3, 1.04], [1.5, 1.1], [1.05, 1.14], [0.1, 1.15], [-0.45, 1.15], [-2.58, 1.12], [-2.62, 0.9], [-2.62, 0.55], [-2.56, 0.4]],
@@ -190,7 +190,9 @@ export function buildModel(m, fine = 0.22) {
     if (c.zB !== undefined && !c.flatBack) P.bar(V(s * hb, c.belt, c.zB), V(s * hr, c.roof - 0.03, c.zB + (roofF - c.zB) * 0.05), 0.09, TRIM);   // B
     if (c.zB2 !== undefined) P.bar(V(s * hb, c.belt, c.zB2), V(s * hr, c.roof - 0.03, c.zB2), 0.08, TRIM);
     P.bar(V(s * hr, c.roof - 0.03, roofR), V(s * hr, c.roof - 0.03, roofF), 0.07, BODY, PAINT, true);   // the roof rail
-    P.bar(V(s * hb, c.belt + 0.01, c.zr), V(s * hb, c.belt + 0.01, c.zf), 0.035, TRIM);   // the window's waist trim
+    // the window's waist trim (on the driver's side, the front part rides on the door)
+    if (s > 0) { P.bar(V(hb, c.belt + 0.01, c.zr), V(hb, c.belt + 0.01, zDoor0 + 0.02), 0.035, TRIM); D.bar(V(hb, c.belt + 0.01, zDoor0 + 0.03), V(hb, c.belt + 0.01, c.zf - 0.03), 0.035, TRIM); }
+    else P.bar(V(s * hb, c.belt + 0.01, c.zr), V(s * hb, c.belt + 0.01, c.zf), 0.035, TRIM);
   }
   { // the roof: a slab with a slight crown
     const pts = [], seg = 4;
@@ -240,7 +242,8 @@ export function buildModel(m, fine = 0.22) {
   const py = m.clear + 0.3, ty0 = m.lamps.tail[1] - 0.24;
   P.box(0.34, 0.11, 0.02, 0, py, Math.max(fz(py), zEnd + 0.1), [0.92, 0.9, 0.84]); P.box(0.34, 0.11, 0.02, 0, ty0, Math.min(rz(ty0), zTail - 0.1), [0.92, 0.9, 0.84]);
   for (const az of m.axle) P.box(m.W - 0.5, m.wheelR + 0.08, m.wheelR * 2 + 0.1, 0, m.wheelR + 0.06, az, [0.035, 0.035, 0.04]);
-  for (const s of [-1, 1]) P.box(0.04, 0.06, c.zf - c.zr - 0.2, s * (hw + 0.005), m.clear + 0.06, (c.zf + c.zr) / 2, TRIM);
+  P.box(0.04, 0.06, c.zf - c.zr - 0.2, -(hw + 0.005), m.clear + 0.06, (c.zf + c.zr) / 2, TRIM);   // rocker trim (the driver's side: under the door, on the door)
+  { const z0 = c.zr + 0.1, z1 = zDoor0; if (z1 - z0 > 0.1) P.box(0.04, 0.06, z1 - z0, hw + 0.005, m.clear + 0.06, (z0 + z1) / 2, TRIM); D.box(0.04, 0.06, c.zf - 0.1 - zDoor0 - 0.04, hw + 0.005, m.clear + 0.2, (zDoor0 + 0.02 + c.zf - 0.1) / 2, TRIM); }
   P.add(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 6).rotateX(Math.PI / 2).translate(-hw * 0.55, m.clear + 0.06, zTail - 0.05), [0.3, 0.3, 0.32]);
   // lamps: headlamps, tail lamps (the brake lights are fleet's), indicators
   const [, hy, hx] = m.lamps.head, [, ty, tx] = m.lamps.tail, hz = faceZ(m, hy, true) + 0.04, tz = faceZ(m, ty, false) - 0.04;

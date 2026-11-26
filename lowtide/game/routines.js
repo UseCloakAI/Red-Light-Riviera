@@ -105,11 +105,29 @@ export class Routines {
     const [x, z] = act.type === "sit" ? this.stand(act) : this.at(act);
     const settle = () => { if (act.type === "sit") { pd.mode = "sitdown"; pd.st = 0; } else this.arrive(p); };
     if (now) { g.position.set(this.ox + x, 0, this.oz + z); g.rotation.y = act.face ?? 0; if (act.type === "sit") { pd.mode = "sit"; pd.st = 0; pd.wait = 25 + this.R() * 60; } else this.arrive(p); }
+    else if (act.type === "sit") {
+      // a seat: come at it from the front (the floor in front can be a narrow gap, between a sofa and its table),
+      // so the last step in is square on and nobody cuts through the furniture
+      const f = act.face || 0, out = this.approach(x, z, f);
+      this.walk(p, out[0], out[1], () => this.turnTo(p, f, settle), [x, z]);
+    }
     else this.walk(p, x, z, () => this.turnTo(p, act.face ?? g.rotation.y, settle));
   }
-  walk(p, x, z, then) {
-    const [sx, sz] = this.pos(p.pd), path = this.nav.path(sx, sz, x, z);
-    if (!path) { p.pd.h.group.position.set(this.ox + x, 0, this.oz + z); then(); return; }
+  // the furthest point straight out in front of a seat (up to a metre) that's still clear of everything
+  approach(x, z, f) {
+    let best = [x, z];
+    for (let k = 0.15; k <= 1.0; k += 0.05) { const px = x + Math.sin(f) * k, pz = z + Math.cos(f) * k, [i, j] = this.nav.cell(px, pz); if (this.nav.free(i, j)) { best = [px, pz]; if (k > 0.45) break; } else if (best[0] !== x || best[1] !== z) break; }
+    if (best[0] !== x || best[1] !== z) return best;
+    // nothing clear straight out (a table close in front): along the front of the seat to where it is clear
+    const lx = Math.cos(f), lz = -Math.sin(f);
+    for (let d = 0.25; d <= 3.5; d += 0.25) for (const s of [1, -1]) { const px = x + lx * d * s, pz = z + lz * d * s, [i, j] = this.nav.cell(px, pz); if (this.nav.free(i, j)) return [px, pz]; }
+    return best;
+  }
+  walk(p, x, z, then, last) {
+    const [sx, sz] = this.pos(p.pd); let path = this.nav.path(sx, sz, x, z);
+    // no way through: walk straight there rather than appear there
+    if (!path) path = [[sx, sz], [x, z]];
+    if (last) path.push(last);
     p.pd.path = path; p.pd.pi = 1; p.pd.mode = "walk"; p.pd.then = then;
   }
   turnTo(p, yaw, then) { p.pd.mode = "turn"; p.pd.turnTo = yaw; p.pd.then = then; }

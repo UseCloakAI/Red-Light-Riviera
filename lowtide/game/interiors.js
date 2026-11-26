@@ -724,7 +724,7 @@ const FURNISH = {
     const { w, d, R } = o;
     const sl = Math.min(2.6, w - 1.3), sx = 0.45, tz = Math.max(4.2, d - 6.4), cx = sx + sl / 2;
     rug(o, sx, sx + sl, tz + 0.8, d - 3.2, "#8a6a4a");
-    sofa(o, sx, d - 3, sl, ["#4a5a7a", "#7a4a3a", "#3a5a4a"][(R() * 3) | 0], true, "watch"); o.box(cx - 0.7, cx + 0.7, 0, 0.4, d - 4.4, d - 3.8, "#6a4a32", { tex: "wooddark" });
+    sofa(o, sx, d - 3, sl, ["#4a5a7a", "#7a4a3a", "#3a5a4a"][(R() * 3) | 0], true, "watch"); { const t0 = Math.max(tz + 0.75, d - 4.6), t1 = Math.min(t0 + 0.6, d - 3.85); if (t1 - t0 > 0.3) o.box(cx - 0.7, cx + 0.7, 0, 0.4, t0, t1, "#6a4a32", { tex: "wooddark" }); }   // the coffee table, a step clear of the sofa
     o.box(cx - 0.9, cx + 0.9, 0, 0.55, tz, tz + 0.42, "#3a3036", { tex: "wooddark" }); tvSet(o, cx - 0.62, cx + 0.62, 0.59, 1.35, tz + 0.05, tz + 0.3, "+z");
     o.box(w - 0.8, w - 0.1, 0, 0.95, 1.5, d - 1, "#d8d2c8"); o.box(w - 0.7, w - 0.1, 1.5, 2.3, 1.5, d - 1, "#b8b0a0", { solid: false }); o.box(w - 0.85, w - 0.1, 0.95, 1.0, 1.5, d - 1, "#4a4a52", { solid: false });
     if (w > 4.5) { o.box(w - 3.5, w - 1.3, 0, 0.75, 3, 4, "#6a4a32", { tex: "wooddark" }); for (const z of [2.6, 4.4]) o.box(w - 2.6, w - 2.2, 0, 0.45, z - 0.2, z + 0.2, "#4a3a2a", { solid: false }); }   // table and chairs

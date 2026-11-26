@@ -20,7 +20,7 @@
 
 export const G = 9.81;
 const RATIOS = [3.3, 2.05, 1.45, 1.08, 0.85], REV_RATIO = 3.1, IDLE = 850, REDLINE = 6500, UP = 5900, DOWN = 2600;
-const B_F = 8.6, B_R = 11.5, C_LAT = 1.42, CRR = 0.013;   // the rear tyres stiffer: a car that understeers a little, like a road car
+const B_F = 11, B_R = 14.5, C_LAT = 1.42, CRR = 0.013;   // the rear tyres stiffer: a car that understeers a little, like a road car
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 // everything derived from a model, once
@@ -36,7 +36,7 @@ export function spec(m) {
   // peak torque: the power at 5600 rpm on the curve below
   const tq = P / (5600 * 2 * Math.PI / 60) / curve(5600);
   const fwd = m.id === "skiff" || m.id === "heron";
-  s = { mass, L, cz, af, br, R, final, kd, tq, fwd, h: p.cg, Iz: mass * ((m.L ** 2) + (m.W ** 2)) / 12 * 1.15, mu: 1.02 * p.grip, brake: p.brake,
+  s = { mass, L, cz, af, br, R, final, kd, tq, fwd, h: p.cg, Iz: mass * ((m.L ** 2) + (m.W ** 2)) / 12 * 0.95, mu: 1.14 * p.grip, brake: p.brake,
     hw: m.W / 2, hl: m.L / 2, track: m.track, pitchK: 0.0052 * (p.cg / 0.52), rollK: 0.0085 * (p.cg / 0.52) };
   SPEC.set(m, s); return s;
 }
@@ -74,6 +74,8 @@ export function step(c, ctl, h, env) {
   // the handbrake: rear wheels locked, sliding
   let locked = false;
   if (ctl.hand) { if (Math.abs(u) > 0.4) { FxR = -Math.sign(u) * mu * Fr * 0.82; locked = true; } else { u *= 0.6; FxR = 0; } }
+  // off the throttle in gear, the engine holds it back (a car doesn't freewheel)
+  if (!ctl.thr && c.gear > 0 && Math.abs(u) > 0.8 && !air) FxR -= Math.sign(u) * W * (0.045 + 0.035 * Math.min(1, (c.rpm - 850) / 4000)) * (S.fwd ? 0 : 1), FxF -= Math.sign(u) * W * (0.045 + 0.035 * Math.min(1, (c.rpm - 850) / 4000)) * (S.fwd ? 1 : 0);
   // rolling resistance and the air
   const sp = Math.hypot(c.vx, c.vz);
   let Fz = -CRR * W * clamp(u / 0.6, -1, 1) - S.kd * u * Math.abs(u), Fx = -S.kd * v * Math.abs(v) * 2;
@@ -90,6 +92,8 @@ export function step(c, ctl, h, env) {
     // rear axle
     const vrx = v - c.om * S.br, aR = Math.atan2(vrx, Math.max(Math.abs(u), 0.5));
     const capR = mu * 1.06 * Fr, want = FxR; FxR = clamp(FxR, -capR, capR);
+    // traction control on everything but the Barracuda: once the tail's stepping out, the power's cut back
+    if (!S.fwd && !locked && c.m.id !== "barracuda" && Math.abs(aR) > 0.09 && FxR > 0) FxR = Math.min(FxR, capR * 0.45);
     c.spinR = !locked && Math.abs(want) > capR * 0.97 && Math.abs(u) < 25 ? Math.min(1, c.spinR + h * 4) : Math.max(0, c.spinR - h * 3);
     if (!S.fwd && c.spinR > 0.2) FxR *= 0.92;   // wheelspin: a little less drive than the grip
     let latR = -capR * mf(aR, B_R) * Math.sqrt(Math.max(0, 1 - (FxR / capR) ** 2)) * (locked ? 0.78 : 1);
