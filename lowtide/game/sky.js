@@ -187,11 +187,15 @@ gl_FragDepth=log2(vFragDepth)*logDepthBufFC*.5;
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.4;
   scene.add(sun, sun.target);
 
+  const seaGeo = (n) => { const g = new THREE.PlaneGeometry(2, 2, n, n).rotateX(-Math.PI / 2), q = g.attributes.position; for (let k = 0; k < q.count; k++) q.setXYZ(k, spread(q.getX(k)), 0, spread(q.getZ(k))); g.computeBoundingSphere(); return g; };
   return {
     sun, water, sky,
+    // low quality: the sea on a coarse grid
+    seaDetail(low) { this.low = low; const n = low ? 56 : 150; if (water.userData.n === n) return; water.userData.n = n; const old = water.geometry; water.geometry = seaGeo(n); old.dispose(); },
     update(t, focus, camPos) {
       uniforms.uTime.value = t;
       sky.position.copy(camPos);
+      swash.visible = !this.low || camPos.z > 140;   // low quality: the beach's surf only when you're near the beach
       water.position.x = Math.round(camPos.x / 8) * 8; water.position.z = Math.round(camPos.z / 8) * 8;
       sun.target.position.copy(focus);
       sun.position.copy(focus).addScaledVector(LIGHT_DIR, 120);

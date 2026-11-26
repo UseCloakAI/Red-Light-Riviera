@@ -232,7 +232,7 @@ export async function spawnPeds(scene, world, o = {}) {
     if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
   }
   /* ---- off the pavement: knocked flat, squaring up to the player, finding their way back ---- */
-  let clock = 0;
+  let clock = 0, frameN = 0, lod = false;
   const pick = (L) => L[(R() * L.length) | 0];
   const A = new THREE.Vector3(), Bv = new THREE.Vector3(), C = new THREE.Vector3(), F = new THREE.Vector3(), U = new THREE.Vector3(0, 1, 0), RT = new THREE.Vector3(), POLE = new THREE.Vector3();
   // knocked off their feet: a ragdoll that gets back up after a moment
@@ -337,7 +337,7 @@ export async function spawnPeds(scene, world, o = {}) {
     get limit() { return limit; },
     update(dt, player) {
       const px = player.pos.x, pz = player.pos.z, pv = player.speed || 0; ear = player.pos;
-      quiet -= dt; clock += dt;
+      quiet -= dt; clock += dt; frameN++;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
         if (pd.cop || pd.npc) { if (pd.dead && pd.rag && g.visible && pd.rag.step(dt)) pd.rag.pose(); return; }
@@ -402,7 +402,7 @@ export async function spawnPeds(scene, world, o = {}) {
         else if (pd.cower > 0 && pd.fear) yaw = Math.atan2(x - pd.fear.x, z - pd.fear.z);   // duck, back to the danger
         let dy = yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
         g.rotation.y += dy * Math.min(1, dt * (pd.stagger > 0 ? 10 : 6));
-        g.visible = d < FAR;
+        g.visible = d < (lod ? 60 : FAR);
         if (d < NEAR) {
           const k = Math.min(1, dt * 6), running = moving && !!pd.fear;
           pd.wW += ((moving && !running ? 1 : 0) - pd.wW) * k; pd.rW += ((running ? 1 : 0) - pd.rW) * k; pd.cW += ((pd.cower > 0 ? 1 : 0) - pd.cW) * k * 1.5;
@@ -411,7 +411,8 @@ export async function spawnPeds(scene, world, o = {}) {
           pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - pd.rW - pd.cW));
           pd.act.walk.timeScale = pd.speed / 1.45; pd.act.run.timeScale = pd.run / 4.8;
           if (pd.gW > 0.001) { pd.gW *= Math.max(0, 1 - dt * 4); for (const n of GESTURES) if (pd.act[n]) pd.act[n].setEffectiveWeight(n === pd.gest ? pd.gW : 0); }
-          pd.mixer.update(dt);
+          pd.acc = (pd.acc || 0) + dt;
+          if (!lod || d < 16 || ((frameN + idx) & 1)) { pd.mixer.update(pd.acc); pd.acc = 0; }   // low quality: far people animate on alternate frames
           const facing = glance(pd, g, toP.x, toP.z, d, dt);
           // now and then, someone close says something
           if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z)), pd); }
@@ -455,6 +456,9 @@ export async function spawnPeds(scene, world, o = {}) {
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
     knock, bumped, squareUp, makeCop, makeNpc,
+    set lod(v) {   // low quality: no eyes, brows or lashes (tiny, but whole meshes each), and nobody drawn past 60 m
+      lod = !!v; for (const pd of peds) pd.h.group.traverse((m) => { if (m.isMesh && /eye|brow|lash/i.test(m.name)) m.visible = !lod; });
+    },
     get cops() { return peds.filter((pd) => pd.cop); },
     get fighting() { return peds.filter((pd) => pd.free && pd.free.mode === "fight" && !pd.dead); },
     alarm(x, z, r = 40, shout = true, kind = "gun") {

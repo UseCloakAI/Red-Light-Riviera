@@ -395,7 +395,27 @@ export async function buildWorld(scene, opts = {}) {
     const tx = new THREE.DataTexture(data, 8, n, THREE.RGBAFormat, THREE.FloatType); tx.needsUpdate = true; ROOMS.value = tx;
   }
   // geometry from the kit: one mesh per material for everything laid down since the last flush
-  const flush = () => { for (const [k, Bf] of Object.entries(B)) { const n0 = Bf.done || 0; if (Bf.p.length > n0) { add(new THREE.Mesh(geometry({ p: Bf.p.slice(n0), n: Bf.n.slice(n0), u: Bf.u.slice(n0 / 3 * 2), c: Bf.c.slice(n0), r: Bf.r ? Bf.r.slice(n0 / 3) : null }), kit.M[k]), false, true); Bf.done = Bf.p.length; } } };
+  /* geometry from the kit, cut into 96 m chunks per material (each triangle goes to the chunk its centre's in),
+     so the GPU can skip what's off-screen, and low quality can skip what's far */
+  const CHUNK = 96, chunks = [];
+  const flush = () => {
+    for (const [k, Bf] of Object.entries(B)) {
+      const n0 = Bf.done || 0; if (Bf.p.length <= n0) continue;
+      const v0 = n0 / 3, nv = Bf.p.length / 3 - v0, cells = new Map(), hasR = Bf.r && Bf.r.length === Bf.p.length / 3;
+      for (let t = 0; t < nv; t += 3) {
+        const i = (v0 + t) * 3, cx = (Bf.p[i] + Bf.p[i + 3] + Bf.p[i + 6]) / 3, cz = (Bf.p[i + 2] + Bf.p[i + 5] + Bf.p[i + 8]) / 3;
+        const key = Math.floor(cx / CHUNK) + "," + Math.floor(cz / CHUNK); let c = cells.get(key);
+        if (!c) cells.set(key, c = { p: [], n: [], u: [], c: [], r: hasR ? [] : null });
+        for (let q = 0; q < 3; q++) {
+          const vi = v0 + t + q;
+          c.p.push(Bf.p[vi * 3], Bf.p[vi * 3 + 1], Bf.p[vi * 3 + 2]); c.n.push(Bf.n[vi * 3], Bf.n[vi * 3 + 1], Bf.n[vi * 3 + 2]);
+          c.u.push(Bf.u[vi * 2], Bf.u[vi * 2 + 1]); c.c.push(Bf.c[vi * 3], Bf.c[vi * 3 + 1], Bf.c[vi * 3 + 2]); if (hasR) c.r.push(Bf.r[vi]);
+        }
+      }
+      for (const c of cells.values()) { const m = add(new THREE.Mesh(geometry(c), kit.M[k]), false, true); m.geometry.computeBoundingSphere(); chunks.push(m); }
+      Bf.done = Bf.p.length;
+    }
+  };
   flush();
   await breathe();
 
@@ -597,7 +617,7 @@ export async function buildWorld(scene, opts = {}) {
   map.parks.push(Array.from({ length: 24 }, (_, k) => ({ x: 10 + Math.cos(k / 24 * 6.283) * 17, z: 10 + Math.sin(k / 24 * 6.283) * 17 })));
   // start on the beach by the pier, facing the sunset
   const sx = PIER.x0 - 14, spawn = { x: sx, z: promenade(sx) + 3, yaw: -0.25 };
-  return { entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
+  return { chunks, entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
     props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh } };
 }
 function buildPalms(scene, palms, R, add) {

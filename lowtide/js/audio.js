@@ -899,9 +899,18 @@
     if (!quiet) sfx.hit(t, B.sfx);
   }
 
+  function lowAudio() {}
   window.LT = {
     loadBaked: loadBaked, bed: bed, playIntro: playIntro, startTitle: startTitle, cutIntro: function () { if (ctx) cutSeq(now()); },
     get baked() { return !!(BAKE.intro && BAKE.loop); },
+    // low quality: swap every reverb for a short one (and back)
+    lowAudio: function (on) {
+      if (!ctx || !hall) return; var key = on ? "short" : "long";
+      if (lowAudio.k === key) return; lowAudio.k = key;
+      [[hall, 3.6, 2.4, 0.03, 4600], [plate, 1.3, 3.0, 0.006, 8000], [mverb, 2.8, 2.6, 0.02, 5200], [streetVerb, 1.7, 2.2, 0.055, 3600]].forEach(function (v) {
+        if (v[0]) v[0].buffer = impulse(on ? Math.min(0.5, v[1]) : v[1], v[2], v[3], v[4]);
+      });
+    },
     init: init, now: now, sfx: sfx, ui: ui, pause: pauseMix, mix: function (S) { mix(S || (window.LT_SET ? LT_SET.all() : {})); },
     cue: { intro: cueIntro, skip: cueSkip },
     song: { play: songPlay, stop: songStop, get wanted() { return SONG.want; } },
