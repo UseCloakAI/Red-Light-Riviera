@@ -88,7 +88,7 @@ const ROOM_GLSL = `
     return mix(col,vec3(.28,.34,.42),.14);   // a little glass
   }`;
 export const ROOMS = { value: null };
-export const ROOMS_ON = { value: 1 };   // low quality: plain windows (the per-pixel room trace is the costliest thing on old GPUs)   // a DataTexture: per enterable building, its frame and up to four rooms (world.js)
+export const ROOMS_ON = { value: 1e6 };   // how far away (m) windows still show the room behind them   // low quality: plain windows (the per-pixel room trace is the costliest thing on old GPUs)   // a DataTexture: per enterable building, its frame and up to four rooms (world.js)
 /* through the ground-floor windows of a building you can go into: that room, cheaply. The same
    size, the same floor, walls and light, the same counter, shelves, booths, bar, beds and
    desks in the same places as interiors.js builds them, traced as boxes (kind ids match
@@ -171,7 +171,7 @@ function interiorRooms(mat, t) {
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uWin; uniform vec2 uCells; uniform vec3 uRoom; uniform float uRoomsOn; varying vec3 vIWP; varying vec3 vIWN;" + ROOM_GLSL + SHOP_GLSL)
       .replace("#include <opaque_fragment>", `#include <opaque_fragment>
         #ifdef USE_MAP
-        if(uRoomsOn>.5&&texture2D(uWin,vMapUv).r>.5){
+        if(distance(vIWP,cameraPosition)<uRoomsOn&&texture2D(uWin,vMapUv).r>.5){
           float litIn=0.;
           #ifdef USE_EMISSIVEMAP
           litIn=step(.15,texture2D(emissiveMap,vEmissiveMapUv).r);
