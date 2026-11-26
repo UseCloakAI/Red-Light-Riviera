@@ -32,6 +32,9 @@ export class Body {
     this.g = group; this.B = {}; this.rest = [];
     for (const b of bones) { this.B[b.name] = b; if (!TRACKED.test(b.name)) this.rest.push([b, b.quaternion.clone()]); }
     this.ok = !!(this.B.root && this.B.upperleg01_L && this.B.upperarm01_R && this.B.head);   // a body these rules fit (not the fallback model)
+    // where the hips sit standing (the bind pose): sitting moves them from here, never from wherever they were last frame
+    // (a mixer doesn't always rewrite the hips' position, and adding to it every frame sends them off and snaps them back)
+    this.root0 = this.B.root ? this.B.root.position.clone() : null;
   }
   // before anything else each frame, after the mixer
   reset() { for (const [b, q] of this.rest) b.quaternion.copy(q); this.g.updateMatrixWorld(true); }
@@ -148,9 +151,8 @@ export class Body {
       this.turn("spine04", Z, 0.025 * Math.sin(T * 0.17 + 1));
     }
     // hips: back from over the feet and down onto the seat (the root bone, in the person's own frame)
-    const standY = root.position.y, hipY = Math.min(s.seat + 0.1, standY - 0.04);
-    root.position.y += (hipY - standY) * kd + give;
-    root.position.z -= (s.back ?? 0.47) * kb;
+    const R0 = this.root0, standY = R0.y, hipY = Math.min(s.seat + 0.1, standY - 0.04);
+    root.position.set(R0.x, standY + (hipY - standY) * kd + give, R0.z - (s.back ?? 0.47) * kb);
     this.g.updateMatrixWorld(true);
     this.lean(lean);
     // legs: ankles back to where they were, knees forward, soles flat
