@@ -601,6 +601,72 @@ Same brief, same timer, same ending beat. Only these change:
 
 ---
 
+### On the screen: WMK 6 and the late-night lineup
+
+Every TV on the island is tuned to the same few channels, and they are louder than the city they broadcast to. The story is told dry; the television isn't. It's the one place in Marlowe Keys where people say the quiet part out loud, swear on air and get bleeped late. Played on sets in apartments, the Seagrape's rooms, bars, laundromats and the diner's corner TV, and on the Palm Square Theatre's screen. Shows and scripts: `lowtide/media/tv/shows.src.json`. How they're made: `lowtide/tools/tv/README.md`.
+
+#### Dale Vance
+- **Role.** Anchor, *WMK 6 News at Eleven*, for twenty-six years. The only local newscast left, which he takes to mean he can't be fired. He has been fired twice. They hired him back both times because nobody else would read the tide tables.
+- **Look.** Silver hair that doesn't move, a navy suit, a tan from a bottle he keeps in the desk next to the other bottle.
+- **Voice.** Low, slow, newsreader cadence that turns sour mid-sentence. Reads a story straight and then adds the one sentence his producer begs him not to.
+- **Wants.** One clean night. A Gulf Coast Emmy. His second wife back, or failing that, her lawyer's number out of his phone.
+- **Secret.** Ashby Tidewater pays for the eleven o'clock weather segment. Dale knows what that buys and reads the copy anyway.
+- **Lines.** "Draw your own conclusions. I've drawn mine. They're in my lawyer's safe." / "Somebody get me a drink."
+
+#### Bunny Marsh
+- **Role.** First Alert weather, WMK 6. A meteorology degree from the mainland, a stage smile, and an open, cheerful wish that the next hurricane takes Bellwether Key first.
+- **Look.** Blonde blowout the humidity is winning against, pinstripe suit, a clicker she points like a gun.
+- **Voice.** Bright and fast, the voice of a morning-show host who has stopped caring who hears her. Says "honey" when she's about to be cruel.
+- **Wants.** The network weather job in Atlanta. Failing that, to be on air when the big one hits.
+- **Secret.** She's the one who leaks the tide warnings to Dez a day early. He pays her in shrimp.
+- **Lines.** "Downtown, expect rain and gunfire." / "Dale, your family left you."
+
+#### Chet Gaines
+- **Role.** Spokesman for Tide Cola. Former Gulf Coast Conference running back, two championships, one acquittal. Says the last part himself now so nobody else gets to.
+- **Look.** Built like a fridge, striped shirt open one button too far, a smile that took a dentist a year.
+- **Voice.** Big, easy, salesman-warm. Every sentence lands like a touchdown he's still proud of.
+- **Wants.** Another season. Any season.
+- **Lines.** "Two time Gulf Coast champion. One time acquitted." / "Taste the tide. Damn right."
+
+#### Tide Cola
+- **What it is.** The island's cola, bottled at Tidewater Bottling in Port Salt, "with real Marlowe Keys water, mostly the clean part." Sweet, flat by the second sip, faintly salty. Thirty-five cents. Its ads carry a disclaimer longer than the ad. Tidewater Bottling is a subsidiary of a subsidiary of Ashby Tidewater, which nobody on the island has looked up.
+
+#### Rex Fontaine
+- **Role.** Host of *Spin City*, the island's only game show, filmed in an old bowling alley in Midtown. The wheel has one jet ski on it. It has never landed there.
+- **Look.** Black dye job, veneers, a tan the color of a saddle, a cordless mic he never puts down.
+- **Voice.** Rapid, sing-song showman patter. Insults contestants on the beat so the studio laughs on cue.
+- **Wants.** His alimony paid (four ex-wives, all in the studio audience at least once), and his marker with the card room above the Nite Owl torn up.
+- **Secret.** The wheel is rigged by a man under the stage with a brake lever. Rex calls him "the producers."
+- **Lines.** "The only game show where the wheel is crooked, and so is your host!" / "I need a drink, and possibly a lawyer."
+
+#### Darlene Sykes
+- **Role.** *Spin City* contestant from Gannet Landing. Drove two hours. Lost.
+- **Look.** Red bob, blue blouse, a lucky scrunchie on her wrist that is not lucky.
+- **Voice.** High and nervous, then loud and righteous.
+- **Lines.** "I'm so nervous I think I peed a little." / "This is rigged!"
+
+#### Marty Kessler
+- **Role.** Attorney at law, *Kessler & Associates*. There are no associates. Night-school law degree (by correspondence), an office over a dry cleaner on Ashby Boulevard, and an ad that runs every fifteen minutes after midnight because the slots are cheap.
+- **Look.** White hair combed over nothing, a suit two sizes ago, a nameplate bigger than his desk.
+- **Voice.** Fast, wheedling, a used-car rhythm. Starts every ad confident and ends it begging.
+- **Wants.** One big case. Failing that, rent.
+- **Secret.** He's sued his own mother twice. She settled. He has a box of *Ottoline* insurance paperwork from a client who never came back for it, and no idea what's in it.
+- **Lines.** "I sue everybody." / "My mother settled." / "Please call. My landlord is watching this."
+
+#### Captain Gull (Morty Plank)
+- **Role.** *Captain Gull's Pier Patrol*, the island's kids' show: a gull puppet in a sailor cap teaching boys and girls about the ocean. Taped on a toy pier set at WMK in the afternoon, rerun at hours no child should be awake.
+- **The man inside.** Morty Plank, puppeteer and voice, ten years on the show. Smokes in the puppet. Owes a man named Gus (a crab, on air; a bookie on Pier 9, off it) eight hundred dollars. Swears on tape and the network bleeps him late, which has made the show a cult hit with the night shift at the Stacks.
+- **Voice.** Squawking, robotic, gleeful, then suddenly very tired.
+- **Lines.** "Stay in school. Stay off the pier. And never, ever trust a pelican." / "Ten years on this show and now they bleep me."
+
+#### The Long Tide (Seagrape Pictures)
+- **What it is.** A black-and-white noir shot on Tideline Pier in the fifties by the Seagrape's original owner, who also financed it. It plays on a loop at the Palm Square Theatre because nobody owns the rights to anything newer. Everyone on the island can quote it; the last line is on T-shirts.
+- **Vic Corrado as Jack Mercer.** A harbour cop gone wrong, narrating his own mistakes in a voice like a gravel road.
+- **Lana Shore as Vivian Kole.** The woman with the money on the boat. Lana married a Port Commissioner and never made another picture.
+- **Lines.** "In this town, even the fish talk." / "Nobody leaves the Keys, kid. Not even the tide."
+
+---
+
 ## 10. Endings
 
 Dead Low ends at Bar Road Landing with the flood tide behind Hollis. Pruitt's car is on one side, alone. Ashby's truck is on the other. The last objective is "Choose who gets it." and it has two markers. Whichever one Hollis walks the capsule to is the ending.

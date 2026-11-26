@@ -1,0 +1,71 @@
+{
+  "_": "Lowtide TV. Source for tools/tv (audio, 3D render) and the game's subtitles. {word} = the network bleeps it; [word] = the bleep that misses (it's late). Cast bios: story/STORY.md, 'WMK 6 and the screen'.",
+  "cast": {
+    "dale":    { "name": "Dale Vance",     "voice": { "v": "en-us+m3", "p": 34, "s": 150 }, "look": { "sex": 1, "age": 58, "muscle": 0.4, "weight": 0.62, "height": 0.55, "proportions": 0.5, "african": 0.05, "asian": 0.0, "caucasian": 0.95, "tone": 0.12, "hair": "short02", "hairColor": "#8b8a86", "outfit": "male_elegantsuit01", "shoes": "shoes02", "brows": "eyebrow002", "browColor": "#5a3d27", "eyes": "blue" } },
+    "bunny":   { "name": "Bunny Marsh",    "voice": { "v": "en-us+f2", "p": 70, "s": 178 }, "look": { "sex": 0, "age": 33, "muscle": 0.4, "weight": 0.35, "height": 0.52, "proportions": 0.7, "african": 0.15, "asian": 0.05, "caucasian": 0.8, "tone": 0.05, "hair": "long01", "hairColor": "#c9a26b", "outfit": "female_elegantsuit01", "shoes": "shoes05", "brows": "eyebrow010", "browColor": "#8a6a48", "eyes": "green" } },
+    "chet":    { "name": "Chet Gaines",    "voice": { "v": "en-us+m1", "p": 40, "s": 165 }, "look": { "sex": 1, "age": 44, "muscle": 0.85, "weight": 0.55, "height": 0.75, "proportions": 0.7, "african": 0.7, "asian": 0.0, "caucasian": 0.3, "tone": 0, "hair": "short04", "hairColor": "#120d0a", "outfit": "male_casualsuit03", "shoes": "shoes03", "brows": "eyebrow006", "browColor": "#120d0a", "eyes": "brown" } },
+    "rex":     { "name": "Rex Fontaine",   "voice": { "v": "en-us+m4", "p": 46, "s": 190 }, "look": { "sex": 1, "age": 54, "muscle": 0.45, "weight": 0.45, "height": 0.6, "proportions": 0.6, "african": 0.0, "asian": 0.0, "caucasian": 1.0, "tone": 0.35, "hair": "short01", "hairColor": "#120d0a", "outfit": "male_elegantsuit01", "shoes": "shoes02", "brows": "eyebrow004", "browColor": "#120d0a", "eyes": "brown" } },
+    "darlene": { "name": "Darlene Sykes",  "voice": { "v": "en-us+f4", "p": 62, "s": 185 }, "look": { "sex": 0, "age": 47, "muscle": 0.3, "weight": 0.75, "height": 0.4, "proportions": 0.4, "african": 0.0, "asian": 0.0, "caucasian": 1.0, "tone": 0.1, "hair": "bob01", "hairColor": "#6a2a1e", "outfit": "female_casualsuit01", "shoes": "shoes01", "brows": "eyebrow011", "browColor": "#5a3d27", "eyes": "blue" } },
+    "marty":   { "name": "Marty Kessler",  "voice": { "v": "en-us+m6", "p": 50, "s": 205 }, "look": { "sex": 1, "age": 61, "muscle": 0.25, "weight": 0.7, "height": 0.35, "proportions": 0.4, "african": 0.0, "asian": 0.0, "caucasian": 1.0, "tone": 0.2, "hair": "short03", "hairColor": "#d8d5cf", "outfit": "male_elegantsuit01", "shoes": "shoes02", "brows": "eyebrow001", "browColor": "#9a9690", "eyes": "brown" } },
+    "gull":    { "name": "Captain Gull (Morty Plank)", "voice": { "v": "en-us+klatt3", "p": 82, "s": 175 } },
+    "announcer": { "name": "Announcer",    "voice": { "v": "en-us+m2", "p": 30, "s": 290 } },
+    "jack":    { "name": "Vic Corrado as Jack Mercer", "voice": { "v": "en-us+m7", "p": 22, "s": 135 }, "look": { "sex": 1, "age": 42, "muscle": 0.6, "weight": 0.45, "height": 0.65, "proportions": 0.65, "african": 0.1, "asian": 0.0, "caucasian": 0.9, "tone": 0, "hair": "short02", "hairColor": "#2a1c14", "outfit": "male_elegantsuit01", "shoes": "shoes02", "hat": "fedora01", "brows": "eyebrow006", "browColor": "#2a1d16", "eyes": "brown" } },
+    "vivian":  { "name": "Lana Shore as Vivian Kole", "voice": { "v": "en-us+f5", "p": 48, "s": 140 }, "look": { "sex": 0, "age": 36, "muscle": 0.35, "weight": 0.32, "height": 0.6, "proportions": 0.8, "african": 0.0, "asian": 0.3, "caucasian": 0.7, "tone": 0, "hair": "bob02", "hairColor": "#120d0a", "outfit": "female_elegantsuit01", "shoes": "shoes05", "brows": "eyebrow009", "browColor": "#120d0a", "eyes": "brown" } }
+  },
+  "shows": [
+    { "id": "news", "title": "WMK 6 News at Eleven", "set": "news", "lines": [
+      ["dale", "Good evening, Marlowe Keys. I'm Dale Vance, and this is W M K Six News at eleven. The only newscast legally allowed in this county.", 0.5],
+      ["dale", "Our top story. A tide warning for Tideline Beach tonight. Public Safety says stay off the sand. I say the sand was never your friend.", 0.5, "cut:story1"],
+      ["dale", "At Port Salt, the longshore strike enters day three. Union steward Bernie Szabo says her people want a fair wage. Calvin Ashby says her people want to be careful. Draw your own conclusions. I've drawn mine. They're in my lawyer's safe.", 0.5, "cut:story2"],
+      ["dale", "And in lighter news, a man on Ashby Boulevard was arrested for getting intimate with a parking meter. He told officers it was consensual. The meter has declined to comment.", 0.6, "cut:story3"],
+      ["dale", "Now let's go to Bunny Marsh with the weather. Bunny, tell me something good.", 0.4, "cut:two"],
+      ["bunny", "Thanks Dale! Nothing good! There's a big ugly storm cell sitting off the Keys like a drunk at closing time, and honey, it is not going home alone.", 0.4, "cut:weather"],
+      ["bunny", "Tideline, expect rain. Downtown, expect rain and gunfire. Bellwether, expect rain on your nice green lawns, you smug little {shits}.", 0.5],
+      ["dale", "Bunny, this is a family broadcast.", 0.3, "cut:two"],
+      ["bunny", "Dale, your family left you.", 0.6],
+      ["dale", "That's fair. That's fair. We'll be right back after this word from Tide Cola. Somebody get me a {goddamn} drink.", 1.0, "cut:dale"]
+    ]},
+    { "id": "cola", "title": "Tide Cola", "set": "cola", "lines": [
+      ["chet", "Hey. I'm Chet Gaines. Two time Gulf Coast champion. One time acquitted.", 0.4],
+      ["chet", "When I need to feel alive, I reach for an ice cold Tide Cola.", 0.4, "cue:sip"],
+      ["chet", "Brewed with real Marlowe Keys water. Mostly the clean part.", 0.4],
+      ["chet", "It's got sugar. It's got caffeine. It's got a chemical the government hasn't named yet.", 0.3],
+      ["announcer", "Tide Cola may cause jitters, rashes, regret, and in rare cases, a second set of teeth. Not for sale in three states or to anyone on parole.", 0.3],
+      ["chet", "Tide Cola. Taste the tide. {Damn} right.", 1.0, "cue:logo"]
+    ]},
+    { "id": "spin", "title": "Spin City", "set": "spin", "lines": [
+      ["rex", "Welcome back to Spin City! The only game show where the wheel is crooked, and so is your host!", 0.5, "cue:applause"],
+      ["rex", "Darlene from Gannet Landing, you are one spin away from tonight's grand prize. A brand new jet ski, and a weekend at the Seagrape Motor Inn. Bed bugs sold separately.", 0.4],
+      ["darlene", "Oh my god, Rex. I'm so nervous I think I peed a little.", 0.4],
+      ["rex", "That's live television, sweetheart. Now spin that {bitch}!", 0.3, "cue:spin"],
+      ["rex", "Round and round she goes, and where she stops, the producers already decided!", 3.6],
+      ["rex", "Oh! Bust! That's a damn shame, Darlene. You go home with nothing. Just like my four ex wives.", 0.5, "cue:aww"],
+      ["darlene", "This is rigged! You lying son of a {bitch}! I drove two hours for this!", 0.4],
+      ["rex", "Security! Get her off my stage. Folks, we'll be right back. I need a drink, and possibly a lawyer.", 1.0, "cue:applause"]
+    ]},
+    { "id": "lawyer", "title": "Kessler & Associates", "set": "lawyer", "lines": [
+      ["marty", "Were you hurt on the job? In a car? By a cop? By a pelican?", 0.4],
+      ["marty", "I'm Marty Kessler, and I sue everybody. I've sued the city. The county. The Coast Guard. My own mother. Twice.", 0.5],
+      ["marty", "My mother settled.", 0.6],
+      ["marty", "Call one eight hundred, K E S S L E R. If you can't spell it, you've got a brain injury, and that, my friend, is a case.", 0.4],
+      ["marty", "Kessler and Associates. There are no associates. It's just me. Please call. My landlord is watching this.", 1.0]
+    ]},
+    { "id": "gull", "title": "Captain Gull's Pier Patrol", "set": "gull", "lines": [
+      ["gull", "Ahoy, boys and girls! It's me, Captain Gull! Who wants to learn about the ocean?", 0.5, "cue:kids"],
+      ["gull", "The ocean is big, and wet, and full of garbage. Just like your daddy's bass boat.", 0.5],
+      ["gull", "Today's lesson is sharing. When you find a french fry on the boardwalk, you share it. With me. Or I take your [fucking] eyes.", 0.6],
+      ["gull", "Whoa, whoa. Did they bleep that? Late? Ten years on this show and now they bleep me. Thanks a lot, Gary.", 0.5],
+      ["gull", "Sorry, kids. Captain Gull's had a long week. My agent won't call me back, and I owe a crab named Gus eight hundred bucks.", 0.5],
+      ["gull", "Remember, kids. Stay in school. Stay off the pier. And never, ever trust a pelican. See you next time, you little {bastards}!", 1.0, "cue:kids"]
+    ]},
+    { "id": "movie", "title": "The Long Tide", "set": "movie", "wide": true, "lines": [
+      ["jack", "The Keys. Ninety square miles of salt, sin, and people who should have known better. I was one of them.", 0.8, "cut:pier"],
+      ["vivian", "You came, Jack. I didn't think you had the guts.", 0.5, "cut:two"],
+      ["jack", "I've got guts, Vivian. I just keep them where you can't reach them with a knife.", 0.5, "cut:jack"],
+      ["vivian", "The money's on the boat. Half a million dollars, and nobody ever has to know.", 0.5, "cut:vivian"],
+      ["jack", "Somebody always knows, sweetheart. In this town, even the fish talk.", 0.5, "cut:jack"],
+      ["vivian", "Then let them talk. Kiss me, you stupid bastard.", 0.8, "cut:two"],
+      ["jack", "She tasted like cheap gin and bad decisions. I should have walked away. But nobody leaves the Keys, kid. Not even the tide.", 1.5, "cut:pier"]
+    ]}
+  ]
+}
