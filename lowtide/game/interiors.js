@@ -130,6 +130,8 @@ export class Interiors {
     if (this.fadeT > 0) { this.fadeT -= dt; if (this.fadeT <= 0 && this.then) { const f = this.then; this.then = null; f(); } }
     if (this.inside) this.tickInside(dt);
     if (this.watch) { this.showPrompt(null, camera); return this.watchKeys(input); }
+    if (this.life && this.life.active) { this.showPrompt(null, camera); return this.life.update(dt, input); }
+    if (this.life && !(this.fadeT > 0)) { const u = this.life.near(); if (u) { const I = this.inside; this.showPrompt({ x: I.ox + u.x, z: I.oz + u.z, seat: true, name: u.label }, camera); if (input.hit("KeyE")) this.life.start(u.does); return !!u; } }
     const busy = this.fadeT > 0 || (this.vehicles && this.vehicles.driving);
     const seat = busy ? null : this.seatNear();
     if (seat) { const I = this.inside; this.showPrompt({ x: I.ox + seat.x, z: I.oz + seat.z, seat: true, name: seat.does === "watch" && this.tvs.some((t) => t.cinema) ? "Watch the picture" : "Watch TV" }, camera); if (input.hit("KeyE")) { this.startWatch(seat); return true; } return false; }
@@ -171,6 +173,7 @@ export class Interiors {
     if (this.hud.root) this.hud.root.classList.add("inside");
     this.tone = this.sfx.roomTone ? this.sfx.roomTone(STORES.includes(kind) ? "store" : kind === "home" ? "apartment" : kind) : null;
     if (this.onEnter) this.onEnter(e);
+    if (this.life) this.life.entered(e);
   }
   leave() {
     const e = this.inside.e;
@@ -251,7 +254,7 @@ export class Interiors {
   tvChannel(T, to) {
     if (T.cinema) return;
     const n = CHANNELS.length; T.ch = to != null ? to : (T.ch + n) % n; T.snow = 0.35; T.v.pause(); this.tvTune(T); this.osd(T);
-    if (this.sfx.click) this.sfx.click();
+    if (this.sfx.sample) this.sfx.sample("remote", { vol: 0.6 }); else if (this.sfx.click) this.sfx.click();
   }
   osd(T) {
     const C = CHANNELS[T.ch]; if (!this.osdEl) { this.osdEl = document.createElement("div"); this.osdEl.className = "tv-osd"; this.osdEl.style.cssText = "position:absolute;right:6%;top:9%;font:900 46px/1 Archivo,monospace;color:#7CFF8A;text-shadow:0 0 8px #2f8,3px 3px 0 #000;opacity:0;transition:opacity .25s;pointer-events:none;z-index:30"; this.root.appendChild(this.osdEl); }
@@ -273,7 +276,7 @@ export class Interiors {
       } else if (T.mat.map !== T.tex) { T.mat.map = T.tex; T.mat.needsUpdate = true; }
       if (!near && d < nd && T.snow <= 0) { nd = d; near = T; }
     }
-    if (near && subs && this.hud && this.hud.subtitle && near.snow <= 0) this.tvData().then((D) => {   // the nearest set's lines, as subtitles
+    if (near && subs && !(this.life && this.life.active) && this.hud && this.hud.subtitle && near.snow <= 0) this.tvData().then((D) => {   // the nearest set's lines, as subtitles
       const sh = D.shows && D.shows[near.show]; if (!sh) return;
       const t = near.v.currentTime, k = sh.lines.findIndex((l) => t >= l[0] && t <= l[1]);
       if (k >= 0 && k !== near.line) { near.line = k; this.hud.subtitle(sh.lines[k][2] + ": " + sh.lines[k][3]); }
@@ -305,6 +308,7 @@ export class Interiors {
     if (!this.bar) { this.bar = document.createElement("div"); this.bar.style.cssText = "position:absolute;left:50%;bottom:7%;transform:translateX(-50%);font:700 14px Archivo,sans-serif;color:#F7F2EA;background:rgba(10,10,10,.6);padding:8px 14px;border-radius:6px;white-space:nowrap;pointer-events:none;z-index:30;opacity:0;transition:opacity .3s"; this.root.appendChild(this.bar); }
     this.bar.innerHTML = T.cinema ? "<kbd>E</kbd> Get up" : "<kbd>A</kbd> <kbd>D</kbd> Channel &nbsp;·&nbsp; <kbd>1</kbd>-<kbd>5</kbd> Pick one &nbsp;·&nbsp; <kbd>E</kbd> Get up"; this.bar.style.opacity = 1;
     if (!T.cinema) this.osd(T);
+    if (this.sfx.sample) { this.sfx.sample("sofa", { vol: 0.55 }); if (!T.cinema) setTimeout(() => { this.sfx.sample("remote", { vol: 0.6 }); this.sfx.sample("tvon", { vol: 0.35, dist: 2 }); }, 700); }
   }
   endWatch(now) {
     const W = this.watch; if (!W) return;
@@ -443,6 +447,7 @@ export class Interiors {
     }
     I.acts = acts; I.nav = new Nav(w, d, walls);
     for (const a of screens) this.addTV(a, ox, oz, g, R);
+    if (this.life) this.life.dress(I, g);
     // geometry, one mesh per texture
     for (const L of layers.values()) {
       const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(L.p, 3)); geo.setAttribute("color", new THREE.Float32BufferAttribute(L.c, 3)); geo.setAttribute("uv", new THREE.Float32BufferAttribute(L.u, 2));
@@ -714,9 +719,11 @@ const FURNISH = {
     const lampTable = (x, z, y) => { B(x - 0.06, x + 0.06, y, y + 0.3, z - 0.06, z + 0.06, "#c9a14a", nb); B(x - 0.17, x + 0.17, y + 0.3, y + 0.55, z - 0.17, z + 0.17, "#ffe2a8", { glow: true, solid: false }); };
     // -- entry
     rug(o, 5.35, 6.65, 0.12, 1.1, "#6a4a32");
-    B(4.05, 4.95, 1.62, 1.7, 0.04, 0.1, "#6a4a32", nb); for (const x of [4.2, 4.5, 4.8]) B(x - 0.02, x + 0.02, 1.5, 1.66, 0.06, 0.16, "#c9a14a", nb);   // hooks
-    B(4.12, 4.48, 0.85, 1.55, 0.08, 0.26, "#3a4a5a", { tex: "fabric", uvs: 3, solid: false }); B(4.56, 4.86, 1.25, 1.5, 0.08, 0.2, "#c8b898", nb);   // her rain jacket, a cap
-    legs(7.2, 8.4, 0.06, 0.46, 0.8); B(7.18, 8.42, 0.8, 0.85, 0.04, 0.48, "#6a4a32", { tex: "wooddark" }); B(7.4, 7.7, 0.85, 0.92, 0.15, 0.35, "#b8643a", nb); B(7.5, 7.58, 0.92, 0.95, 0.22, 0.28, "#c9a14a", nb);   // console, key bowl, keys
+    legs(7.2, 8.4, 0.06, 0.46, 0.8); B(7.18, 8.42, 0.8, 0.85, 0.04, 0.48, "#6a4a32", { tex: "wooddark" }); B(7.4, 7.7, 0.85, 0.92, 0.15, 0.35, "#b8643a", nb);   // console, the key bowl (the keys are homelife's)
+    B(7.72, 8.28, 0.85, 1.62, 0.12, 0.2, "#6a4a32", nb); B(7.77, 8.23, 0.9, 1.57, 0.2, 0.205, "#9fb8c8", { glow: true, solid: false });   // a standing mirror
+    B(8.7, 9.1, 0, 0.04, 0.2, 0.6, "#2a2018", nb); B(8.88, 8.92, 0.04, 1.78, 0.38, 0.42, "#4a3424", nb); for (const [dx, dz] of [[0.12, 0], [-0.12, 0], [0, 0.12]]) B(8.9 + dx - 0.015, 8.9 + dx + 0.015, 1.62, 1.66, 0.4 + dz - 0.015, 0.4 + dz + 0.015, "#c9a14a", nb);   // the coat stand
+    B(8.76, 9.04, 1.66, 1.82, 0.27, 0.53, "#c8b898", nb);   // her cap on top
+    o.act("use", 8.15, 0.95, { y: 0.02, face: Math.PI, does: "ready", label: "Get ready" });
     o.plaque("f", 7.8, 0.7, 0.9, 1.25, o.board([""], { bg: "#9fb4c4", border: "#c9a14a", w: 32, h: 40 }));   // a mirror
     // -- living room
     rug(o, 1.0, 4.4, 1.5, 5.1, "#7a4a3a"); o.quad([1.2, 0.017, 1.7], [4.2, 0.017, 1.7], [4.2, 0.017, 4.9], [1.2, 0.017, 4.9], o.C("#a8704a"));   // a rug on a rug, a hair above it
@@ -763,15 +770,33 @@ const FURNISH = {
     // -- the bedroom, behind its wall
     B(7.92, 8.08, 0, H, 6.4, d - 0.02, "#ffffff", { tex: "cream" }); B(7.92, 8.08, 0, H, 4.3, 5.2, "#ffffff", { tex: "cream" }); B(7.92, 8.08, 2.25, H, 5.2, 6.4, "#ffffff", { tex: "cream", solid: false });
     B(8.08, w - 0.02, 0, H, 4.3, 4.45, "#ffffff", { tex: "cream" });
-    rug(o, 8.8, 11.3, 6.0, 9.3, "#5a6a8a");
-    B(w - 0.2, w - 0.05, 0, 1.15, 6.5, 8.5, "#ffffff", { tex: "wooddark" });   // headboard
-    B(9.5, w - 0.2, 0, 0.35, 6.55, 8.45, "#ffffff", { tex: "wooddark" }); B(9.52, w - 0.22, 0.35, 0.55, 6.6, 8.4, "#f2ede2", nb);   // the bed, the mattress
-    B(9.48, w - 0.75, 0.55, 0.64, 6.56, 8.44, "#2f5d8c", { tex: "fabric", uvs: 3, solid: false }); B(9.48, 9.52, 0.25, 0.64, 6.56, 8.44, "#2f5d8c", { tex: "fabric", uvs: 3, solid: false });   // the duvet, over the end
-    for (const z of [6.7, 7.55]) B(w - 0.72, w - 0.25, 0.55, 0.72, z, z + 0.72, "#f4f0e6", { tex: "fabric", uvs: 4, solid: false });   // pillows
-    for (const z of [5.9, 8.6]) { B(w - 0.55, w - 0.06, 0, 0.55, z, z + 0.48, "#ffffff", { tex: "wooddark" }); lampTable(w - 0.3, z + 0.24, 0.55); }
-    B(8.4, 9.9, 0, 0.95, d - 0.55, d - 0.05, "#ffffff", { tex: "wooddark" }); for (let y = 0.2; y < 0.9; y += 0.25) B(8.45, 9.85, y, y + 0.02, d - 0.57, d - 0.55, "#2a1a10", nb);   // dresser
-    o.plaque("b", 9.15, 0.8, 0.9, 1.15, o.board([""], { bg: "#9fb4c4", border: "#6a4a32", w: 32, h: 40 }));   // its mirror
-    o.plaque("r", 7.5, 0.9, 0.6, 1.4, o.board(["PORT SALT", "1998"], { bg: "#d8c8a8", fg: "#3a2a1e", border: "#6a4a32", big: 9 }));   // over the bed: the old crew
+    rug(o, 9.2, 11.4, 4.95, 7.75, "#5a6a8a");
+    B(w - 0.2, w - 0.05, 0, 1.15, 5.3, 7.3, "#ffffff", { tex: "wooddark" });   // headboard
+    B(9.5, w - 0.2, 0, 0.35, 5.35, 7.25, "#ffffff", { tex: "wooddark" }); B(9.52, w - 0.22, 0.35, 0.55, 5.4, 7.2, "#f2ede2", nb);   // the bed, the mattress
+    B(9.48, w - 0.75, 0.55, 0.64, 5.36, 7.24, "#2f5d8c", { tex: "fabric", uvs: 3, solid: false }); B(9.48, 9.52, 0.25, 0.64, 5.36, 7.24, "#2f5d8c", { tex: "fabric", uvs: 3, solid: false });   // the duvet, over the end
+    for (const z of [5.5, 6.35]) B(w - 0.72, w - 0.25, 0.55, 0.72, z, z + 0.72, "#f4f0e6", { tex: "fabric", uvs: 4, solid: false });   // pillows
+    for (const z of [4.72, 7.45]) { B(w - 0.55, w - 0.06, 0, 0.55, z, z + 0.48, "#ffffff", { tex: "wooddark" }); lampTable(w - 0.3, z + 0.24, 0.55); }
+    o.plaque("r", 6.3, 0.9, 0.6, 1.4, o.board(["PORT SALT", "1998"], { bg: "#d8c8a8", fg: "#3a2a1e", border: "#6a4a32", big: 9 }));   // over the bed: the old crew
+    // the wardrobe against the wall: an open carcass with her clothes in it (homelife.js hangs the doors)
+    { const x0 = 8.08, x1 = 8.72, z0 = 6.55, z1 = 8.2;
+      B(x0, x0 + 0.04, 0, 2.15, z0, z1, "#ffffff", { tex: "wooddark", solid: false }); B(x0, x1, 2.1, 2.15, z0, z1, "#ffffff", { tex: "wooddark", solid: false }); B(x0, x1, 0, 0.1, z0, z1, "#ffffff", { tex: "wooddark" });
+      B(x0, x1, 0, 2.15, z0, z0 + 0.03, "#ffffff", { tex: "wooddark", solid: false }); B(x0, x1, 0, 2.15, z1 - 0.03, z1, "#ffffff", { tex: "wooddark", solid: false }); B(x0, x1, 0.1, 2.1, z0, z1, "#000", { skip: true });
+      B(x0 + 0.3, x0 + 0.33, 1.85, 1.88, z0 + 0.03, z1 - 0.03, "#c8c8cc", nb);   // the rail
+      let z = z0 + 0.1; for (const c of ["#2a3a5a", "#8a2a2a", "#e8e2d6", "#3f5a3a", "#c8b898", "#1a1a1e", "#5a3a5a", "#2f5d8c"]) { const t = 0.08 + R() * 0.07; B(x0 + 0.12, x0 + 0.52, 0.95 + R() * 0.25, 1.85, z, z + t, c, { tex: "fabric", uvs: 3, solid: false }); z += t + 0.04; if (z > z1 - 0.15) break; }
+      o.act("use", 9.3, 7.38, { y: 0.02, face: -Math.PI / 2, does: "wardrobe", label: "Change clothes" }); }
+    // the bathroom along the back: a wall with a doorway, tiles, the tub, the toilet, the basin and its mirror
+    B(8.08, 9.4, 0, H, 8.3, 8.45, "#ffffff", { tex: "cream" }); B(10.3, w - 0.02, 0, H, 8.3, 8.45, "#ffffff", { tex: "cream" }); B(9.4, 10.3, 2.25, H, 8.3, 8.45, "#ffffff", { tex: "cream", solid: false });
+    o.quad([8.09, 0.008, 8.46], [w - 0.01, 0.008, 8.46], [w - 0.01, 0.008, d - 0.01], [8.09, 0.008, d - 0.01], o.C("#ffffff"), { tex: "walltile", uv: [[0, 0], [3.9 * 2, 0], [3.9 * 2, 1.54 * 2], [0, 1.54 * 2]] });
+    rug(o, 10.2, 11.1, 8.6, 9.25, "#8aa4b8");
+    B(8.12, 9.35, 0, 0.56, 8.5, d - 0.04, "#f4f2ee"); B(8.2, 9.27, 0.4, 0.565, 8.58, d - 0.12, "#bcd2dc", nb);   // the tub, its water line
+    B(8.7, 8.76, 1.85, 2.0, d - 0.1, d - 0.04, "#c8c8cc", nb); B(8.66, 8.8, 1.82, 1.85, d - 0.2, d - 0.08, "#c8c8cc", nb);   // the shower head
+    B(11.33, 11.88, 0.35, 0.82, d - 0.22, d - 0.04, "#f4f2ee"); B(11.38, 11.83, 0, 0.42, d - 0.66, d - 0.18, "#f4f2ee"); B(11.36, 11.85, 0.42, 0.45, d - 0.68, d - 0.16, "#e8e4dc", nb);   // the toilet
+    B(10.15, 11.15, 0.08, 0.84, d - 0.52, d - 0.04, "#ffffff", { tex: "woodlight" }); B(10.12, 11.18, 0.84, 0.88, d - 0.55, d - 0.03, "#f4f2ee", nb); B(10.38, 10.92, 0.86, 0.885, d - 0.45, d - 0.15, "#bcd2dc", nb);   // the vanity, its basin
+    B(10.62, 10.68, 0.88, 1.06, d - 0.1, d - 0.05, "#c8c8cc", nb); B(10.62, 10.68, 1.02, 1.06, d - 0.22, d - 0.08, "#c8c8cc", nb);   // the tap
+    B(10.2, 11.1, 1.15, 1.95, d - 0.04, d - 0.02, "#6a4a32", nb); B(10.25, 11.05, 1.2, 1.9, d - 0.05, d - 0.04, "#a8c4d4", { glow: true, solid: false }); B(10.25, 11.05, 1.98, 2.06, d - 0.12, d - 0.04, "#fff4d8", { glow: true, solid: false });   // the mirror and its light
+    B(10.25, 10.33, 0.88, 0.99, d - 0.28, d - 0.2, "#56a0c0", nb);   // the toothbrush cup
+    B(w - 0.06, w - 0.03, 1.15, 1.2, 8.7, 9.3, "#c8c8cc", nb); B(w - 0.09, w - 0.05, 0.6, 1.2, 8.74, 9.26, "#e8506a", { tex: "fabric", uvs: 4, solid: false });   // the towel rail, a towel
+    o.act("use", 10.65, d - 1.05, { y: 0.02, face: 0, does: "brush", label: "Brush teeth" });
     // -- her corner: the desk, the case, the gear
     legs(w - 0.75, w - 0.06, 1.1, 2.9, 0.75); B(w - 0.78, w - 0.04, 0.75, 0.8, 1.08, 2.92, "#ffffff", { tex: "woodlight", solid: true });
     for (const [z, a] of [[1.3, 0.04], [1.7, 0.07], [2.15, 0.02], [2.45, 0.05]]) B(w - 0.66, w - 0.3, 0.8, 0.81, z, z + 0.28 + a, "#f4f0e6", nb);   // papers

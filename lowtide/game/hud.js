@@ -62,6 +62,8 @@ export class Hud {
     el.classList.add("on"); if (this.sfxTip) this.sfxTip();
     clearTimeout(this.tT); this.tT = setTimeout(() => { el.classList.remove("on"); this.tT = setTimeout(() => this.nextTip(), 500); }, n[1]);
   }
+  // a notification that can't wait its turn: shown now, in the same box
+  notify(text, ms) { this.tq = []; clearTimeout(this.tT); this.tOn = false; this.tip(text, ms); }
   tipOnce(key, text) {
     let seen = []; try { seen = JSON.parse(localStorage.getItem("lowtide_tips") || "[]"); } catch (e) { /* private mode: show it */ }
     if (seen.includes(key) || (this.tSeen || (this.tSeen = new Set())).has(key)) return;

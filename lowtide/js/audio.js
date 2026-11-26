@@ -708,6 +708,26 @@
     /* inside: each place has its sound. A fridge hum and a radio for the shops, the jukebox in
        the bar, the murmur and clink of a diner, the machines in a laundromat, lift music in a
        lobby, a film through the wall at the theatre, the big hum of a warehouse */
+    /* recorded sounds (media/sfx, CC0, see CREDITS.md): played as if in the room with you. Each goes through
+       its own level and a soft top end, then the small-room reverb of a flat (short, close, a little dull),
+       so a tap or a wardrobe door sits in the same space as the footsteps. opt: { vol, rate, loop, dist,
+       pan, fadeIn, room }. Returns { stop(fadeSec) }. Files load once, on first use. */
+    sample: function (name, opt) {
+      opt = opt || {}; var h = { node: null, gain: null, dead: false, stop: function (f) { this.dead = true; if (!this.gain) return; var t2 = now(), fd = f == null ? 0.08 : f; this.gain.gain.cancelScheduledValues(t2); this.gain.gain.setValueAtTime(this.gain.gain.value, t2); this.gain.gain.linearRampToValueAtTime(0, t2 + fd); try { this.node.stop(t2 + fd + 0.05); } catch (e) { /* done */ } } };
+      if (!ctx) return h;
+      var cache = sample.cache || (sample.cache = {});
+      var p = cache[name] || (cache[name] = fetch("media/sfx/" + name + ".mp3").then(function (r) { return r.arrayBuffer(); }).then(function (b) { return ctx.decodeAudioData(b); }).catch(function () { return null; }));
+      p.then(function (buf) {
+        if (!buf || h.dead) return;
+        var t = now() + 0.01, d = opt.dist || 0, v = (opt.vol == null ? 0.8 : opt.vol) / (1 + d / 4);
+        var src = ctx.createBufferSource(); src.buffer = buf; src.loop = !!opt.loop; src.playbackRate.value = (opt.rate || 1) * slowRate;
+        var g = G(0), lp = F("lowpass", 11000 / (1 + d / 8), 0.5), pn = P(opt.pan || 0);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + (opt.fadeIn || 0.01));
+        chain(src, g, lp, pn, B.sfx); send(pn, sample.room || (sample.room = verb(0.55, 3.2, 0.004, 5200, 0.55, B.sfx)), opt.room == null ? 0.22 : opt.room);
+        src.start(t); h.node = src; h.gain = g;
+      });
+      return h;
+    },
     roomTone: function (kind) {
       if (!ctx) return { stop: function () {} };
       var t = now(), bus = G(0), nodes = [], timers = []; bus.connect(B.under); send(bus, plate, 0.2);
@@ -997,6 +1017,7 @@
   }
 
   function lowAudio() {}
+  function sample() {}
   window.LT = {
     loadBaked: loadBaked, bed: bed, playIntro: playIntro, startTitle: startTitle, cutIntro: function () { if (ctx) cutSeq(now()); },
     get baked() { return !!(BAKE.intro && BAKE.loop); },

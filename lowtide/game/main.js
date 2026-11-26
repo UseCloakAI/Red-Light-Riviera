@@ -22,13 +22,14 @@ import { Gore } from "./gore.js?v=dev";
 import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
+import { HomeLife } from "./homelife.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
 import { ROOMS_ON } from "./city/build.js?v=dev";
 
 // the player: the character from the creator (MakeHuman, game/human.js); the Mixamo model is the fallback
 async function loadCharacter(params) {
   try {
-    if (params) { const h = await createHuman(params); return { scene: h.group, clips: h.clips }; }
+    if (params) { const h = await createHuman(params); return { scene: h.group, clips: h.clips, human: h }; }
   } catch (e) { console.warn("Lowtide: created character failed, using the fallback", e); }
   try {
     const [gltf, anims] = await Promise.all([
@@ -75,7 +76,7 @@ export async function start(o) {
   await step(0.25);
   const world = await buildWorld(scene, {});
   await step(0.7);
-  const player = new Player(scene, world, await charP);
+  const charM = await charP, player = new Player(scene, world, charM); player.human = charM && charM.human;
   const input = new Input(renderer.domElement);
   const rig = new CamRig(camera, world, player.yaw);
   const hud = new Hud(o.hud, world);
@@ -181,6 +182,7 @@ export async function start(o) {
     say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "calm"); } });
   interiors.on = (e) => { if (e === "near-door") hud.tipOnce("door", "{E} goes in. Nearly every door on the island opens."); };
   // the police's hooks into everything else
+  const homeLife = new HomeLife({ interiors, player, hud, sfx: o.sfx || {}, camera }); interiors.life = homeLife;
   hud.home = interiors.home || null; hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets();
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
@@ -379,17 +381,18 @@ export async function start(o) {
     life.update(dt, input, dw); gore.update(dw);
     const usedDoor = input.locked && !life.down && !vehicles.driving && interiors.update(dt, input, camera);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
-    if (input.locked && !down) { const used = usedDoor || interiors.watching || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    if (input.locked && !down) { const used = usedDoor || interiors.watching || homeLife.active || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
     else if (down) { vehicles.update(dw, { hit: () => false, down: () => false, keys: new Set() }); arsenal.tickFx(dw); player.aimYaw = null; rig.aim = 0; }
     if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
-    if (interiors.watching) { player.animate(dw); interiors.poseWatcher(dt); }
+    if (homeLife.active) { player.animate(dw); homeLife.pose(dt); }
+    else if (interiors.watching) { player.animate(dw); interiors.poseWatcher(dt); }
     else if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);
     if (police && !indoors) police.update(dw);
     if (!input.locked || life.down || vehicles.driving) interiors.update(dt, { hit: () => false }, camera);
-    rig.update(dt, input, player); interiors.watchCam(camera, dt);
+    rig.update(dt, input, player); interiors.watchCam(camera, dt); homeLife.cam(camera, dt);
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
     { const m = Math.hypot(player.pos.x - px0, player.pos.z - pz0); if (m < 20) stats[inCar ? "drive" : "foot"] += m; }
