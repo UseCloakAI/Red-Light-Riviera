@@ -256,8 +256,8 @@ footer{padding:40px 0;font-size:12px;opacity:.55;letter-spacing:.1em;text-transf
   <h2>Sound</h2>
   <p class="lead">Every sound is made live in the browser: FM keys, generated reverbs, ocean made from noise. There are no audio files to license. Tap one to hear it.</p>
   <div class="sfx">
-    <button data-s="thump">Orb landing</button><button data-s="unfurl">Wordmark slide</button><button data-s="drop">Blink</button>
-    <button data-s="sting">Studio chord</button><button data-s="swell">Match cut</button><button data-s="hit">Title hit</button>
+    <button data-s="open">Cold open</button><button data-s="slam">Studio hit</button><button data-s="glint">Light sweep</button>
+    <button data-s="blink">Blink</button><button data-s="hit">Title hit</button>
     <button data-s="move">Menu move</button><button data-s="select">Select</button><button data-s="back">Back</button>
     <button data-s="music">Title music</button><button data-s="ocean">Ocean</button>
   </div>
@@ -283,11 +283,10 @@ footer{padding:40px 0;font-size:12px;opacity:.55;letter-spacing:.1em;text-transf
 <script>
 (function () {
   var A = {
-    thump: function (t) { LT.sfx.thump(t, 1); },
-    unfurl: function (t) { LT.sfx.unfurl(t, -1); LT.sfx.unfurl(t + 0.03, 1); },
-    drop: function (t) { LT.sfx.drop(t, 0.08); },
-    sting: function (t) { LT.sfx.sting(t); },
-    swell: function (t) { LT.sfx.swell(t, 0.7); LT.sfx.through(t + 0.7); },
+    open: function (t) { var C = LT_CUE; LT.sfx.air(t, 3.6); LT.sfx.suck(t + C.rise, C.slam - C.rise); LT.sfx.slam(t + C.slam); },
+    slam: function (t) { LT.sfx.slam(t); },
+    glint: function (t) { LT.sfx.glint(t, 1.15); },
+    blink: function (t) { LT.sfx.blink(t, 190, 86, 1); LT.sfx.blink(t + 0.28, 150, 93, 0.8); },
     hit: function (t) { LT.sfx.riser(t, 1.5); LT.sfx.hit(t + 1.5); },
     move: function () { LT.ui.move(); }, select: function () { LT.ui.select(); }, back: function () { LT.ui.back(); }
   };

@@ -333,78 +333,177 @@
 
   /* ---------------- sound design ---------------- */
   function dst() { return B.seq; }
+  // a fresh convolver on a cached impulse, so the tail follows its sound (and a skip cuts it)
+  var IRS = {};
+  function space(key, sec, shape, pre, damp, dest) {
+    var cv = ctx.createConvolver(); cv.buffer = IRS[key] || (IRS[key] = impulse(sec, shape, pre, damp));
+    var r = G(0.55); chain(cv, r, dest); return cv;
+  }
+  function stage(d) { return space("stage", 5.4, 2.1, 0.032, 3300, d); }   // big and dark, long pre-delay
+  function glass(d) { return space("glass", 3.0, 2.6, 0.014, 9500, d); }   // bright, for the glint and the blink
   var sfx = {
-    // quiet room tone under the paper slate
-    room: function (t, dur) {
-      var n = noise("pink", t, Math.min(dur, 5.5)), lp = F("lowpass", 1800, 0.5), g = G(0);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.018, t + 0.35); g.gain.setValueAtTime(0.018, t + dur - 0.3); g.gain.linearRampToValueAtTime(0, t + dur);
-      chain(n, lp, g, dst());
+    /* ---- Cloak Studios: the cold open ----
+       Built like a trailer logo: room tone in the black, a reversed swell that
+       sucks everything in and cuts to silence a beat before the hit, then a
+       hit made of eight layers (sub drop, punch, click, body, crack, a low
+       D-minor braam, a struck-metal shimmer and falling air) into a big dark
+       stage. All of it is in D minor, the key of the Lowtide theme. */
+    // the black: room tone and a little projector air, felt more than heard
+    air: function (t, dur, dest) {
+      t = t === undefined ? now() : t; dur = dur || 5; var d = dest || dst();
+      var hp = F("highpass", 28, 0.7), lp = F("lowpass", 480, 0.5), g = G(0);
+      [-0.6, 0.6].forEach(function (pan) { chain(noise("brown", t, dur + 0.1), P(pan), hp); });
+      chain(hp, lp, g, d);
+      var hs = noise("pink", t, dur + 0.1), hb = F("bandpass", 3200, 0.5), hg = G(0);
+      chain(hs, hb, hg, d);
+      [[g, 0.05], [hg, 0.0035]].forEach(function (k) {
+        var gp = k[0].gain; gp.setValueAtTime(0, t); gp.linearRampToValueAtTime(k[1], t + 0.9);
+        gp.setValueAtTime(k[1], t + dur - 0.9); gp.linearRampToValueAtTime(0, t + dur);
+      });
     },
-    // air rushing past the falling orb, rising into the impact
-    fall: function (t, dur) {
-      var n = noise("white", t, dur + 0.05), bp = F("bandpass", 260, 1.1), g = G(0);
-      bp.frequency.setValueAtTime(260, t); bp.frequency.exponentialRampToValueAtTime(1900, t + dur);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
-      chain(n, bp, g, dst());
+    // the suck-in: a reversed hall swell, a D-minor cluster swelling backwards and a
+    // sub that climbs under it, all gated hard to silence 45 ms before the hit
+    suck: function (t, dur, dest) {
+      t = t === undefined ? now() : t; dur = dur || 1.25; var d = dest || dst(), gap = 0.045, len = dur - gap, cut = t + len;
+      var bus = G(1); bus.connect(d);
+      bus.gain.setValueAtTime(1, cut - 0.006); bus.gain.linearRampToValueAtTime(0, cut);
+      // reversed hall: noise swelling up while its filter opens, dark to bright, decorrelated per side
+      var sr = ctx.sampleRate, n = Math.floor(sr * len), buf = ctx.createBuffer(2, n, sr);
+      for (var c = 0; c < 2; c++) {
+        var x = buf.getChannelData(c), r = seeded(140 + c * 13), lp = 0, lp2 = 0;
+        for (var i = 0; i < n; i++) {
+          var k = i / n, fc = 300 + 9000 * k * k, a = Math.exp(-2 * Math.PI * fc / sr);
+          lp = (1 - a) * (r() * 2 - 1) + a * lp; lp2 = (1 - a) * lp + a * lp2;
+          x[i] = lp2 * Math.pow(k, 2.4) * (1.6 + 2.4 * k);
+        }
+      }
+      var rv = ctx.createBufferSource(); rv.buffer = buf; var rg = G(0.15);
+      chain(rv, F("highpass", 90, 0.6), rg, bus); rv.start(t);
+      // the cluster: D2 A2 D3 F3 A3 in detuned saws, opening up as it swells
+      var cl = F("lowpass", 220, 0.9), cs = ctx.createWaveShaper(), cg = G(0); cs.curve = sat(1.8);
+      cl.frequency.setValueAtTime(220, t); cl.frequency.exponentialRampToValueAtTime(2600, cut);
+      cg.gain.setValueAtTime(0.0001, t); cg.gain.exponentialRampToValueAtTime(0.045, cut);
+      chain(cl, cs, cg, bus);
+      [38, 45, 50, 53, 57].forEach(function (m, i) {
+        [-1, 1].forEach(function (k) {
+          var o = O("sawtooth", mtof(m), t), p = P(k * (0.25 + i * 0.12)); o.detune.value = k * 8 + (rnd() - 0.5) * 4;
+          chain(o, p, cl); o.start(t); o.stop(cut + 0.02);
+        });
+      });
+      // the sub climbs a fifth, D1 to A1
+      var su = O("sine", mtof(26), t), sg = G(0); su.frequency.exponentialRampToValueAtTime(mtof(33), cut);
+      sg.gain.setValueAtTime(0.0001, t); sg.gain.exponentialRampToValueAtTime(0.12, cut);
+      chain(su, sg, bus); su.start(t); su.stop(cut + 0.02);
+      // air rushing in over the last half second, sweeping across from the left
+      var w = noise("white", cut - 0.55, 0.6), wb = F("bandpass", 500, 1.3), wg = G(0), wp = P(-0.6);
+      wb.frequency.setValueAtTime(500, cut - 0.55); wb.frequency.exponentialRampToValueAtTime(7500, cut);
+      wg.gain.setValueAtTime(0.0001, cut - 0.55); wg.gain.exponentialRampToValueAtTime(0.045, cut);
+      wp.pan.setValueAtTime(-0.6, cut - 0.55); wp.pan.linearRampToValueAtTime(0.1, cut);
+      chain(w, wb, wg, wp, bus);
     },
-    // rubber orb on a hard floor: pitched thump, wooden body knock, soft click
-    thump: function (t, size) {
-      t = t === undefined ? now() : t; size = size || 1;
-      var o = O("sine", 100 + 25 * size, t), a = G(0), d = dst();
-      o.frequency.exponentialRampToValueAtTime(48, t + 0.16);
-      a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(0.55 * size, t + 0.003); a.gain.setTargetAtTime(0, t + 0.01, 0.07);
-      var body = O("triangle", 232, t), bg = G(0); perc(bg, t, 0.002, 0.1 * size, 0.07);
-      var n = noise("white", t, 0.05), lp = F("lowpass", 2200, 0.7), ng = G(0); perc(ng, t, 0.001, 0.28 * size, 0.03);
-      chain(o, a, d); chain(body, bg, d); chain(n, lp, ng, d); send(ng, plate, 0.3); send(a, plate, 0.1);
-      o.start(t); o.stop(t + 0.7); body.start(t); body.stop(t + 0.3);
+    // the hit
+    slam: function (t, dest) {
+      t = t === undefined ? now() : t; var d = dest || dst(), sv = stage(d);
+      var one = function (node) { node.start(t); return node; };
+      // 1 · sub: a long falling sine, saturated at the peak so laptops still feel it, clean as it decays
+      var sub = one(O("sine", 66, t)), sa = G(0), sh = ctx.createWaveShaper(), st = G(1.3);
+      sh.curve = sat(3); sh.oversample = "4x";
+      sub.frequency.exponentialRampToValueAtTime(34, t + 1.8);
+      sa.gain.setValueAtTime(0, t); sa.gain.linearRampToValueAtTime(1, t + 0.003); sa.gain.setTargetAtTime(0, t + 0.08, 0.55);
+      chain(sub, sa, sh, st, d); sub.stop(t + 5.5);
+      // 2 · its octave, shorter: the part small speakers can actually play
+      var oc = one(O("sine", 132, t)), og = G(0); oc.frequency.exponentialRampToValueAtTime(58, t + 0.9);
+      og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.26, t + 0.003); og.gain.setTargetAtTime(0, t + 0.03, 0.28);
+      chain(oc, og, d); oc.stop(t + 2);
+      // 3 · punch
+      var pu = one(O("sine", 200, t)), pg = G(0); pu.frequency.exponentialRampToValueAtTime(52, t + 0.055); pu.frequency.exponentialRampToValueAtTime(42, t + 0.4);
+      pg.gain.setValueAtTime(0, t); pg.gain.linearRampToValueAtTime(0.62, t + 0.001); pg.gain.setTargetAtTime(0, t + 0.012, 0.1);
+      chain(pu, pg, d); pu.stop(t + 1);
+      // 4 · click
+      var ck = noise("white", t, 0.02), cg = G(0); perc(cg, t, 0.0004, 0.16, 0.012);
+      chain(ck, F("highpass", 3200, 0.7), cg, d);
+      // 5 · body: a low chest thump, mostly into the room
+      var bo = noise("pink", t, 0.7), bl = F("lowpass", 1000, 0.7), bp = F("peaking", 160, 1); bp.gain.value = 7;
+      var bg = G(0); perc(bg, t, 0.002, 0.5, 0.26);
+      chain(bo, bl, bp, bg, d); send(bg, sv, 0.75);
+      // 6 · crack: the snap that lights up the hall, Haas-split for width
+      [[-0.75, 0], [0.75, 0.007]].forEach(function (k) {
+        var cr = noise("white", t + k[1], 0.3), cb = F("bandpass", 1900, 0.6), crg = G(0), cp = P(k[0]);
+        perc(crg, t + k[1], 0.0008, 0.24, 0.055);
+        chain(cr, cb, crg, cp, d); send(cp, sv, 1.1);
+      });
+      // 7 · braam: D1 D2 A2 D3 in detuned saws, the filter snapping open then closing over three seconds
+      var bf = F("lowpass", 150, 1.3), bs = ctx.createWaveShaper(), ba = G(0); bs.curve = sat(2.4);
+      bf.frequency.setValueAtTime(150, t); bf.frequency.exponentialRampToValueAtTime(1700, t + 0.045); bf.frequency.exponentialRampToValueAtTime(210, t + 3);
+      ba.gain.setValueAtTime(0, t); ba.gain.linearRampToValueAtTime(0.15, t + 0.014); ba.gain.setTargetAtTime(0, t + 0.12, 1.0);
+      chain(bf, bs, ba, d); send(ba, sv, 0.42);
+      [26, 38, 45, 50].forEach(function (m, i) {
+        [-1, 1].forEach(function (k) {
+          var o = one(O("sawtooth", mtof(m), t)), p = P(k * (0.2 + i * 0.16)); o.detune.value = k * 7 + (rnd() - 0.5) * 3;
+          chain(o, p, bf); o.stop(t + 5);
+        });
+      });
+      // 8 · shimmer: a struck metal plate on D, inharmonic partials beating against each other
+      var mb = G(1), mh = F("highpass", 260, 0.7); chain(mb, mh, d); send(mh, sv, 0.9);
+      [1, 1.59, 2.14, 2.65, 3.16, 4.1, 5.43, 6.8].forEach(function (r, i) {
+        var f = mtof(62) * r, a1 = 0.02 / (1 + i * 0.35), tau = 2.4 / (1 + i * 0.5);
+        [1, 1.0023].forEach(function (dt, j) {
+          var o = one(O("sine", f * dt, t)), g = G(0), p = P((i % 2 ? 1 : -1) * (0.25 + 0.4 * j));
+          g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(a1, t + 0.004); g.gain.setTargetAtTime(0, t + 0.01, tau);
+          chain(o, g, p, mb); o.stop(t + tau * 6 + 0.1);
+        });
+      });
+      // 9 · falling air: debris and pressure leaving the room, both sides
+      [-0.7, 0.7].forEach(function (pan) {
+        var a = noise("white", t, 2.6), ab = F("bandpass", 6500, 0.55), ag = G(0), ap = P(pan);
+        ab.frequency.setValueAtTime(6500, t); ab.frequency.exponentialRampToValueAtTime(420, t + 2.3);
+        ag.gain.setValueAtTime(0, t); ag.gain.linearRampToValueAtTime(0.045, t + 0.02); ag.gain.exponentialRampToValueAtTime(0.0001, t + 2.5);
+        chain(a, ab, ag, ap, d); send(ap, sv, 0.35);
+      });
+      // 10 · rumble under the tail
+      var ru = noise("brown", t, 4), rg = G(0);
+      rg.gain.setValueAtTime(0, t); rg.gain.linearRampToValueAtTime(0.1, t + 0.03); rg.gain.setTargetAtTime(0, t + 0.1, 0.8);
+      chain(ru, F("lowpass", 110, 0.6), rg, d);
     },
-    // letters sliding out from behind the orb, panned to their side
-    unfurl: function (t, pan) {
-      t = t === undefined ? now() : t; pan = pan === undefined ? 0 : pan;
-      var n = noise("white", t, 0.8), hp = F("highpass", 400), bp = F("bandpass", 3200, 0.7), g = G(0), p = P(0);
-      bp.frequency.setValueAtTime(3200, t); bp.frequency.exponentialRampToValueAtTime(900, t + 0.6);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.065, t + 0.035); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
-      p.pan.setValueAtTime(pan * 0.15, t); p.pan.linearRampToValueAtTime(pan * 0.7, t + 0.5);
-      chain(n, hp, bp, g, p, dst()); send(p, plate, 0.25);
+    // the light raking across the letters: a narrow band of air lifting left to right, and a
+    // few glassy notes (D F A D) catching along the way
+    glint: function (t, dur, dest) {
+      t = t === undefined ? now() : t; dur = dur || 1.15; var d = dest || dst(), bv = glass(d);
+      var n = noise("white", t, dur + 0.1), hp = F("highpass", 1800, 0.7), bp = F("bandpass", 2800, 3.5), g = G(0), p = P(-0.7);
+      bp.frequency.setValueAtTime(2800, t); bp.frequency.exponentialRampToValueAtTime(10500, t + dur);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.085, t + dur * 0.45); g.gain.linearRampToValueAtTime(0, t + dur);
+      p.pan.setValueAtTime(-0.7, t); p.pan.linearRampToValueAtTime(0.7, t + dur);
+      chain(n, hp, bp, g, p, d); send(p, bv, 0.6);
+      [86, 89, 93, 98].forEach(function (m, i) {
+        var at = t + dur * (0.3 + i * 0.12), f = mtof(m), o = O("sine", f, at), o2 = O("sine", f * 2.76, at), og = G(0), o2g = G(0), pp = P(-0.45 + i * 0.3);
+        perc(og, at, 0.002, 0.024 - i * 0.003, 0.7); perc(o2g, at, 0.001, 0.006, 0.09);
+        chain(o, og, pp, d); chain(o2, o2g, pp); send(pp, bv, 0.8);
+        o.start(at); o2.start(at); o.stop(at + 1); o2.stop(at + 0.2);
+      });
     },
-    // a water droplet: the eyes opening and blinking
-    drop: function (t, v) {
-      t = t === undefined ? now() : t;
-      var o = O("sine", 950, t), g = G(0);
-      o.frequency.exponentialRampToValueAtTime(2300, t + 0.035);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v || 0.08, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
-      chain(o, g, dst()); send(g, hall, 0.35); o.start(t); o.stop(t + 0.15);
+    // the blink: a soft felt tick as the lids close, and a water-drop note as they open
+    blink: function (t, ms, note, v, dest) {
+      t = t === undefined ? now() : t; ms = ms || 190; v = v || 1;
+      var d = dest || dst(), bv = glass(d), shut = t + ms * 0.0003, open = t + ms * 0.0006;
+      var k = noise("white", shut, 0.03), kb = F("bandpass", 1500, 1.4), kg = G(0); perc(kg, shut, 0.0008, 0.09 * v, 0.02);
+      var kt = O("sine", 430, shut), ktg = G(0); kt.frequency.exponentialRampToValueAtTime(300, shut + 0.03); perc(ktg, shut, 0.001, 0.05 * v, 0.03);
+      chain(k, kb, kg, d); chain(kt, ktg, d); send(kg, bv, 0.2);
+      kt.start(shut); kt.stop(shut + 0.1);
+      var f = mtof(note || 86), o = O("sine", f * 0.7, open), o2 = O("sine", f * 2.01, open), og = G(0), o2g = G(0);
+      o.frequency.exponentialRampToValueAtTime(f, open + 0.028);
+      perc(og, open, 0.001, 0.095 * v, 0.17); perc(o2g, open, 0.001, 0.016 * v, 0.05);
+      chain(o, og, d); chain(o2, o2g, d); send(og, bv, 0.55);
+      o.start(open); o2.start(open); o.stop(open + 0.4); o2.stop(open + 0.15);
     },
-    // the studio chord: Bbmaj9, strummed, with a sub underneath
-    sting: function (t) {
-      t = t === undefined ? now() : t;
-      var sb = G(1.25); sb.connect(dst()); send(sb, hall, 0.45); send(sb, echo, 0.15);
-      [46, 53, 57, 60, 62, 69].forEach(function (m, i) { rhodes(m, t + i * 0.024, 0.64 - i * 0.03, 3.0, sb, (i - 2.5) * 0.14); });
-      var s = O("sine", mtof(34), t), sg = G(0); sg.gain.setValueAtTime(0, t); sg.gain.linearRampToValueAtTime(0.16, t + 0.25); sg.gain.setTargetAtTime(0, t + 1.2, 0.5);
-      chain(s, sg, sb); s.start(t); s.stop(t + 4);
-    },
-    // the orb swelling over the frame: reverse cymbal, rising sweep, a low suck
-    swell: function (t, dur) {
-      var d = dst(), sr = ctx.sampleRate, len = Math.floor(sr * dur), buf = ctx.createBuffer(2, len, sr);
-      for (var c = 0; c < 2; c++) { var x = buf.getChannelData(c), r = seeded(77 + c); for (var i = 0; i < len; i++) x[i] = (r() * 2 - 1) * Math.pow(i / len, 2.6); }
-      var rv = ctx.createBufferSource(); rv.buffer = buf; var rh = F("highpass", 3500), rg = G(0.2);
-      chain(rv, rh, rg, d); rv.start(t);
-      var n = noise("white", t, dur), lp = F("lowpass", 200, 1.2), ng = G(0);
-      lp.frequency.setValueAtTime(200, t); lp.frequency.exponentialRampToValueAtTime(7000, t + dur);
-      ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.1, t + dur); ng.gain.linearRampToValueAtTime(0, t + dur + 0.015);
-      chain(n, lp, ng, d);
-      var o = O("sine", 70, t), og = G(0); o.frequency.exponentialRampToValueAtTime(230, t + dur);
-      og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.09, t + dur); og.gain.linearRampToValueAtTime(0, t + dur + 0.015);
-      chain(o, og, d); o.start(t); o.stop(t + dur + 0.05);
-    },
-    // through the match cut: a falling, darkening breath into the sea
-    through: function (t) {
-      var n = noise("pink", t, 1.6), lp = F("lowpass", 6000, 0.6), g = G(0), d = dst();
-      lp.frequency.setValueAtTime(6000, t); lp.frequency.exponentialRampToValueAtTime(300, t + 1.4);
-      g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
-      chain(n, lp, g, d); send(g, hall, 0.4);
-      var o = O("sine", 62, t), og = G(0); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.3, t + 0.02); og.gain.setTargetAtTime(0, t + 0.05, 0.25);
-      chain(o, og, d); o.start(t); o.stop(t + 1.5);
+    // out: a long falling breath as the picture sinks to black
+    release: function (t, dur, dest) {
+      t = t === undefined ? now() : t; dur = dur || 0.95; var d = dest || dst(), sv = stage(d);
+      var n = noise("pink", t, dur + 0.6), lp = F("lowpass", 4200, 0.6), g = G(0);
+      lp.frequency.setValueAtTime(4200, t); lp.frequency.exponentialRampToValueAtTime(160, t + dur + 0.4);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.5);
+      chain(n, lp, g, d); send(g, sv, 0.3);
+      var o = O("sine", mtof(38), t), og = G(0); og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.1, t + dur * 0.4); og.gain.linearRampToValueAtTime(0, t + dur + 0.3);
+      chain(o, og, d); o.start(t); o.stop(t + dur + 0.4);
     },
     // reverse cymbal into the title
     riser: function (t, dur) {
@@ -815,14 +914,12 @@
 
   /* ---------------- cue sheets ---------------- */
   function cueIntro(T, bake) {
-    sfx.room(T, C.cover - 0.05);
-    sfx.fall(T + C.fall, C.impact - C.fall);
-    sfx.thump(T + C.impact, 1); sfx.thump(T + C.rebound, 0.42);
-    sfx.unfurl(T + C.unfurl, -1); sfx.unfurl(T + C.unfurl + 0.03, 1);
-    sfx.sting(T + C.sting);
-    sfx.drop(T + C.eyesOpen + 0.02, 0.07); sfx.drop(T + C.blink1 + 0.06, 0.045); sfx.drop(T + C.blink2 + 0.05, 0.035);
-    sfx.swell(T + C.iris - 0.08, C.cover - C.iris + 0.08);
-    sfx.through(T + C.cover);
+    sfx.air(T + C.tone, C.dark - C.tone);
+    sfx.suck(T + C.rise, C.slam - C.rise);
+    sfx.slam(T + C.slam);
+    sfx.glint(T + C.sheen, 1.15);
+    sfx.blink(T + C.blink1, 190, 86, 1); sfx.blink(T + C.blink2, 150, 93, 0.8);   // D6, then A6
+    sfx.release(T + C.fade, C.dark - C.fade);
     ambStart(T + C.cover - 0.05);
     musicStart(T + C.musicStart, "intro");
     sfx.riser(T + C.riser, C.hit - C.riser);

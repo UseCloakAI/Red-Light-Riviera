@@ -4,7 +4,7 @@ Lowtide is an open-world crime game by Cloak Studios. It's built in HTML, has no
 
 | Path | What |
 |---|---|
-| `index.html` | The intro: Cloak Studios slate, match cut, title, main menu and pause menu |
+| `index.html` | The intro: Cloak Studios cold open, title, main menu and pause menu |
 | `brand/` | The brand kit: logo, colour, type, motion, interface and a sound board |
 | `js/cues.js` | The cue sheet. Every beat of the intro in seconds, read by both picture and sound |
 | `js/audio.js` | All music, ambience and sound effects, made live with WebAudio (no audio files) |
@@ -58,9 +58,9 @@ Coming next: weapons (Stage 3), police and wanted levels (4), vehicles (5), the 
 
 ## The intro
 
-1. **Cloak Studios.** The orb drops in with its eyes shut, squashes on landing and bounces once. CL and AK slide out from behind it. It opens its eyes, looks around and blinks.
-2. **Match cut.** The orb winds up and swells to fill the frame in rust, then shrinks down until it becomes the sun over the water.
-3. **Lowtide.** Letterbox bars come in over the dusk ocean, with ambience and the opening of the track. On the downbeat of the drop, the logo rises out of the water.
+1. **Cloak Studios.** A cold open in the style of a big studio logo. Black, with room tone and a reversed swell sucking everything in. A line of light opens across the frame, the sound cuts to silence for a beat, then a hit (sub drop, punch, crack, a low D-minor braam and a struck-metal shimmer in a big dark hall) hard-cuts to the on-dark CL(O)AK lockup, over-exposed and split for a few frames. It pushes in slowly while it holds, a light sweep rakes across it, and the orb blinks twice (a soft tick on each close, a water-drop note on each open: D, then A). Then it all sinks to black.
+2. **Out of the black.** The dusk ocean comes up out of the dark, with ambience and the opening of the track.
+3. **Lowtide.** Letterbox bars come in over the water. On the downbeat of the drop, the logo rises out of the water.
 
 Picture and sound both read `js/cues.js`. Picture time zero is set after the audio's output latency, so hits land on the frame they belong to.
 
@@ -68,9 +68,9 @@ Picture and sound both read `js/cues.js`. Picture time zero is set after the aud
 
 To run on low-end devices, the expensive parts are pre-rendered:
 
-- **The film**: the Cloak Studios slate, the match cut and the ocean up to the drop, as 1920x1080 H.264.
+- **The film**: the Cloak Studios cold open and the ocean up to the drop, as 1920x1080 H.264.
 - **The title background**: a seamless 10 s ocean loop.
-- **The sound**: the film's soundtrack and an 8-bar music-and-ocean loop, as FLAC so the loop has no gap.
+- **The sound**: the film's soundtrack, as FLAC. The title loop is the Lowtide theme (`theme.mp3`). The old 8-bar engine loop still bakes with `--kinds=loop`.
 
 The page plays the film muted, keeps it in step with the audio clock, and cuts to the live title exactly on the drop. A flash and a small camera punch hide the cut. Only the logo, the menus and the UI sounds run live. If the media can't load, it falls back to the fully live intro.
 
