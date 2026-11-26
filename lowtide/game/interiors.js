@@ -30,10 +30,18 @@ const GREET = {
   house: ["Uh, can I help you?", "You lost?"], hall: ["Meeting's Tuesday.", "Members only, friend."], theatre: ["Show's already started.", "Find a seat, quietly."]
 };
 
-/* ---- the textures: 32 px, nearest, drawn once ---- */
+/* ---- the textures: real ones where we have them (CC0, Screaming Brain Studios' Tiny Texture Packs, cut to
+   64 px: assets/tex/LICENSE.md), the rest drawn here at 32 px; nearest, made once ---- */
 const TEX = {};
+const IMG = new Set(["checker", "tile", "walltile", "plank", "carpet", "bluecarpet", "concrete", "paint", "wood", "brick", "metal", "wooddark", "woodlight", "steel", "crate", "parquet", "door"]);
+const TL = new THREE.TextureLoader();
 function tex(name) {
   if (TEX[name]) return TEX[name];
+  if (IMG.has(name)) {
+    const t = TL.load(new URL("../assets/tex/" + name + ".png", import.meta.url).href);
+    t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapNearestFilter; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return (TEX[name] = t);
+  }
   const c = document.createElement("canvas"); c.width = c.height = 32; const g = c.getContext("2d"); let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const fill = (col) => { g.fillStyle = col; g.fillRect(0, 0, 32, 32); };
   const noise = (a) => { for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(${r() < 0.5 ? "0,0,0" : "255,255,255"},${a * r()})`; g.fillRect((r() * 32) | 0, (r() * 32) | 0, 1, 1); } };
@@ -51,6 +59,11 @@ function tex(name) {
     case "wood": fill("#6a4428"); for (let x = 0; x < 32; x += 6) { g.fillStyle = "rgba(0,0,0,.22)"; g.fillRect(x, 0, 1, 32); } noise(0.1); break;
     case "brick": fill("#9a5a46"); for (let y = 0; y < 32; y += 4) { g.fillStyle = "rgba(220,210,200,.5)"; g.fillRect(0, y, 32, 1); for (let x = (y / 4 % 2) * 4; x < 32; x += 8) g.fillRect(x, y, 1, 4); } noise(0.1); break;
     case "metal": fill("#8a8c90"); for (let x = 0; x < 32; x += 4) { g.fillStyle = "rgba(0,0,0,.16)"; g.fillRect(x, 0, 1, 32); g.fillStyle = "rgba(255,255,255,.1)"; g.fillRect(x + 1, 0, 1, 32); } break;
+    // packaged goods: a cap, a label band with print, the body; the box's colour tints it
+    case "pack": fill("#c4c4c4"); g.fillStyle = "#5a5a5a"; g.fillRect(0, 0, 32, 5); g.fillStyle = "#ffffff"; g.fillRect(0, 11, 32, 12); g.fillStyle = "#2a2a2a"; for (let x = 4; x < 28; x += 3 + ((r() * 3) | 0)) g.fillRect(x, 15 + ((r() * 2) | 0), 2, 1); g.fillRect(6, 19, 20, 1); g.fillStyle = "#e8e8e8"; g.fillRect(3, 26, 6, 3); break;
+    case "bottle": fill("#b8b8b8"); g.fillStyle = "#ffffff"; g.fillRect(0, 12, 32, 10); g.fillStyle = "#3a3a3a"; g.fillRect(12, 0, 8, 6); g.fillRect(8, 16, 16, 2); g.fillStyle = "rgba(255,255,255,.5)"; g.fillRect(5, 6, 2, 24); break;
+    case "fabric": fill("#d8d8d8"); for (let y = 0; y < 32; y += 2) for (let x = (y / 2) % 2; x < 32; x += 2) { g.fillStyle = "rgba(0,0,0,.08)"; g.fillRect(x, y, 1, 1); } noise(0.12); g.fillStyle = "rgba(0,0,0,.18)"; g.fillRect(0, 31, 32, 1); break;
+    case "peg": fill("#b8b4ac"); g.fillStyle = "#4a4844"; for (let y = 2; y < 32; y += 4) for (let x = 2; x < 32; x += 4) g.fillRect(x, y, 1, 1); break;
     case "ceil": fill("#e4e0d8"); g.fillStyle = "rgba(0,0,0,.14)"; g.fillRect(0, 0, 32, 1); g.fillRect(0, 0, 1, 32); for (let i = 0; i < 40; i++) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect((r() * 32) | 0, (r() * 32) | 0, 1, 1); } break;
     default: fill("#ffffff");
   }
@@ -203,13 +216,14 @@ export class Interiors {
     };
     const solid = (x0, x1, z0, z1, h = 2) => { this.solid.push(this.world.grid.box(ox + x0, oz + z0, ox + x1, oz + z1, h)); };
     const box = (x0, x1, y0, y1, z0, z1, col, o = {}) => {
+      if (o.skip) { if (o.solid !== false && y0 < 1.6) solid(x0, x1, z0, z1, y1); return; }   // collision only
       const c = typeof col === "string" ? C(col) : col, s = o.shade || 1, t = o.tex ? { tex: o.tex } : {}, gl = o.glow;
-      const sx = x1 - x0, sy = y1 - y0, sz = z1 - z0, us = o.tex ? 1 : 1;
-      quad([x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], c, { ...t, shade: 1.05 * s, glow: gl, uv: [[0, 0], [sx * us, 0], [sx * us, sz * us], [0, sz * us]] });
-      quad([x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], c, { ...t, shade: 0.82 * s, glow: gl, uv: [[0, 0], [sx, 0], [sx, sy], [0, sy]] });
-      quad([x1, y0, z1], [x0, y0, z1], [x0, y1, z1], [x1, y1, z1], c, { ...t, shade: 0.72 * s, glow: gl, uv: [[0, 0], [sx, 0], [sx, sy], [0, sy]] });
-      quad([x0, y0, z1], [x0, y0, z0], [x0, y1, z0], [x0, y1, z1], c, { ...t, shade: 0.66 * s, glow: gl, uv: [[0, 0], [sz, 0], [sz, sy], [0, sy]] });
-      quad([x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0], c, { ...t, shade: 0.76 * s, glow: gl, uv: [[0, 0], [sz, 0], [sz, sy], [0, sy]] });
+      const k = o.uvs || 1, sx = (x1 - x0) * k, sy = (y1 - y0) * k, sz = (z1 - z0) * k, F = o.fit ? [[0, 0], [1, 0], [1, 1], [0, 1]] : null;
+      quad([x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], c, { ...t, shade: 1.05 * s, glow: gl, uv: o.fit ? [[0, 0], [1, 0], [1, 0.12], [0, 0.12]] : [[0, 0], [sx, 0], [sx, sz], [0, sz]] });
+      quad([x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], c, { ...t, shade: 0.82 * s, glow: gl, uv: F || [[0, 0], [sx, 0], [sx, sy], [0, sy]] });
+      quad([x1, y0, z1], [x0, y0, z1], [x0, y1, z1], [x1, y1, z1], c, { ...t, shade: 0.72 * s, glow: gl, uv: F || [[0, 0], [sx, 0], [sx, sy], [0, sy]] });
+      quad([x0, y0, z1], [x0, y0, z0], [x0, y1, z0], [x0, y1, z1], c, { ...t, shade: 0.66 * s, glow: gl, uv: F || [[0, 0], [sz, 0], [sz, sy], [0, sy]] });
+      quad([x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0], c, { ...t, shade: 0.76 * s, glow: gl, uv: F || [[0, 0], [sz, 0], [sz, sy], [0, sy]] });
       if (o.solid !== false && y0 < 1.6) solid(x0, x1, z0, z1, y1);
     };
     // a board on a wall: which wall (f front z=0, b back z=d, l x=0, r x=w), where along it, how big, how high
@@ -224,7 +238,8 @@ export class Interiors {
     const isStore = STORES.includes(kind);
     const FLOOR = { diner: "checker", cafe: "checker", barber: "checker", bar: "plank", laundry: "tile", hotel: "carpet", pawn: "tile", surf: "tile", motel: "bluecarpet", apartment: "plank", house: "plank", office: "tile", warehouse: "concrete", garage: "concrete", theatre: "carpet", hall: "plank", checks: "tile" }[kind] || "tile";
     const WALL = { diner: "walltile", cafe: "stripe", bar: "wood", laundry: "walltile", barber: "walltile", hotel: "stripe", motel: "paint", apartment: "stripe", house: "stripe", office: "paint", warehouse: "metal", garage: "concrete", theatre: "damask", hall: "brick", pawn: "brick", surf: "wood" }[kind] || "paint";
-    quad([0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d], C("#ffffff"), { tex: FLOOR, shade: 0.95, uv: [[0, 0], [w / 2, 0], [w / 2, d / 2], [0, d / 2]] });
+    const fs = FLOOR === "tile" ? 1 : 2;   // metres a texture repeat
+    quad([0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d], C("#ffffff"), { tex: FLOOR, shade: 0.95, uv: [[0, 0], [w / fs, 0], [w / fs, d / fs], [0, d / fs]] });
     const wallCol = C("#ffffff");
     const wall = (x0, z0, x1, z1, inset) => {
       const L = Math.hypot(x1 - x0, z1 - z0), ix = inset[0], iz = inset[1];
@@ -242,9 +257,12 @@ export class Interiors {
       else quad([lx - 0.6, H - 0.02, lz - 0.25], [lx + 0.6, H - 0.02, lz - 0.25], [lx + 0.6, H - 0.02, lz + 0.25], [lx - 0.6, H - 0.02, lz + 0.25], C("#fff6e0"), { glow: true });   // panels
     }
     // the way in, and windows out to the night
-    quad([DX - 0.7, 0, 0.03], [DX + 0.7, 0, 0.03], [DX + 0.7, 2.3, 0.03], [DX - 0.7, 2.3, 0.03], C("#5a3a24"), { shade: 0.95 });
-    quad([DX - 0.45, 1.3, 0.04], [DX + 0.45, 1.3, 0.04], [DX + 0.45, 2.1, 0.04], [DX - 0.45, 2.1, 0.04], C("#1c2a44"), { glow: true });
-    quad([DX + 0.4, 1.05, 0.045], [DX + 0.55, 1.05, 0.045], [DX + 0.55, 1.15, 0.045], [DX + 0.4, 1.15, 0.045], C("#e0b040"), { glow: true });
+    quad([DX - 0.62, 0, 0.03], [DX + 0.62, 0, 0.03], [DX + 0.62, 2.22, 0.03], [DX - 0.62, 2.22, 0.03], C("#d8c8b8"), { tex: "door", shade: 0.95, uv: [[0, 0], [1.2, 0], [1.2, 2.2], [0, 2.2]] });
+    box(DX - 0.75, DX - 0.62, 0, 2.34, 0.0, 0.08, "#e8e2d6", { solid: false }); box(DX + 0.62, DX + 0.75, 0, 2.34, 0.0, 0.08, "#e8e2d6", { solid: false }); box(DX - 0.75, DX + 0.75, 2.22, 2.34, 0.0, 0.08, "#e8e2d6", { solid: false });   // the frame
+    quad([DX - 0.42, 1.25, 0.04], [DX + 0.42, 1.25, 0.04], [DX + 0.42, 2.05, 0.04], [DX - 0.42, 2.05, 0.04], C("#1c2a44"), { glow: true });   // the glass, night outside
+    box(DX - 0.46, DX + 0.46, 1.21, 1.25, 0.03, 0.06, "#6a5a4a", { solid: false }); box(DX - 0.46, DX + 0.46, 2.05, 2.09, 0.03, 0.06, "#6a5a4a", { solid: false });
+    box(DX - 0.5, DX + 0.5, 0, 0.22, 0.03, 0.05, "#9a9aa0", { tex: "steel", solid: false });   // kick plate
+    box(DX - 0.4, DX + 0.4, 1.0, 1.06, 0.06, 0.12, "#c8c8cc", { tex: "steel", solid: false }); box(DX - 0.42, DX - 0.36, 0.98, 1.08, 0.03, 0.1, "#8a8a90", { solid: false }); box(DX + 0.36, DX + 0.42, 0.98, 1.08, 0.03, 0.1, "#8a8a90", { solid: false });   // push bar
     // the front windows, exactly where they are outside (each 4 m bay of the facade tile, from where the tile starts), dark glass and blinds from in here
     const FACE = { shop: [0.25, 3.75, 0.05, 2.7], stucco: [1, 3, 0.73, 2.48], siding: [1.125, 2.625, 0.75, 2.25], motel: [2.25, 3.75, 1.3, 2.33] }[I.e.face];
     if (FACE) {
@@ -264,8 +282,10 @@ export class Interiors {
     // what's in it
     const fan = (x, z) => { const f = new THREE.Group(), m = this.mat("flat", null, false), geo = new THREE.BoxGeometry(1.4, 0.03, 0.16); for (const r of [0, Math.PI / 2]) { const b = new THREE.Mesh(geo, m); b.rotation.y = r; f.add(b); } geo.setAttribute("color", new THREE.Float32BufferAttribute(new Array(geo.attributes.position.count * 3).fill(0.28), 3)); f.position.set(ox + x, H - 0.35, oz + z); g.add(f); this.fans.push(f); };
     const spots = { worker: null, extra: [] };
-    const F = FURNISH[isStore ? "store" : kind] || FURNISH.store;
-    F({ w, d, R, box, quad, plaque, board, C, H, kind, fan, spots });
+    const F = FURNISH[isStore ? "store" : kind] || FURNISH.store, rec = [];
+    F({ w, d, R, box: (...a) => rec.push(["b", a]), quad: (...a) => rec.push(["q", a]), plaque, board, C, H, kind, fan, spots });
+    keepDoorClear(rec, spots, w, d, DX);
+    for (const [t, a] of rec) t === "b" ? box(...a) : quad(...a);
     // geometry, one mesh per texture
     for (const L of layers.values()) {
       const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(L.p, 3)); geo.setAttribute("color", new THREE.Float32BufferAttribute(L.c, 3)); geo.setAttribute("uv", new THREE.Float32BufferAttribute(L.u, 2));
@@ -304,28 +324,113 @@ function bakeBody(group) {
   return out;
 }
 
+/* the way in stays clear: whatever furniture stands in the 2 m wide, 3.4 m deep walk in from the door is moved
+   (each piece whole: its boxes grouped by touching) to the nearer side that's free, or further in, or left out.
+   The people who stand at a moved piece move with it, and nobody waits in the doorway. */
+function keepDoorClear(rec, spots, w, d, DX) {
+  const CX0 = DX - 1.0, CX1 = DX + 1.0, CZ = 3.4;
+  const bb = rec.map(([t, a]) => {
+    if (t === "b") return { x0: Math.min(a[0], a[1]), x1: Math.max(a[0], a[1]), y0: a[2], y1: a[3], z0: Math.min(a[4], a[5]), z1: Math.max(a[4], a[5]) };
+    const P = a.slice(0, 4); return { x0: Math.min(...P.map((q) => q[0])), x1: Math.max(...P.map((q) => q[0])), y0: Math.min(...P.map((q) => q[1])), y1: Math.max(...P.map((q) => q[1])), z0: Math.min(...P.map((q) => q[2])), z1: Math.max(...P.map((q) => q[2])) };
+  });
+  const n = bb.length, par = bb.map((_, i) => i), find = (i) => (par[i] === i ? i : (par[i] = find(par[i])));
+  const flatThing = (b) => b.y1 < 0.06;   // rugs: under things, not part of them
+  for (let i = 0; i < n; i++) { const A = bb[i]; if (flatThing(A)) continue; for (let j = i + 1; j < n; j++) { const B = bb[j]; if (flatThing(B)) continue; if (A.x0 <= B.x1 + 0.03 && B.x0 <= A.x1 + 0.03 && A.z0 <= B.z1 + 0.03 && B.z0 <= A.z1 + 0.03 && A.y0 <= B.y1 + 0.03 && B.y0 <= A.y1 + 0.03) par[find(i)] = find(j); } }
+  const G = new Map(); for (let i = 0; i < n; i++) { const r = find(i); if (!G.has(r)) G.set(r, { ids: [], b: { ...bb[i] } }); const g = G.get(r); g.ids.push(i); const b = bb[i]; g.b.x0 = Math.min(g.b.x0, b.x0); g.b.x1 = Math.max(g.b.x1, b.x1); g.b.y0 = Math.min(g.b.y0, b.y0); g.b.y1 = Math.max(g.b.y1, b.y1); g.b.z0 = Math.min(g.b.z0, b.z0); g.b.z1 = Math.max(g.b.z1, b.z1); }
+  const groups = [...G.values()];
+  const blocks = (b) => b.y1 > 0.06 && b.y0 < 1.9 && b.x1 > CX0 && b.x0 < CX1 && b.z0 < CZ;
+  const fits = (b) => b.x0 >= 0.05 && b.x1 <= w - 0.05 && b.z0 >= 0.05 && b.z1 <= d - 0.05;
+  const hits = (b, self) => groups.some((g) => g !== self && !g.drop && g.b.y1 > 0.06 && g.b.y0 < 1.9 && b.x1 > g.b.x0 + 0.02 && b.x0 < g.b.x1 - 0.02 && b.z1 > g.b.z0 + 0.02 && b.z0 < g.b.z1 - 0.02);
+  const moved = [];
+  for (const g of groups) {
+    if (!blocks(g.b)) continue;
+    const opts = [{ dx: CX0 - g.b.x1, dz: 0 }, { dx: CX1 - g.b.x0, dz: 0 }, { dx: 0, dz: CZ - g.b.z0 }].sort((a, b) => Math.abs(a.dx) + Math.abs(a.dz) - Math.abs(b.dx) - Math.abs(b.dz));
+    const ok = opts.find((m) => { const b = { ...g.b, x0: g.b.x0 + m.dx, x1: g.b.x1 + m.dx, z0: g.b.z0 + m.dz, z1: g.b.z1 + m.dz }; return fits(b) && !blocks(b) && !hits(b, g); });
+    if (!ok) { g.drop = true; continue; }
+    const old = { ...g.b }; g.b.x0 += ok.dx; g.b.x1 += ok.dx; g.b.z0 += ok.dz; g.b.z1 += ok.dz; g.m = ok; moved.push({ old, m: ok });
+  }
+  const drop = new Set(), shift = new Map();
+  for (const g of groups) for (const i of g.ids) { if (g.drop) drop.add(i); else if (g.m) shift.set(i, g.m); }
+  for (let i = n - 1; i >= 0; i--) {
+    if (drop.has(i)) { rec.splice(i, 1); continue; }
+    const m = shift.get(i); if (!m) continue;
+    const [t, a] = rec[i];
+    if (t === "b") { a[0] += m.dx; a[1] += m.dx; a[4] += m.dz; a[5] += m.dz; }
+    else for (let k = 0; k < 4; k++) a[k] = [a[k][0] + m.dx, a[k][1], a[k][2] + m.dz];
+  }
+  const fix = (sp) => {
+    if (!sp) return;
+    for (const { old, m } of moved) if (sp[0] > old.x0 - 1.3 && sp[0] < old.x1 + 1.3 && sp[1] > old.z0 - 1.3 && sp[1] < old.z1 + 1.3) { sp[0] += m.dx; sp[1] += m.dz; break; }
+    if (sp[0] > CX0 - 0.3 && sp[0] < CX1 + 0.3 && sp[1] < CZ) sp[0] = sp[0] < DX ? CX0 - 0.4 : CX1 + 0.4;
+  };
+  fix(spots.worker); spots.extra.forEach(fix);
+}
+
 /* ---------------- furniture, by kind ---------------- */
+const lift = (hex, k) => "#" + C(hex).lerp(C("#ffffff"), k).getHexString();   // a colour washed toward white, to tint a texture
 const STOCK = ["#c23b2a", "#2f5d8c", "#e0b040", "#3f7a4a", "#e8e2d6", "#8a3b6a", "#d9772a", "#56a0c0"];
 function gondola(o, x0, x1, z, palette) {   // shelving with stock on both faces
-  o.box(x0, x1, 0, 1.65, z - 0.32, z + 0.32, "#7a7a80");
-  for (let y = 0.3; y < 1.6; y += 0.42) {
-    o.box(x0, x1, y - 0.04, y, z - 0.42, z + 0.42, "#9a9aa0", { solid: false });
-    for (let x = x0 + 0.08; x < x1 - 0.25; x += 0.24 + o.R() * 0.12) {
-      const c = palette[(o.R() * palette.length) | 0], h = 0.14 + o.R() * 0.16;
-      o.box(x, x + 0.18, y, y + h, z - 0.4, z - 0.33, c, { solid: false }); o.box(x, x + 0.18, y, y + h, z + 0.33, z + 0.4, c, { solid: false });
+  o.box(x0, x1, 0, 0.12, z - 0.44, z + 0.44, "#3a3a40", { tex: "steel" });   // the base
+  o.box(x0 + 0.05, x1 - 0.05, 0.12, 1.7, z - 0.03, z + 0.03, "#ffffff", { tex: "peg", uvs: 2, solid: false });   // pegboard spine
+  o.box(x0, x1, 0.12, 1.7, z - 0.02, z + 0.02, "#8a8a90", { solid: true });
+  for (const x of [x0, x1 - 0.06]) o.box(x, x + 0.06, 0, 1.78, z - 0.44, z + 0.44, "#b8b8be", { tex: "steel", solid: false });   // the uprights
+  o.box(x0, x1, 1.7, 1.78, z - 0.1, z + 0.1, "#b8b8be", { tex: "steel", solid: false });
+  for (let y = 0.42; y < 1.65; y += 0.4) {
+    o.box(x0 + 0.06, x1 - 0.06, y - 0.03, y, z - 0.42, z + 0.42, "#d0d0d4", { tex: "steel", solid: false });
+    for (const sd of [-1, 1]) {   // a price strip on the lip, then the stock in facings
+      const zl = z + sd * 0.42, zf = z + sd * 0.405;
+      o.box(x0 + 0.06, x1 - 0.06, y - 0.07, y, Math.min(zl, zf + sd * 0.025), Math.max(zl, zf + sd * 0.025), "#f2efe6", { solid: false });
+      for (let x = x0 + 0.1; x < x1 - 0.2;) {
+        const c = palette[(o.R() * palette.length) | 0], wv = 0.09 + o.R() * 0.1, h = 0.12 + o.R() * 0.2, n = 1 + ((o.R() * 4) | 0), dz = 0.18 + o.R() * 0.12;
+        for (let k = 0; k < n && x + wv < x1 - 0.1; k++, x += wv + 0.015) o.box(x, x + wv, y, y + h, sd < 0 ? z - 0.4 : z + 0.4 - dz, sd < 0 ? z - 0.4 + dz : z + 0.4, lift(c, 0.15), { tex: o.R() < 0.3 ? "bottle" : "pack", fit: true, solid: false });
+        x += 0.03 + o.R() * 0.05;
+      }
     }
   }
+  o.box(x1 - 0.02, x1 + 0.005, 1.0, 1.55, z - 0.3, z + 0.3, "#c23b2a", { solid: false });   // the end-cap card
 }
 function stools(o, x0, x1, z, seat = "#b8302a") { for (let x = x0; x < x1; x += 0.9) { o.box(x - 0.05, x + 0.05, 0, 0.7, z - 0.05, z + 0.05, "#9a9aa0", { solid: false }); o.box(x - 0.2, x + 0.2, 0.7, 0.8, z - 0.2, z + 0.2, seat, { solid: false }); } }
-function sofa(o, x, z, len, col, back) { o.box(x, x + len, 0, 0.45, z, z + 0.85, col); o.box(x, x + len, 0.45, 0.95, back ? z + 0.65 : z, back ? z + 0.85 : z + 0.2, col, { shade: 0.9 }); }
+function sofa(o, x, z, len, col, back) {
+  const c = lift(col, 0.1), bz0 = back ? z + 0.65 : z, bz1 = back ? z + 0.85 : z + 0.2;
+  o.box(x, x + len, 0.06, 0.3, z, z + 0.85, c, { tex: "fabric", uvs: 3 }); for (const fx of [x + 0.05, x + len - 0.1]) o.box(fx, fx + 0.05, 0, 0.06, z + 0.1, z + 0.75, "#2a2420", { solid: false });
+  for (let k = 0; k < Math.max(1, Math.round(len / 0.9)); k++) { const a = x + 0.1 + k * (len - 0.2) / Math.max(1, Math.round(len / 0.9)), b = a + (len - 0.2) / Math.max(1, Math.round(len / 0.9)) - 0.03; o.box(a, b, 0.3, 0.45, back ? z + 0.02 : z + 0.22, back ? z + 0.64 : z + 0.83, c, { tex: "fabric", uvs: 3, shade: 1.05, solid: false }); }   // cushions
+  o.box(x, x + len, 0.3, 0.95, bz0, bz1, c, { tex: "fabric", uvs: 3, shade: 0.9, solid: false });
+  for (const ax of [x, x + len - 0.12]) o.box(ax, ax + 0.12, 0.3, 0.62, z, z + 0.85, c, { tex: "fabric", uvs: 3, shade: 0.95, solid: false });   // arms
+}
 function plant(o, x, z) { o.box(x - 0.22, x + 0.22, 0, 0.42, z - 0.22, z + 0.22, "#6a4a32"); o.box(x - 0.32, x + 0.32, 0.42, 1.25, z - 0.32, z + 0.32, "#3f7a4a", { solid: false }); o.box(x - 0.2, x + 0.2, 1.25, 1.55, z - 0.2, z + 0.2, "#4f8a5a", { solid: false }); }
 function rug(o, x0, x1, z0, z1, col) { o.quad([x0, 0.012, z0], [x1, 0.012, z0], [x1, 0.012, z1], [x0, 0.012, z1], o.C(col)); }
-function counter(o, x0, x1, z0, z1, top = "#2a2a2e", body = "#6a4a32") { o.box(x0, x1, 0, 0.98, z0, z1, body); o.box(x0 - 0.05, x1 + 0.05, 0.98, 1.05, z0 - 0.05, z1 + 0.05, top, { solid: false }); }
+function counter(o, x0, x1, z0, z1, top = "#2a2a2e", body = "#6a4a32") {
+  o.box(x0 + 0.04, x1 - 0.04, 0, 0.1, z0 + 0.04, z1 - 0.04, "#1e1c1a", { solid: false });   // the toe kick
+  o.box(x0, x1, 0.1, 0.98, z0, z1, lift(body, 0.45), { tex: "wooddark" });
+  for (let x = x0 + 0.6; x < x1 - 0.3; x += 0.6) { o.box(x - 0.012, x + 0.012, 0.16, 0.92, z0 - 0.012, z0, "#2a2018", { solid: false }); o.box(x - 0.012, x + 0.012, 0.16, 0.92, z1, z1 + 0.012, "#2a2018", { solid: false }); }   // panel joints
+  o.box(x0 - 0.05, x1 + 0.05, 0.98, 1.05, z0 - 0.05, z1 + 0.05, lift(top, 0.25), { tex: "steel", solid: false });
+}
+function register(o, x, z) {   // till, screen, card reader
+  o.box(x - 0.25, x + 0.25, 1.05, 1.17, z - 0.2, z + 0.2, "#2a2a2e", { solid: false }); o.box(x - 0.2, x + 0.2, 1.17, 1.21, z - 0.16, z + 0.1, "#4a4a52", { solid: false });
+  o.box(x - 0.04, x + 0.04, 1.17, 1.4, z + 0.08, z + 0.14, "#2a2a2e", { solid: false }); o.box(x - 0.2, x + 0.2, 1.36, 1.6, z + 0.12, z + 0.16, "#1a1a1e", { solid: false }); o.box(x - 0.17, x + 0.17, 1.39, 1.57, z + 0.115, z + 0.12, "#3fa0c0", { glow: true, solid: false });
+  o.box(x + 0.35, x + 0.47, 1.05, 1.11, z - 0.12, z + 0.06, "#2a2a2e", { solid: false }); o.box(x + 0.37, x + 0.45, 1.11, 1.12, z - 0.08, z, "#7ad07a", { glow: true, solid: false });
+}
+function fridges(o, x0, x1, z0, z1, wallX) {   // glass-door coolers along a side wall: lit inside, stocked, steel frames
+  o.box(x0, x1, 0, 0.12, z0, z1, "#2a2a2e", { solid: true }); o.box(x0, x1, 2.12, 2.45, z0, z1, "#e8e8ec", { tex: "steel" });
+  o.box(x0 + 0.02, x0 + 0.06, 2.18, 2.38, z0 + 0.3, z1 - 0.3, "#3fa0c0", { glow: true, solid: false });   // the lit header
+  o.box(wallX - 0.06, wallX, 0.12, 2.12, z0, z1, "#cfe6f2", { glow: true, solid: false });   // the lit back
+  for (let z = z0; z < z1 - 0.3; z += 0.85) {
+    const za = z + 0.04, zb = Math.min(z1, z + 0.85) - 0.04;
+    for (let y = 0.4; y < 2.0; y += 0.42) {
+      o.box(x0 + 0.1, wallX - 0.06, y - 0.02, y, za, zb, "#e8f2f6", { glow: true, solid: false });
+      for (let q = za + 0.03; q < zb - 0.08; q += 0.085) { const c = ["#c23b2a", "#2f5d8c", "#e0b040", "#3f7a4a", "#e8e2d6", "#d9772a", "#56a0c0"][(o.R() * 7) | 0]; for (let r = 0; r < 3; r++) o.box(x0 + 0.14 + r * 0.16, x0 + 0.2 + r * 0.16, y, y + 0.22 + (q * 7 % 1) * 0.08, q, q + 0.065, lift(c, 0.2), { tex: "bottle", fit: true, glow: true, solid: false }); }
+    }
+    o.box(x0 - 0.02, x0 + 0.04, 0.12, 2.12, z, z + 0.05, "#b8b8be", { tex: "steel", solid: false });   // the door frames
+    o.box(x0 - 0.06, x0 - 0.02, 0.8, 1.5, zb - 0.12, zb - 0.08, "#d8d8dc", { solid: false });   // handles
+  }
+  o.box(x0 - 0.02, x0 + 0.04, 0.12, 2.12, z1 - 0.05, z1, "#b8b8be", { tex: "steel", solid: false });
+  o.box(x0, wallX, 0.12, 2.12, z0, z1, "#000", { solid: true, glow: true, skip: true });
+}
 const FURNISH = {
   // all the shops with shelves: a register by the door, stock by kind, fridges or racks along the side
   store(o) {
     const { w, d, R, kind } = o;
-    counter(o, 0.5, 3.2, 1.5, 2.2); o.box(1.3, 1.8, 1.05, 1.32, 1.6, 2.0, "#2a2a2e", { solid: false });   // register
+    counter(o, 0.5, 3.2, 1.5, 2.2); register(o, 1.55, 1.8);
     o.spots.worker = [1.8, 0.85, 0];
     const pal = { pharmacy: ["#e8e2d6", "#56a0c0", "#c23b2a", "#ffffff"], hardware: ["#d9772a", "#7a7a80", "#3f7a4a", "#c9a14a"], surf: ["#56a0c0", "#e0b040", "#ff6fa8"], pawn: ["#c9a14a", "#7a7a80", "#2a2a2e"] }[kind] || STOCK;
     if (kind === "pawn" || kind === "checks") {   // glass cases and a counter with a screen
@@ -338,8 +443,7 @@ const FURNISH = {
     } else {
       for (let z = 3.6; z < d - 1.8; z += 2.4) gondola(o, 3.8, w - 1.7, z, pal);
       if (kind === "store" || kind === "pharmacy") {   // the fridges, lit
-        o.box(w - 1, w - 0.08, 0, 2.2, 2, d - 0.4, "#cfe6f2", { glow: true });
-        for (let z = 2.2; z < d - 0.6; z += 1.1) o.box(w - 1.02, w - 0.99, 0.08, 2.12, z, z + 0.05, "#55595e", { solid: false });
+        fridges(o, w - 0.95, w - 0.02, 2, d - 0.4, w - 0.02);
       }
     }
     o.plaque("l", d / 2, 1.4, 0.6, 2.2, o.board([kind === "pharmacy" ? "PHARMACY" : kind === "hardware" ? "TOOLS" : kind === "checks" ? "NO CHECKS OVER $500" : "SALE", "2 FOR $1"], { bg: "#c23b2a", fg: "#fff" }));
@@ -421,7 +525,7 @@ const FURNISH = {
   warehouse(o) {
     const { w, d, R } = o;
     for (let x = 6; x < w - 3; x += 6) for (let z = 5; z < d - 2; z += 6) o.box(x - 0.25, x + 0.25, 0, H, z - 0.25, z + 0.25, "#7a766e");
-    for (let i = 0; i < 12; i++) { const x = 2 + R() * (w - 5), z = 3 + R() * (d - 5), h = 1 + ((R() * 3) | 0) * 0.9; o.box(x, x + 1.4, 0, h, z, z + 1.2, ["#9a7a4a", "#8a6a3a", "#5a6a7a"][(R() * 3) | 0], { tex: "wood" }); o.box(x, x + 1.4, 0, 0.14, z, z + 1.2, "#6a5034", { solid: false }); }
+    for (let i = 0; i < 12; i++) { const x = 2 + R() * (w - 5), z = 3 + R() * (d - 5), h = 1 + ((R() * 3) | 0) * 0.9; o.box(x, x + 1.4, 0.14, h, z, z + 1.2, ["#e8d8b8", "#d8c098", "#b8c4cc"][(R() * 3) | 0], { tex: "crate", uvs: 1.4 }); o.box(x - 0.02, x + 1.42, h - 0.08, h, z - 0.02, z + 1.22, "#8a6a44", { tex: "crate", solid: false }); o.box(x + 0.05, x + 1.35, 0, 0.14, z + 0.05, z + 1.15, "#a08060", { tex: "crate", solid: false }); }
     o.box(1, 2.2, 0, 1.6, d - 2, d - 1, "#d9a441"); o.box(1.1, 2.1, 1.6, 2.4, d - 1.9, d - 1.1, "#2a2a2e", { solid: false });   // a forklift, sort of
     o.spots.worker = [3, d - 3, Math.PI];
   },

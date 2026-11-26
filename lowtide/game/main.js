@@ -399,7 +399,7 @@ export async function start(o) {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyRes();
   });
 
-  const api = {
+  const api = { interiors,
     input, hud, player,
     resume() { if (running) return; running = true; last = 0; input.active = true; raf = requestAnimationFrame(loop); },
     pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); },
