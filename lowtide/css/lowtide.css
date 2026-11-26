@@ -358,3 +358,17 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .settings{max-height:calc(100vh - 330px);overflow:auto;padding-left:14px;margin-left:-14px;scrollbar-width:thin}
 .settings li{font-size:24px;padding:9px 14px}
 .g-acts{align-content:start}
+/* creator: mode switch, preset cards, expanders, notes */
+.cc-mode{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:rgba(0,0,0,.3);padding:4px;margin-bottom:14px}
+.cc-mode button{background:none;border:0;cursor:pointer;color:rgba(247,242,234,.55);font:extra-condensed 800 16px/1 var(--fd);letter-spacing:.1em;text-transform:uppercase;padding:10px 6px;transition:background .14s linear,color .14s linear}
+.cc-mode button:hover{color:var(--off)}
+.cc-mode button.sel{background:var(--gold);color:var(--ink)}
+.cc-cards{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cc-cards button{text-align:left;background:rgba(0,0,0,.25);border:1.5px solid rgba(247,242,234,.14);color:var(--off);padding:12px 12px 11px;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:border-color .14s linear}
+.cc-cards button:hover{border-color:rgba(247,242,234,.45)}
+.cc-cards button.on{border-color:var(--gold);background:rgba(255,211,110,.08)}
+.cc-cards b{font:extra-condensed 800 18px/1 var(--fd);text-transform:uppercase}
+.cc-cards span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.6}
+.cc-row.more button{width:100%;display:flex;justify-content:space-between;background:none;border:1px dashed rgba(247,242,234,.25);color:rgba(247,242,234,.75);font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:10px 12px;cursor:pointer}
+.cc-row.more button:hover{color:var(--gold);border-color:var(--gold)}
+.cc-row.note p{margin:0;font-size:12px;line-height:1.5;opacity:.65}

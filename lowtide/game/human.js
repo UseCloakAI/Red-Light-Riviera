@@ -44,6 +44,13 @@ export const HOLLIS = {
   eyes: "brownlight", brows: "eyebrow006", browColor: "#3a2a20", lashes: "eyelashes01",
   hair: "ponytail01", hairColor: "#3b2a20", outfit: "male_casualsuit05", shoes: "shoes02", hat: null
 };
+/* Story Mode's Hollis is a fixed person: only these can change. */
+export const STORY_EDITABLE = ["hair", "hairColor", "outfit", "shoes", "hat"];
+export function lockStory(p) {
+  const out = JSON.parse(JSON.stringify(HOLLIS));
+  if (p) for (const k of STORY_EDITABLE) if (k in p) out[k] = p[k];
+  return out;
+}
 export const SWATCHES = {
   hair: ["#120d0a", "#2a1c14", "#3b2a20", "#5a3d27", "#7a5634", "#a37a4c", "#c9a26b", "#8b8a86", "#d8d5cf", "#6a2a1e"],
   brow: ["#120d0a", "#2a1d16", "#3a2a20", "#5a3d27", "#8a6a48", "#9a9690"]

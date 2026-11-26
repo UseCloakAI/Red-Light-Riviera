@@ -21,7 +21,7 @@ import { Police, STATION } from "./police.js?v=dev";
 import { Gore } from "./gore.js?v=dev";
 import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { createHuman } from "./human.js?v=dev";
+import { createHuman, lockStory } from "./human.js?v=dev";
 import { HomeLife } from "./homelife.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
 import { ROOMS_ON } from "./city/build.js?v=dev";
@@ -29,7 +29,7 @@ import { ROOMS_ON } from "./city/build.js?v=dev";
 // the player: the character from the creator (MakeHuman, game/human.js); the Mixamo model is the fallback
 async function loadCharacter(params) {
   try {
-    if (params) { const h = await createHuman(params); return { scene: h.group, clips: h.clips, human: h }; }
+    if (params) { const h = await createHuman(lockStory(params)); return { scene: h.group, clips: h.clips, human: h }; }
   } catch (e) { console.warn("Lowtide: created character failed, using the fallback", e); }
   try {
     const [gltf, anims] = await Promise.all([
