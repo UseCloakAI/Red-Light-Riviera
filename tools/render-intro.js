@@ -88,7 +88,8 @@ async function bakeAudio(browser, base) {
       }
     }, what);
   };
-  for (const what of ["intro", "loop"]) {
+  // the title now plays the Lowtide theme (media/theme.mp3); the old 8-bar loop only bakes on request
+  for (const what of ["intro", "loop"].filter(w => w === "intro" || KINDS.includes("loop"))) {
     const wav = path.join(os.tmpdir(), `lt-${what}.wav`);
     fs.writeFileSync(wav, Buffer.from(await pcm(what), "base64"));
     ff(["-i", wav, "-c:a", "flac", "-compression_level", "8", path.join(OUT, `${what}.flac`)]);
@@ -107,7 +108,7 @@ async function bakeAudio(browser, base) {
     for (const [name, v] of Object.entries(VARIANTS)) {
       if (ONLY && ONLY !== name) continue;
       const x264 = ["-c:v", "libx264", "-preset", "slow", "-crf", String(v.crf), "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-an"];
-      // the film: slate, match cut and the ocean up to the drop
+      // the film: the Cloak Studios cold open and the ocean up to the drop
       if (KINDS.includes("intro")) {
       const di = path.join(tmp, name + "-intro");
       await frames(browser, base, "intro", v, di);

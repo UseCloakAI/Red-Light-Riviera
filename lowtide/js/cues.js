@@ -3,28 +3,23 @@
 (function () {
   "use strict";
   var C = {
-    // Cloak Studios slate
-    grid: 0.10,
-    fall: 0.45,       // orb leaves the top of frame, eyes shut
-    impact: 0.87,     // first contact, squash
-    unfurl: 0.90,     // CL and AK slide out from behind the orb
-    rebound: 1.28,    // second, smaller landing
-    sting: 1.22,      // the studio chord
-    eyesOpen: 1.62,
-    studios: 1.72,
-    lookL: 1.98, lookR: 2.42, lookC: 2.86,
-    blink1: 3.10, blink2: 3.36,
-    eyesClose: 3.84,
-    windup: 3.90,     // anticipation before the iris
-    iris: 4.04,       // orb swells to fill the frame
-    cover: 4.74,      // frame is all rust: match cut happens here
-    sunLand: 5.64,    // the disc has shrunk into the sun
+    // Cloak Studios: a cold open in the dark
+    tone: 0.05,       // room tone in the black
+    rise: 0.30,       // the suck-in starts
+    flare: 0.85,      // a line of light opens across the frame
+    slam: 1.55,       // the boom: hard cut to the lockup
+    sheen: 2.10,      // light rakes across the letters
+    blink1: 3.08, blink2: 3.36,
+    fade: 4.30,       // fade to black
+    dark: 5.25,       // all black
 
     // Lowtide title
-    bars: 4.95,
-    credit: 5.80, creditOut: 8.20,
+    cover: 5.50,      // the ocean comes up out of the black, music starts
     bpm: 92, introBars: 2
   };
+  C.bars = C.cover + 0.30;
+  C.credit = C.cover + 1.10;
+  C.creditOut = C.cover + 3.50;
   C.musicStart = C.cover;
   C.bar = 240 / C.bpm;
   C.hit = C.musicStart + C.introBars * C.bar;   // the drop lands on a downbeat
