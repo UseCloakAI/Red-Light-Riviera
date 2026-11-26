@@ -554,7 +554,7 @@
     { k: "fov", label: "Field of view", min: 55, max: 95, step: 5, fmt: function (v) { return v + "°"; } },
     { k: "shake", label: "Camera shake", bool: true },
     { k: "subtitles", label: "Subtitles", bool: true },
-    { k: "quality", label: "Graphics quality", choice: [["auto", "Auto"], ["high", "High"], ["low", "Low"]], note: "Auto switches to low if the game runs slow" },
+    { k: "quality", label: "Graphics quality", choice: [["auto", "Auto"], ["high", "High"], ["low", "Low"]], note: "Auto switches to low if the game runs slow. Low saves the most after a reload" },
     { k: "ps1", label: "PS1 look", bool: true, note: "Off: sharp and smooth. The wobble changes on the next load" },
     { k: "fps", label: "Show FPS", bool: true },
     { k: "pixels", label: "Resolution", choice: [[200, "Crunchy, 200 lines"], [270, "Classic, 270 lines"], [360, "Sharp, 360 lines"], [480, "Clean, 480 lines"]], note: "Takes effect the next time the island loads" },
