@@ -54,7 +54,22 @@ Characters are built from MakeHuman's CC0 data (`tools/human/`, see its README).
 
 `game/peds.js` fills the streets with 18 unique people from the same generator, built on MakeHuman's 1,600-vertex body proxy. They walk the block sidewalks, stop now and then, wait for you to pass, and are recycled out of sight. Animation only runs within 70 m.
 
-Coming next: weapons (Stage 3), police and wanted levels (4), vehicles (5), the first mission (6).
+## Cars (Stage 5)
+
+Six original models (the Marlin saloon, Skiff hatchback, Heron estate, Tarpon pickup, Barracuda coupe and Pelican van) plus the police cruiser and the cab, built in `game/carmodels.js` from side profiles: solid nose and tail, an open cabin with seats, dash and wheel, see-through glass. `game/carrender.js` draws every car on the island from its state: clean cars as instances, packed each frame with only what's in view; a hit car gets its own subdivided copy of the same model that dents where it's struck (paint scraped to metal, glass and lamps broken, wheels bent), with no limit and no drop in quality.
+
+`game/carphys.js` is the driving model: magic-formula tyres sharing a friction circle with drive and brakes, load moving front to back, a torque curve through a five-speed automatic, ABS, a rear-locking handbrake, springs under the body (pitch, roll, kerbs, landing off a jump), and impulse collisions with the world and with other cars. Parked cars and traffic come loose into the same physics when they're hit, then settle (traffic finds its lane again).
+
+`game/occupants.js` animates people and cars on the real bodies: getting in (door handle, door swung wide, duck, inside leg first, door pulled shut, hands to the wheel), getting out, pulling a driver out and throwing them on the road, and diving out of a moving car. The nearest drivers are real people at the wheel; further off, a figure through the glass. Traffic parks in free kerbside spaces (the driver gets out and walks off), and people walk up to parked cars, get in and pull out. Ragdolls (`game/rig.js`) have weighted limbs, hinged knees and elbows, real ground friction, and land on and roll off cars.
+
+| Key | In a car |
+|---|---|
+| E | Get in (or pull the driver out) / get out (at speed: bail out) |
+| W / S | Throttle / brake, reverse from a stop |
+| A / D | Steer (less lock at speed) |
+| Space | Handbrake |
+
+`tools/carlab/index.html` renders every model side by side for checking them.
 
 ## The intro
 

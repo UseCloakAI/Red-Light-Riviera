@@ -102,7 +102,9 @@ export async function start(o) {
   const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
   // Stage 5, early: the parked cars drive
   const traffic = new Traffic(scene, world, { count: lowLoad ? 10 : 16, sfx: o.sfx });
-  const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
+  // the people at the wheel of the cars near you (real people, seated by vehicles.js)
+  if (peds) try { for (let i = 0; i < (lowLoad ? 3 : 6); i++) { await peds.makeDriver(); await frame(); } } catch (e) { console.warn("Lowtide: drivers failed to load", e); }
+  const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic, low: lowLoad });
   // your health; cars and blasts take it
   const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
   arsenal.say = (t, pd) => { if (pd) voice.speak(t, pd.voice, heard(pd), "scared"); };
@@ -130,11 +132,11 @@ export async function start(o) {
     traffic.panic(pos.x, pos.z, 75, true);
     if (!hit || !hit.point) return;
     // the first car along the round's path takes it
-    const all = vehicles.cars.concat(traffic.cars.filter((k) => k.active || k.taken)), dx = hit.point.x - pos.x, dz = hit.point.z - pos.z, L = Math.hypot(dx, dz);
-    for (let t = 0.5; t < L; t += 0.5) {
+    const all = vehicles.all(), dx = hit.point.x - pos.x, dz = hit.point.z - pos.z, L = Math.hypot(dx, dz);
+    for (let t = 0.5; t < L; t += 0.35) {
       const x = pos.x + dx * t / L, z = pos.z + dz * t / L, y = pos.y + 1.4 + (hit.point.y - pos.y - 1.4) * t / L;
-      const c = all.find((k) => !k.wreck && Math.abs(k.x - x) < 3 && Math.abs(k.z - z) < 3 && vehicles.touching(k, x, z, 0) && y < (k.y || 0) + 1.5);
-      if (c) { c.byPlayerT = performance.now(); vehicles.impactCar(c, x, z, dx / L, dz / L, 4); vehicles.hurt(c, 9); break; }
+      const c = all.find((k) => k !== vehicles.car && !k.hidden && Math.abs(k.x - x) < 3 && Math.abs(k.z - z) < 3 && vehicles.touching(k, x, z, 0) && y < (k.y || 0) + (k.m ? k.m.cab.roof : 1.5));
+      if (c) { c.byPlayerT = performance.now(); if (!c.wreck) vehicles.shot(c, x, y, z, dx / L, dz / L); break; }
     }
   };
   /* ---- what the pause menu shows: stats, the brief (everything said and shown), the clock ---- */
@@ -229,7 +231,7 @@ export async function start(o) {
   // warm up: compile every shader before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
   const seen = { calls: 0, tris: 0 };
-  const draw = () => { renderer.setRenderTarget(rt); renderer.render(scene, camera); seen.calls = renderer.info.render.calls; seen.tris = renderer.info.render.triangles; renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); };
+  const draw = () => { vehicles.draw(Math.max(0, (performance.now() - (draw.t || performance.now())) / 1000)); draw.t = performance.now(); renderer.setRenderTarget(rt); renderer.render(scene, camera); seen.calls = renderer.info.render.calls; seen.tris = renderer.info.render.triangles; renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); };
   await step(0.96, "people");
   // compile for where we actually draw (the low-res target, no tone mapping), in parallel where the browser can
   renderer.setRenderTarget(rt);
@@ -297,7 +299,7 @@ export async function start(o) {
   };
   /* static scenery drawn as instances (palms, trees, benches, bins, containers, poles): one batch each, so
      no culling; on low, each batch is compacted to the instances within the view, a few times a second */
-  const dynamic = new Set([world.props.hydrantMesh, world.props.redMesh, world.props.greenMesh, ...(world.cars.meshes || []), ...traffic.meshes, ...(traffic.lampMeshes || []), gore.splats, arsenal.fx.holes, arsenal.fx.brass, arsenal.fx.hulls]);
+  const dynamic = new Set([world.props.hydrantMesh, world.props.redMesh, world.props.greenMesh, ...vehicles.fleet.meshes, gore.splats, arsenal.fx.holes, arsenal.fx.brass, arsenal.fx.hulls]);
   if (world.props.lampMeshes) for (const k of ["pI", "hI", "lI"]) dynamic.add(world.props.lampMeshes[k]);
   const statics = [];
   scene.traverse((o) => { if (o.isInstancedMesh && !dynamic.has(o) && o.count > 8) { const n = o.count, m = new THREE.Matrix4(), c = new Float32Array(n * 2); for (let i = 0; i < n; i++) { o.getMatrixAt(i, m); c[i * 2] = m.elements[12]; c[i * 2 + 1] = m.elements[14]; } statics.push({ o, all: o.instanceMatrix.array.slice(), c, n }); } });
@@ -387,8 +389,8 @@ export async function start(o) {
     rig.car = vehicles.car;
     if (homeLife.active) { player.animate(dw); homeLife.pose(dt); }
     else if (interiors.watching) { interiors.watchStep(dt); player.animate(dw); interiors.poseWatcher(dt); }
-    else if (input.locked && !inCar && !down) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
-    else if (!inCar && !down) player.animate(dw);
+    else if (input.locked && !inCar && !down && !vehicles.busy) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
+    else if (!inCar && !down && !vehicles.busy) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);
     if (police && !indoors) police.update(dw);
     if (!input.locked || life.down || vehicles.driving) interiors.update(dt, { hit: () => false }, camera);

@@ -1,7 +1,7 @@
 /* Life at Hollis's place. Things to do at home, each a short cutscene played in the game itself:
 
    - brush her teeth at the bathroom basin (tap on, brush from the cup to her mouth, spit, rinse, back in the cup)
-   - get ready by the door (jacket off the coat stand and on, a look in the mirror, the keys out of the bowl)
+   - get ready by the door (jacket off the coat stand and on, a hand through her hair, the keys out of the bowl)
    - change clothes at the wardrobe (doors open, a hand through the hangers, a cut, the new outfit, doors shut)
    - and the TV on the sofa (interiors.js), which this only introduces
 
@@ -236,9 +236,9 @@ export class HomeLife {
     return S;
   }
 
-  /* getting ready to go out: the jacket, the mirror, the keys */
+  /* getting ready to go out: the jacket, the hair, the keys */
   sReady() {
-    const P = this.props, hook = this.W(8.9, 1.55, 0.48), bowl = this.W(7.55, 0.95, 0.25), mirror = this.W(8.0, 1.25, 0.2);
+    const P = this.props, hook = this.W(8.9, 1.55, 0.48), bowl = this.W(7.55, 0.95, 0.25);
     const S = { at: [8.15, 0.95, Math.PI], dur: 9.2 };
     S.shots = [
       { d: 3.0, p: this.W(5.6, 1.62, 2.9), at: this.W(8.3, 1.25, 0.45), pan: -0.08, tilt: 0.02, fov: 40 },
@@ -256,7 +256,7 @@ export class HomeLife {
         const k = seg(t, 1.5, 2.1) - seg(t, 3.0, 3.6), sh = this.head().add(V(0, -0.2, 0));
         this.reach("R", sh.clone().addScaledVector(r, 0.22).addScaledVector(f, -0.12), poleR, k); this.reach("L", sh.clone().addScaledVector(r, -0.22).addScaledVector(f, -0.12), poleL, k);
         this.turn("spine03", V(1, 0, 0), -0.08 * k);   // chest out, shoulders back into the sleeves
-      } else if (t < 5.6) {   // the mirror: a hand through her hair
+      } else if (t < 5.6) {   // a hand through her hair
         this.turn("head", V(0, 1, 0), 0.25 * (seg(t, 3.6, 4.0) - seg(t, 5.2, 5.6))); this.turn("head", V(0, 0, 1), 0.08 * Math.sin(t * 3) * (seg(t, 3.8, 4.2) - seg(t, 5, 5.4)));
         const hair = this.head().add(V(0, 0.0, 0)).addScaledVector(r, -0.12).addScaledVector(f, 0.03 * Math.sin(t * 5));
         this.reach("L", hair, V(0, 0.2, 0).addScaledVector(r, -1).addScaledVector(f, 0.2), seg(t, 3.7, 4.2) - seg(t, 5.0, 5.5));
@@ -358,7 +358,7 @@ export class HomeLife {
       { d: 4.0, p: this.W(6.9, 1.7, 4.4), at: this.W(2.4, 1.05, 8.8), pan: -0.12, tilt: 0.02, fov: 48, note: "The kitchen. Mostly Tide Cola, some of it food." },
       { d: 4.2, p: this.W(9.85, 1.8, 7.75), at: this.W(10.7, 1.2, d - 0.4), pan: 0.08, tilt: -0.04, fov: 44, note: "Brush your teeth at the bathroom sink." },
       { d: 4.2, p: this.W(11.55, 1.65, 4.75), at: this.W(8.5, 1.15, 7.4), pan: -0.1, tilt: 0.02, fov: 46, note: "Change clothes at the wardrobe." },
-      { d: 4.0, p: this.W(5.3, 1.62, 2.9), at: this.W(8.5, 1.25, 0.4), pan: 0.09, tilt: -0.02, fov: 44, note: "Get ready by the door: jacket, a look in the mirror, keys." },
+      { d: 4.0, p: this.W(5.3, 1.62, 2.9), at: this.W(8.5, 1.25, 0.4), pan: 0.09, tilt: -0.02, fov: 44, note: "Get ready by the door: jacket on, keys." },
       { d: 4.4, p: this.W(9.0, 1.72, 3.7), at: this.W(11.8, 1.45, 1.9), pan: -0.08, tilt: 0.05, fov: 44, note: "The Ottoline case, pinned up. Everything she's got on it." }
     ];
     S.dur = S.shots.reduce((a, s) => a + s.d, 0);

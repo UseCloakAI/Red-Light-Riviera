@@ -748,11 +748,9 @@ const FURNISH = {
     // -- entry
     rug(o, 5.35, 6.65, 0.12, 1.1, "#6a4a32");
     legs(7.2, 8.4, 0.06, 0.46, 0.8); B(7.18, 8.42, 0.8, 0.85, 0.04, 0.48, "#6a4a32", { tex: "wooddark" }); B(7.4, 7.7, 0.85, 0.92, 0.15, 0.35, "#b8643a", nb);   // console, the key bowl (the keys are homelife's)
-    B(7.72, 8.28, 0.85, 1.62, 0.12, 0.2, "#6a4a32", nb); B(7.77, 8.23, 0.9, 1.57, 0.212, 0.218, "#9fb8c8", { glow: true, solid: false });   // a standing mirror
     B(8.7, 9.1, 0, 0.04, 0.2, 0.6, "#2a2018", nb); B(8.88, 8.92, 0.04, 1.78, 0.38, 0.42, "#4a3424", nb); for (const [dx, dz] of [[0.12, 0], [-0.12, 0], [0, 0.12]]) B(8.9 + dx - 0.015, 8.9 + dx + 0.015, 1.62, 1.66, 0.4 + dz - 0.015, 0.4 + dz + 0.015, "#c9a14a", nb);   // the coat stand
     B(8.76, 9.04, 1.66, 1.82, 0.27, 0.53, "#c8b898", nb);   // her cap on top
     o.act("use", 8.15, 0.95, { y: 0.02, face: Math.PI, does: "ready", label: "Get ready" });
-    o.plaque("f", 7.8, 0.7, 0.9, 1.25, o.board([""], { bg: "#9fb4c4", border: "#c9a14a", w: 32, h: 40 }));   // a mirror
     // -- living room
     rug(o, 1.0, 4.4, 1.5, 5.1, "#7a4a3a"); o.quad([1.2, 0.017, 1.7], [4.2, 0.017, 1.7], [4.2, 0.017, 4.9], [1.2, 0.017, 4.9], o.C("#a8704a"));   // a rug on a rug, a hair above it
     B(0.06, 0.52, 0, 0.55, 2.2, 4.4, "#ffffff", { tex: "wooddark" }); B(0.08, 0.5, 0.12, 0.42, 2.4, 3.25, "#1a1410", nb); B(0.08, 0.5, 0.12, 0.42, 3.35, 4.2, "#1a1410", nb);   // the console, its shelves

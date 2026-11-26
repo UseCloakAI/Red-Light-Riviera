@@ -838,6 +838,12 @@
       if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 2600, 0.6), g = G(0); chain(n, bp, g, B.loop);
       return { set: function (s, d) { g.gain.setTargetAtTime(0.06 * s / (1 + d / 10), now(), 0.1); }, stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.3); n.stop(t2 + 1.5); } };
     },
+    // tyres letting go: a squeal (narrow noise, a little wobble), set by how much they're sliding
+    skid: function () {
+      if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 1300, 7), bp2 = F("bandpass", 1300, 3), g = G(0); chain(n, bp, bp2, g, B.loop);
+      return { set: function (s) { var t2 = now(); g.gain.setTargetAtTime(0.16 * s * s, t2, 0.06); bp.frequency.setTargetAtTime(1150 + 500 * s + Math.sin(t2 * 23) * 40, t2, 0.08); },
+        stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.08); n.stop(t2 + 0.6); } };
+    },
     // a car door: the latch and the thud
     door: function () {
       if (!ctx) return; var t = now();

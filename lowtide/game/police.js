@@ -171,7 +171,7 @@ export class Police {
       pd.arm = this.level >= 3 && (k === 0 || this.level >= 4) ? "shotgun" : "pistol";
     });
     // the car stays where it stopped, solid
-    c.ai = false; c.pursue = false; c.speed = 0; c.obb = this.world.grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);
+    c.ai = false; c.pursue = false; c.speed = 0; c.occ = null; c.obb = this.world.grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);
     if (this.say && u.cops[0]) this.line(this.armed() ? pick(SAY.armed) : this.level <= 1 ? pick(SAY.stop) : pick(SAY.chase), u.cops[0]);
   }
   armed() { const w = this.arsenal && this.arsenal.weapon; return !!(w && !w.melee); }
@@ -311,7 +311,7 @@ export class Police {
         goal = { x: c.x, z: c.z }; speed = pd.speed;
         if (Math.hypot(c.x - g.position.x, c.z - g.position.z) < 2.2) {
           pd.active = "car"; g.visible = false; pd.gun.visible = false;
-          if (pd.unit.cops.every((q) => q.active !== "foot")) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.siren = false; c.pursue = false; c.taken = false; this.snapToLane(c); for (const q of pd.unit.cops) q.active = false; }
+          if (pd.unit.cops.every((q) => q.active !== "foot")) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.siren = false; c.pursue = false; c.taken = false; c.occ = { shirt: 0x1d2a4a, own: true }; this.snapToLane(c); for (const q of pd.unit.cops) q.active = false; }
           continue;
         }
         face = Math.atan2(goal.x - g.position.x, goal.z - g.position.z);
@@ -321,7 +321,7 @@ export class Police {
         goal = { x: c.x, z: c.z }; speed = pd.run; face = Math.atan2(c.x - g.position.x, c.z - g.position.z);
         if (Math.hypot(c.x - g.position.x, c.z - g.position.z) < 2.4) {
           pd.active = "car"; g.visible = false; pd.gun.visible = false; if (pd.shotgun) pd.shotgun.visible = false;
-          if (pd.unit.cops.every((q) => q.active !== "foot" || q.dead)) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.pursue = true; c.siren = true; c.deployed = false; c.mode = "direct"; c.taken = false; c.speed = 0; c.stopT = 0; this.snapToLane(c); }
+          if (pd.unit.cops.every((q) => q.active !== "foot" || q.dead)) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.pursue = true; c.siren = true; c.deployed = false; c.mode = "direct"; c.taken = false; c.speed = 0; c.stopT = 0; c.occ = { shirt: 0x1d2a4a, own: true }; this.snapToLane(c); }
           continue;
         }
       } else {

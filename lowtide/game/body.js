@@ -81,6 +81,44 @@ export class Body {
     this.turn("neck01", X, -ang * keepHead * 0.55); this.turn("head", X, -ang * keepHead * 0.45);
   }
 
+  /* a person put where they need to be, piece by piece (getting into a car, driving, being dragged out of one).
+     o: { hip (world, where the pelvis goes), lean (rad forward, - back), twist (rad, the chest turned left +),
+          feet: { L, R } world targets (planted; either may be null to leave the clip's leg), legW,
+          knee: world pole for the knees (default forward and up),
+          hands: { L, R } world targets, handW: { L, R } 0..1, poles: { L, R }, grip: 0..1 (or { L, R }),
+          look: world point for the head (eased by lookW), tilt: head roll } */
+  place(o) {
+    if (!this.ok) return;
+    const B = this.B, root = B.root, { f, r } = this.dirs();
+    if (o.hip) {
+      if (o.hipW === undefined || o.hipW >= 1) { root.parent.updateWorldMatrix(true, false); root.position.copy(root.parent.worldToLocal(_c.copy(o.hip))); }
+      else { root.updateWorldMatrix(true, false); const cur = root.getWorldPosition(_b); cur.lerp(o.hip, o.hipW); root.position.copy(root.parent.worldToLocal(_c.copy(cur))); }
+      this.g.updateMatrixWorld(true);
+    }
+    if (o.pelvis) this.turn("root", X, o.pelvis);
+    if (o.twist) { this.turn("spine04", Y, o.twist * 0.3); this.turn("spine03", Y, o.twist * 0.35); this.turn("spine02", Y, o.twist * 0.35); }
+    if (o.side) { this.turn("spine04", Z, o.side * 0.4); this.turn("spine02", Z, o.side * 0.6); }
+    if (o.lean) this.lean(o.lean, o.keepHead ?? 0.7);
+    if (o.feet) for (const s of ["L", "R"]) {
+      const t = o.feet[s]; if (!t) continue;
+      const pole = o.knee ? o.knee.clone() : f.clone().add(new THREE.Vector3(0, 0.35, 0)).addScaledVector(r, (s === "R" ? 1 : -1) * 0.18);
+      this.solve("upperleg01_" + s, "lowerleg01_" + s, "foot_" + s, t, pole, o.legW ?? 1);
+    }
+    if (o.hands) for (const s of ["L", "R"]) {
+      const t = o.hands[s], w = o.handW ? (o.handW[s] ?? 1) : 1; if (!t || w <= 0.001) continue;
+      this.arm(s, t, o.poles && o.poles[s] ? o.poles[s] : this.armPole(s, 0.7), w);
+      const gk = typeof o.grip === "number" ? o.grip : o.grip ? o.grip[s] || 0 : 0; if (gk) this.grip(s, gk * w);
+    }
+    if (o.look) {
+      const h = this.pos("head"), d = _a.copy(o.look).sub(h); d.y = 0;
+      const want = Math.atan2(d.x * f.z - d.z * f.x, d.x * f.x + d.z * f.z), k = Math.max(-1.25, Math.min(1.25, want)) * (o.lookW ?? 1);
+      this.turn("neck01", Y, k * 0.45); this.turn("head", Y, k * 0.55);
+    }
+    if (o.tilt) this.turn("head", Z, o.tilt);
+  }
+  // how high the hips are standing (for paths that start or end on your feet)
+  standHip() { this.g.updateMatrixWorld(true); return this.pos("root").y - this.g.position.y; }
+
   /* sitting. s: { phase: "down" | "seated" | "up", t (seconds into the phase), seat (seat top height, m),
      back (how far behind the feet the hips land, m), hands (0..1 on the thighs), tSeated (for the breathing),
      recline (lean back once seated, rad) }. The person's group stands where the feet are, facing out. */

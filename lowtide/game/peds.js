@@ -168,6 +168,34 @@ export async function spawnPeds(scene, world, o = {}) {
     h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
   }
   // someone behind a counter: an ordinary person, kept off the street (interiors.js places them)
+  // someone to drive the cars near the player (vehicles.js seats them), kept off the street until then
+  async function makeDriver() {
+    const p = randomPerson(R), h = new Human(D, p, { lod: p.sex < 0.5 ? "female1605" : "male1591" });
+    h.group.traverse((m) => { if (m.isMesh) m.receiveShadow = false; });
+    const mixer = new THREE.AnimationMixer(h.group), act = {};
+    for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
+    act.idle.setEffectiveWeight(1);
+    const pd = { driver: true, out: false, inCar: null, voice: { female: p.sex < 0.5, pitch: 0.92 + R() * 0.16, age: p.age }, h, mixer, act, head: h.bones.find((b) => b.name === "head"), neck: h.bones.find((b) => b.name === "neck01"),
+      speed: 1.2 + R() * 0.4, run: 4.3 + R() * 1.4, wW: 0, rW: 0, cW: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0, side: 0, stagger: 0, down: 0, free: null, anger: 0, bumpT: -9, brave: R(), fear: null, cower: 0, pause: 0, w: null, s: 0, gW: 0, gT: 0, gest: null, look: 0, st: null };
+    h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
+  }
+  // a driver back in the pool (out of sight, ready for the next car)
+  function toPool(pd) {
+    Object.assign(pd, { out: false, inCar: null, dead: false, rag: null, hp: 100, fear: null, cower: 0, stagger: 0, pause: 0, down: 0, free: null, anger: 0 });
+    pd.h.group.visible = false;
+  }
+  // onto the street at (x, z): back to the nearest pavement and on with their day (running if scared)
+  function toStreet(pd, x, z, opt = {}) {
+    let best = null, bd = Infinity;
+    for (const l of lanes) { if (Math.abs(l.pts[0].x - x) > 160 || Math.abs(l.pts[0].z - z) > 160) continue; for (let i = 0; i < l.pts.length; i++) { const q = l.pts[i], d = (q.x - x) ** 2 + (q.z - z) ** 2; if (d < bd) { bd = d; best = { l, s: l.cum[i] }; } } }
+    if (!best) { const sp = spot(pd, { x, z }); best = { l: sp.l, s: sp.s }; }
+    pd.w = laneWalk(best.l.ends[R() < 0.5 ? 0 : 1], best.s); pd.s = 0; pd.side = 0;
+    pd.inCar = null; if (pd.driver) pd.out = true;
+    const g = pd.h.group; g.position.set(x, world.heightAt(x, z), z); g.rotation.set(0, g.rotation.y, 0); g.visible = true;
+    pd.free = { mode: "back", cd: 0, punch: 0, t: 0 };
+    if (opt.scared) { pd.fear = { x: ear.x, z: ear.z, t: 12 + R() * 6 }; }
+    pd.wW = 0; pd.rW = 0;
+  }
   async function makeNpc() {
     const p = randomPerson(R), h = new Human(D, p, { lod: p.sex < 0.5 ? "female1605" : "male1591" });
     h.group.traverse((m) => { if (m.isMesh) m.receiveShadow = false; });
@@ -274,6 +302,11 @@ export async function spawnPeds(scene, world, o = {}) {
         if (dp < 1.35 && f.cd <= 0 && !f.punch) { f.punch = 0.0001; f.hit = false; f.hand = R() < 0.6 ? "R" : "L"; f.cd = 0.85 + R() * 0.8; if (sfx.swing) sfx.swing("fist", distTo(pd)); }
       }
     }
+    if (f.mode === "goto") {   // somewhere in particular (a car door): walk there, then whatever's next
+      tx = f.x; tz = f.z; speed = pd.speed; face = Math.atan2(tx - g.position.x, tz - g.position.z);
+      if (Math.hypot(tx - g.position.x, tz - g.position.z) < 0.3) { pd.free = null; pd.side = 0; pd.vx = pd.vz = 0; if (f.done) f.done(pd); return; }
+      if (f.t > 30 || pd.fear) { f.mode = "back"; }
+    }
     if (f.mode === "back") {   // walk (or run, if scared) back onto the pavement where we left it
       pointOn(pd.w, pd.s, tmp); tx = tmp.x; tz = tmp.z; speed = pd.fear ? pd.run : pd.speed;
       face = Math.atan2(tx - g.position.x, tz - g.position.z);
@@ -340,17 +373,19 @@ export async function spawnPeds(scene, world, o = {}) {
       quiet -= dt; clock += dt; frameN++;
       peds.forEach((pd, idx) => {
         const g = pd.h.group;
+        if (pd.inCar) return;   // at the wheel (or getting in or out): vehicles.js has them
         if (pd.cop || pd.npc) { if (pd.dead && pd.rag && g.visible && pd.rag.step(dt)) pd.rag.pose(); return; }
-        if (idx >= limit) { g.visible = false; return; }
+        if (pd.driver && !pd.out) { g.visible = false; return; }
+        if (idx >= limit && !pd.driver) { g.visible = false; return; }
         if (pd.dead) {   // a body: let it fall and settle; clear it away once nobody can see
           const dd = Math.hypot(g.position.x - px, g.position.z - pz);
-          if (dd > FAR * 0.6) { revive(pd, player.pos); return; }
-          if (dd < NEAR && pd.rag.step(dt)) pd.rag.pose();
+          if (dd > FAR * 0.6) { if (pd.driver) toPool(pd); else revive(pd, player.pos); return; }
+          if (dd < NEAR && pd.rag && pd.rag.step(dt)) pd.rag.pose();
           return;
         }
         pd.anger = Math.max(0, pd.anger - dt * 0.08);
         if (pd.down > 0) {   // on the floor; then up again
-          pd.down -= dt; if (pd.rag.step(dt)) pd.rag.pose();
+          pd.down -= dt; if (!pd.rag) { pd.down = 0; return; } if (pd.rag.step(dt)) pd.rag.pose();
           if (pd.down <= 0) getUp(pd);
           return;
         }
@@ -373,7 +408,7 @@ export async function spawnPeds(scene, world, o = {}) {
           if (!pd.st) return;                                        // the lead just walked off with us
           return standing(pd, g, x, z, d, px, pz, dt);
         }
-        if (d > FAR) { place(pd, player.pos); pointOn(pd.w, 0, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx; hz = tmp.dz; d = Math.hypot(x - px, z - pz); }
+        if (d > FAR) { if (pd.driver) { toPool(pd); return; } place(pd, player.pos); pointOn(pd.w, 0, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx; hz = tmp.dz; d = Math.hypot(x - px, z - pz); }
 
         // the player a step ahead: wait; the player running at us: sidestep instead
         const rx = -hz, rz = hx;                                       // our right-hand side
@@ -422,6 +457,12 @@ export async function spawnPeds(scene, world, o = {}) {
     },
     // a round hit someone. hit: { point, dir, damage, head, from }. Returns "dead", "hurt" or "body"
     damage(pd, hit) {
+      // at the wheel: they die where they sit (slumped over it); vehicles.js lets the car roll on
+      if (pd.inCar) {
+        if (gore && hit.point) gore.hit(hit.point, hit.dir || new THREE.Vector3(0, 0, 1), 1.4, this.fx);
+        pd.hp -= hit.head ? 1000 : hit.damage; if (pd.hp > 0) return "hurt";
+        pd.dead = true; const c = pd.inCar; if (c.occ) c.occ.dead = true; if (sfx.rattle) setTimeout(() => sfx.rattle(pd.voice, distTo(pd)), 400); return "dead";
+      }
       if (gore && hit.point) gore.hit(hit.point, hit.dir || new THREE.Vector3(0, 0, 1), hit.blunt ? hit.blunt : hit.head ? 2.8 : (hit.force || 0) > 6 ? 1.9 : 1.1, this.fx);
       if (pd.dead) { if (pd.rag) { pd.rag.impulse(hit.point, hit.dir, 2.5); pd.rag.sleep = 0; } return "body"; }
       pd.hp -= hit.head ? 1000 : hit.damage;
@@ -455,7 +496,19 @@ export async function spawnPeds(scene, world, o = {}) {
       if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
-    knock, bumped, squareUp, makeCop, makeNpc,
+    knock, bumped, squareUp, makeCop, makeNpc, makeDriver, toStreet,
+    get drivers() { return peds.filter((pd) => pd.driver); },
+    // someone from the crowd walking near (x, z) (not busy, not frightened, not standing about)
+    nearest(x, z, r) {
+      let best = null, bd = r;
+      for (let i = 0; i < Math.min(limit, peds.length); i++) { const pd = peds[i]; if (pd.dead || pd.down > 0 || pd.free || pd.fear || pd.st || pd.inCar || pd.cop || pd.npc || pd.driver || !pd.h.group.visible) continue; const g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z); if (d < bd) { bd = d; best = pd; } }
+      return best;
+    },
+    goTo(pd, x, z, done) { pd.free = { mode: "goto", x, z, done, t: 0, cd: 0, punch: 0 }; },
+    walkBack(pd) { pd.inCar = null; pd.free = { mode: "back", cd: 0, punch: 0, t: 0 }; },
+    // off the street for now (someone from the crowd who drove away): back out of sight, a new face later
+    hide(pd) { pd.inCar = null; if (pd.driver) toPool(pd); else revive(pd, ear); },
+    say(pd, kind) { if (kind === "jacked") say(pick(pd.brave > 0.55 ? FIGHT : PANIC), pd, pd.brave > 0.55 ? "angry" : "scared"); },
     set lod(v) {   // low quality: no eyes, brows or lashes (tiny, but whole meshes each), and nobody drawn past 60 m
       lod = !!v; for (const pd of peds) pd.h.group.traverse((m) => { if (m.isMesh && /eye|brow|lash/i.test(m.name)) m.visible = !lod; });
     },
@@ -465,7 +518,7 @@ export async function spawnPeds(scene, world, o = {}) {
       let nearest = null, nd = Infinity;
       for (let i = 0; i < Math.min(limit, peds.length); i++) {
         const pd = peds[i], g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z);
-        if (d > r || pd.dead || pd.down > 0) continue;
+        if (d > r || pd.dead || pd.down > 0 || pd.inCar) continue;
         if (pd.free && pd.free.mode === "fight") { if (kind === "fight") continue; pd.free.mode = "back"; }
         if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
         const fresh = !pd.fear;
@@ -483,7 +536,7 @@ export async function spawnPeds(scene, world, o = {}) {
     // keep the player from walking through people; a sprinting player knocks them off their stride
     push(p, r, speed) {
       for (let i = 0; i < Math.min(limit, peds.length); i++) {
-        const pd = peds[i]; if (pd.dead || pd.down > 0) continue;
+        const pd = peds[i]; if (pd.dead || pd.down > 0 || pd.inCar) continue;
         const g = pd.h.group.position, dx = p.x - g.x, dz = p.z - g.z, dd = Math.hypot(dx, dz), m = r + 0.3;
         if (dd < m && dd > 1e-4) {
           p.x = g.x + dx / dd * m; p.z = g.z + dz / dd * m;

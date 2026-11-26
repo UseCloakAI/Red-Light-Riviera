@@ -182,7 +182,9 @@ export class CamRig {
     this.idle = dx || dy ? 0 : this.idle + dt;
     if (this.car) {
       const c = this.car;
-      if (this.idle > 0.8 && Math.abs(c.speed) > 2) { const want = c.a + (c.speed < 0 ? 0 : Math.PI); let d = want - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * Math.min(1, dt * 2.5); this.pitch += (0.22 - this.pitch) * Math.min(1, dt * 2); }
+      // behind the way it's actually going: a sliding car's camera swings toward its line, not its nose
+      const sp = Math.hypot(c.vx || 0, c.vz || 0), vh = sp > 4 && c.speed > 0 ? Math.atan2(c.vx, c.vz) : c.a, head = c.a + Math.atan2(Math.sin(vh - c.a), Math.cos(vh - c.a)) * 0.6;
+      if (this.idle > 0.8 && Math.abs(c.speed) > 2) { const want = head + (c.speed < 0 ? 0 : Math.PI); let d = want - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * Math.min(1, dt * 2.5); this.pitch += (0.22 - this.pitch) * Math.min(1, dt * 2); }
     }
     this.shake = Math.max(0, this.shake - dt * 3);
     const target = new THREE.Vector3(player.pos.x, player.pos.y + (this.car ? 1.9 : 1.55 - this.aim * 0.05), player.pos.z);

@@ -79,7 +79,10 @@ class Grid {
   }
   remove(o) {
     const i = this.all.indexOf(o); if (i < 0) return; this.all.splice(i, 1);
-    for (const a of this.m.values()) { const k = a.indexOf(o); if (k >= 0) a.splice(k, 1); }
+    // only the cells it was put in
+    const e = o.ob ? Math.abs(o.hx * o.cs) + Math.abs(o.hz * o.sn) : 0, f = o.ob ? Math.abs(o.hx * o.sn) + Math.abs(o.hz * o.cs) : 0;
+    const [x0, z0, x1, z1] = o.r ? [o.x - o.r, o.z - o.r, o.x + o.r, o.z + o.r] : o.ob ? [o.cx - e, o.cz - f, o.cx + e, o.cz + f] : [o.x0, o.z0, o.x1, o.z1];
+    this._cells(x0, z0, x1, z1, (key) => { const a = this.m.get(key); if (!a) return; const k = a.indexOf(o); if (k >= 0) a.splice(k, 1); });
   }
   box(x0, z0, x1, z1, h) { const o = { x0, z0, x1, z1, h: h === undefined ? 50 : h }; this.add(o); return o; }
   // a turned box: centre, half sizes along its own axes, angle (radians, x toward z)
@@ -91,9 +94,9 @@ class Grid {
     return out;
   }
   // push a circle at (p.x, p.z) out of everything it overlaps, below height y + tall
-  resolve(p, r, y, tall) {
+  resolve(p, r, y, tall, skip) {
     for (const o of this.near(p.x - r, p.z - r, p.x + r, p.z + r)) {
-      if (y > o.h || y + tall < (o.y0 || -10)) continue;
+      if (y > o.h || y + tall < (o.y0 || -10) || (skip && skip(o))) continue;
       if (o.r) {
         const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz), m = r + o.r;
         if (d < m && d > 1e-6) { p.x += dx / d * (m - d); p.z += dz / d * (m - d); }
@@ -457,6 +460,7 @@ export async function buildWorld(scene, opts = {}) {
   }
   instanced(scene, new THREE.BoxGeometry(12.2, 2.59, 2.44), L({ color: 0xffffff }), containers);
   // parked cars in the car parks
+  const parking = [];   // every kerbside space (taken or not): traffic pulls into the free ones
   for (const l of lotsToPaint) if (l.cars) for (let u = l.u0 + 1.5; u < l.u1 - 2; u += 2.8) if (R() < 0.6) { const p = l.F.p(u + 1.2, l.v0 + 3.2, 0); cars.push({ x: p[0], z: p[2], a: Math.atan2(l.F.n[0], l.F.n[2]) }); }
 
   /* ---- the street: lamps, palms, trees, signals, benches, bins, hydrants, bus stops, power lines, parked cars ---- */
@@ -487,9 +491,10 @@ export async function buildWorld(scene, opts = {}) {
         for (let t = e.s0 + 5; t < e.s1 - 3; t += 32) { const p = at(e.pl, t), o = e.w / 2 + SIDEWALK - 0.3, q = [p.x + p.nx * o, p.z + p.nz * o, Math.atan2(p.tx, p.tz)]; if (last) for (const dy of [9.2, 8.6]) wires.push([last, q, dy]); poles.push({ x: q[0], z: q[1], a: q[2] }); grid.circle(q[0], q[1], 0.18, 10); last = q; }
       }
       // parked cars along the kerb of ordinary streets
-      if (e.kind === "street" && e.w >= 11) for (let t = e.s0 + 6; t < e.s1 - 6; t += 6.5 + R() * 6) if (R() < 0.42) {
+      if (e.kind === "street" && e.w >= 11) for (let t = e.s0 + 6; t < e.s1 - 6; t += 6.5 + R() * 6) {
         const p = at(e.pl, t), o = e.w / 2 - 1.02, x = p.x + p.nx * s * o, z = p.z + p.nz * s * o, a = Math.atan2(p.tx * s, p.tz * s);
-        cars.push({ x, z, a });
+        const slot = { x, z, a, e, side: s, t, car: null }; parking.push(slot);
+        if (R() < 0.42) { const c = { x, z, a, slot }; slot.car = c; cars.push(c); }
       }
     }
   }
@@ -497,7 +502,7 @@ export async function buildWorld(scene, opts = {}) {
   for (const n of roads.nodes) if (n.deg >= 3 && n.ends.some((d) => d.e.kind === "avenue")) for (const d of n.ends) {
     const o = d.e.w / 2 + 0.7, x = d.p.x + d.n.x * o, z = d.p.z + d.n.z * o; signals.push({ x, z, a: Math.atan2(-d.n.x, -d.n.z), go: (n.ends.indexOf(d) % 2) === 0, node: n, end: n.ends.indexOf(d) }); grid.circle(x, z, 0.15, 6);
   }
-  for (const c of cars) c.obb = grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);   // a turn of a about y puts local x on angle -a
+  for (const c of cars) c.obb = grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);   // a turn of a about y puts local x on angle -a (vehicles.js resizes it to the model)
   for (const t of trees) grid.circle(t.x, t.z, 0.35, 8);
   for (const [x, z] of palms) grid.circle(x, z, 0.3, 9);
 
@@ -542,13 +547,9 @@ export async function buildWorld(scene, opts = {}) {
   const treeTrunk = new THREE.CylinderGeometry(0.15, 0.22, 3, 6).translate(0, 1.5, 0), canopy = new THREE.IcosahedronGeometry(2.4, 0).scale(1, 0.85, 1).translate(0, 4.4, 0);
   instanced(scene, treeTrunk, L({ color: 0x6a5240 }), trees);
   instanced(scene, canopy, L({ color: 0xffffff, flatShading: true }), trees.map((t, i) => ({ ...t, c: i % 3 ? 0x4a7a3a : 0x5e8a3e })));
-  // cars: a low-poly body in one of a dozen paints, a glasshouse, four wheels
-  const paints = [0xC23B2A, 0x2F5D8C, 0xE8E2D6, 0x2a2a2e, 0x8a8d92, 0x3F7A4A, 0xD9A441, 0x6a2a4a, 0x7a9ab8, 0xa8a08a, 0x5a3a2a, 0xf0f0f0];
-  const carList = cars.map((c) => ({ x: c.x, z: c.z, a: c.a, c: paints[(R() * paints.length) | 0], obb: c.obb }));
+  // the parked cars (vehicles.js gives each its model, paint and physics; carrender.js draws them)
+  const carList = cars.map((c) => { R(); const k = { x: c.x, z: c.z, a: c.a, obb: c.obb, slot: c.slot || null }; if (c.slot) c.slot.car = k; return k; });
   const carMeshes = [];
-  carMeshes.push(instanced(scene, mergeGeometries([new THREE.BoxGeometry(1.8, 0.62, 4.3).translate(0, 0.58, 0), new THREE.BoxGeometry(1.75, 0.2, 1.0).translate(0, 0.95, 1.55)]), L({ color: 0xffffff }), carList));
-  carMeshes.push(instanced(scene, new THREE.BoxGeometry(1.55, 0.55, 2.1).translate(0, 1.16, -0.25), L({ color: 0x2a3644, emissive: 0x0c1218 }), carList));
-  carMeshes.push(instanced(scene, mergeGeometries([[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]].map(([x, z]) => new THREE.CylinderGeometry(0.33, 0.33, 0.22, 8).rotateZ(Math.PI / 2).translate(x, 0.33, z))), L({ color: 0x18181a }), carList));
   buildPalms(scene, palms, R, add);
   const lampMeshes = buildLamps(scene, lamps, add, "high");
   const lampList = lamps.map(([x, z, dx, dz], i) => ({ x, z, dx, dz, i, obj: grid.circle(x, z, 0.15, 7) }));
@@ -658,7 +659,7 @@ export async function buildWorld(scene, opts = {}) {
   const sx = PIER.x0 - 14, spawn = { x: sx, z: promenade(sx) + 3, yaw: -0.25 };
   // Hollis's place: the nearest apartment, dressed so you can tell from the street (home.js)
   const homeE = pickHome(entrances, spawn); if (homeE) homeFront(scene, grid, homeE);
-  return { chunks, entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes },
+  return { chunks, entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes }, parking,
     props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh } };
 }
 function buildPalms(scene, palms, R, add) {
