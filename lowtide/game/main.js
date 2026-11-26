@@ -23,6 +23,7 @@ import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman } from "./human.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
+import { ROOMS_ON } from "./city/build.js?v=dev";
 
 // the player: the character from the creator (MakeHuman, game/human.js); the Mixamo model is the fallback
 async function loadCharacter(params) {
@@ -48,8 +49,14 @@ export async function start(o) {
   const SET = window.LT_SET || { get: () => undefined, on: () => {} };
   if ([200, 270, 360, 480].includes(SET.get("pixels"))) PS1.h = SET.get("pixels");   // the picture's line count (settings; read once)
   const ps1Load = SET.get("ps1") !== false;
+  /* an old or integrated GPU (an older iMac, say): on Auto, start low. And when the game starts low, the
+     things that can only be chosen at load go light too: no logarithmic depth (it writes depth per pixel,
+     which turns off the GPU's early depth test), a shorter view, a smaller pool of people */
+  const weakGPU = (() => { try { const c = document.createElement("canvas"), gl = c.getContext("webgl2") || c.getContext("webgl"); const ext = gl && gl.getExtension("WEBGL_debug_renderer_info"); const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : ""; gl && gl.getExtension("WEBGL_lose_context") && gl.getExtension("WEBGL_lose_context").loseContext();
+    return /Intel|Iris|HD Graphics|Radeon (HD|R[579] M|Pro [45]\d\d)|GeForce (GT|9\d\d|[3-7]\d\dM)|Mali|Adreno|PowerVR|SwiftShader|llvmpipe/i.test(name) && !/Apple M|Radeon Pro [5-9]\d{3}/i.test(name) || (navigator.hardwareConcurrency || 8) <= 2; } catch (e) { return false; } })();
+  const lowLoad = SET.get("quality") === "low" || (SET.get("quality") !== "high" && weakGPU);
   configure(innerWidth / innerHeight, ps1Load);   // before any material exists: the vertex snap goes into every shader
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", logarithmicDepthBuffer: true })   // log depth: the flat layers a few cm apart never fight, near or far;
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", logarithmicDepthBuffer: !lowLoad, stencil: false })   // log depth: the flat layers a few cm apart never fight, near or far;
   const ratio = 1;
   renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = false;
@@ -58,7 +65,7 @@ export async function start(o) {
   const rt = new THREE.WebGLRenderTarget(PS1.w, PS1.h, { type: THREE.HalfFloatType, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, depthBuffer: true });   // the PS1 blit samples texel centres, so linear is exact there
   const blit = makeBlit(); blit.mat.uniforms.tSrc.value = rt.texture;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.3, 2600);
+  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, lowLoad ? 0.5 : 0.3, 2600);
   await step(0.12);
 
   const charP = loadCharacter(o.character);   // download while the city builds
@@ -79,19 +86,19 @@ export async function start(o) {
   const voice = makeVoice(o.sfx);   // eSpeak reads the lines (and does the screaming)
   if (o.sfx) o.sfx.scream = (who, dist) => voice.scream(who, dist);
   const heard = (pd) => (pd ? Math.hypot(pd.h.group.position.x - player.pos.x, pd.h.group.position.z - player.pos.z) : 0);
-  const pedHooks = { gore, sfx: o.sfx, count: o.peds || 18, near: player.pos };   // the fight callbacks get filled in once there's a player to hit
+  const pedHooks = { gore, sfx: o.sfx, count: o.peds || (lowLoad ? 10 : 18), near: player.pos };   // the fight callbacks get filled in once there's a player to hit
   try { peds = await spawnPeds(scene, world, Object.assign(pedHooks, { onSpeak: (t, pd, mood) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), mood); }, progress: (k) => o.progress && o.progress(0.82 + k * 0.14) })); }
   catch (e) { console.warn("Lowtide: pedestrians failed to load", e); }
   const cops = [];   // the Marlowe Keys PD: eight officers, kept out of sight until they're needed
-  if (peds) try { for (let i = 0; i < 12; i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
+  if (peds) try { for (let i = 0; i < (lowLoad ? 6 : 12); i++) { cops.push(await peds.makeCop()); await frame(); } } catch (e) { console.warn("Lowtide: police failed to load", e); }
   const npcs = [];   // the people behind counters, three of them, reused room to room
-  if (peds) try { for (let i = 0; i < 6; i++) { npcs.push(await peds.makeNpc()); await frame(); } } catch (e) { console.warn("Lowtide: interior people failed to load", e); }
+  if (peds) try { for (let i = 0; i < (lowLoad ? 3 : 6); i++) { npcs.push(await peds.makeNpc()); await frame(); } } catch (e) { console.warn("Lowtide: interior people failed to load", e); }
   let police = null;
 
   // Stage 3: weapons
   const arsenal = new Arsenal({ scene, camera, world, player, rig, hud, peds, sfx: o.sfx });
   // Stage 5, early: the parked cars drive
-  const traffic = new Traffic(scene, world, { count: 16, sfx: o.sfx });
+  const traffic = new Traffic(scene, world, { count: lowLoad ? 10 : 16, sfx: o.sfx });
   const vehicles = new Vehicles({ world, player, rig, camera, hud, peds, sfx: o.sfx, prompt: o.hud.querySelector(".prompt"), scene, fx: arsenal.fx, traffic });
   // your health; cars and blasts take it
   const life = new Life({ player, world, rig, hud, root: o.hud, blit, sfx: o.sfx, vehicles });
@@ -154,7 +161,7 @@ export async function start(o) {
   });
   // fast travel: haze thins with altitude so the island reads from the sky
   const fogMats = []; scene.traverse((m) => { if (m.material && m.material.uniforms && m.material.uniforms.uFogD) fogMats.push(m.material.uniforms.uFogD); });
-  const FOG0 = scene.fog.density;
+  let FOG0 = scene.fog.density; const FOG_HI = FOG0;
   const setFog = (k) => { const d = FOG0 * (1 - 0.72 * k); scene.fog.density = d; for (const u of fogMats) u.value = d; };
   const travel = new Travel({ world, player, rig, camera, blit, sfx: o.sfx || {}, hud, vehicles, life, setFog, onArrive: (sp) => { stats.trips++; hud.area = null; } });
   /* headshots: every one counts; the first, and every few after, rides the bullet cam */
@@ -217,7 +224,8 @@ export async function start(o) {
 
   // warm up: compile every shader before the first real frame
   rig.update(0, input, player); sky.update(0, player.pos, camera.position);
-  const draw = () => { renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); };
+  const seen = { calls: 0, tris: 0 };
+  const draw = () => { renderer.setRenderTarget(rt); renderer.render(scene, camera); seen.calls = renderer.info.render.calls; seen.tris = renderer.info.render.triangles; renderer.setRenderTarget(null); renderer.render(blit.scene, blit.cam); };
   await step(0.96, "people");
   // compile for where we actually draw (the low-res target, no tone mapping), in parallel where the browser can
   renderer.setRenderTarget(rt);
@@ -234,18 +242,50 @@ export async function start(o) {
   await step(1);
 
   let running = false, last = 0, t = 0, raf = 0;
-  const perf = { n: 0, sum: 0, stage: 0 };
+  const perf = { n: 0, sum: 0, stage: 0 }, work = { ms: 0, n: 0 };   // work: time spent per frame (for testing)
   /* quality. High: everything. Low: the picture drawn smaller and fewer people and cars about.
      Auto (the default): starts high and, if frames run slow after the warm-up, steps down (a smaller
      crowd, then low, then smaller still) and says so. The PS1 look off: the picture at the screen's own
      resolution, smooth textures, no colour cut (the vertex wobble goes on the next load). */
   const PEDS0 = peds ? peds.limit : 0, CARS0 = traffic.limit;
   let low = false, ps1 = SET.get("ps1") !== false;
+  if (lowLoad && SET.get("quality") !== "low") perf.stage = 2;   // Auto on a weak GPU: start low
   const applyRes = () => {
     let w, h;
-    if (ps1) { h = Math.round(PS1.h * (low ? 0.74 : 1)); w = Math.round(h * innerWidth / innerHeight / 2) * 2; }
-    else { const k = low ? 0.55 : Math.min(1.5, devicePixelRatio || 1); w = Math.round(innerWidth * k); h = Math.round(innerHeight * k); }
+    if (ps1) { h = Math.round(PS1.h * (low ? 0.62 : 1)); w = Math.round(h * innerWidth / innerHeight / 2) * 2; }
+    else { const k = low ? 0.45 : Math.min(1.5, devicePixelRatio || 1); w = Math.round(innerWidth * k); h = Math.round(innerHeight * k); }
     rt.setSize(w, h); blit.mat.uniforms.res.value.set(w, h); blit.mat.uniforms.uRetro.value = ps1 ? 1 : 0;
+  };
+  /* low quality, everything that can change live: 30 frames a second steady (not 60 dropping to 20), a thicker
+     haze and a shorter view (the far chunks of the city simply aren't drawn, and the sky dome comes in to fit),
+     the plain windows, a coarse sea, far people animated every other frame, short reverbs */
+  let fpsCap = 0, viewR = Infinity, cullT = 0;
+  const lowKit = (on) => {
+    fpsCap = on ? 30 : 0; viewR = on ? 300 : Infinity;
+    FOG0 = on ? FOG_HI * 1.9 : FOG_HI; setFog(0);
+    camera.far = on ? 800 : 2600; camera.updateProjectionMatrix(); if (sky.sky) sky.sky.scale.setScalar(on ? 0.42 : 1);
+    ROOMS_ON.value = on ? 0 : 1; if (sky.seaDetail) sky.seaDetail(on);
+    if (peds) peds.lod = on; if (window.LT && LT.lowAudio) LT.lowAudio(on);
+    if (!on) for (const m of world.chunks) m.visible = true;
+  };
+  /* static scenery drawn as instances (palms, trees, benches, bins, containers, poles): one batch each, so
+     no culling; on low, each batch is compacted to the instances within the view, a few times a second */
+  const dynamic = new Set([world.props.hydrantMesh, world.props.redMesh, world.props.greenMesh, ...(world.cars.meshes || []), ...traffic.meshes, ...(traffic.lampMeshes || []), gore.splats, arsenal.fx.holes, arsenal.fx.brass, arsenal.fx.hulls]);
+  if (world.props.lampMeshes) for (const k of ["pI", "hI", "lI"]) dynamic.add(world.props.lampMeshes[k]);
+  const statics = [];
+  scene.traverse((o) => { if (o.isInstancedMesh && !dynamic.has(o) && o.count > 8) { const n = o.count, m = new THREE.Matrix4(), c = new Float32Array(n * 2); for (let i = 0; i < n; i++) { o.getMatrixAt(i, m); c[i * 2] = m.elements[12]; c[i * 2 + 1] = m.elements[14]; } statics.push({ o, all: o.instanceMatrix.array.slice(), c, n }); } });
+  const cull = (dt) => {   // the chunks past the view, hidden (checked a few times a second)
+    if ((cullT -= dt) > 0) return; cullT = 0.25;
+    const cx = camera.position.x, cz = camera.position.z, R = viewR;
+    if (R === Infinity) { if (cull.on) { cull.on = false; for (const S of statics) { S.o.instanceMatrix.array.set(S.all); S.o.count = S.n; S.o.instanceMatrix.needsUpdate = true; } } return; }
+    cull.on = true;
+    for (const m of world.chunks) { const sp = m.geometry.boundingSphere; m.visible = Math.hypot(sp.center.x - cx, sp.center.z - cz) - sp.radius < R; }
+    const R2 = (R * 0.75) ** 2;   // small things go a little sooner
+    for (const S of statics) {
+      const arr = S.o.instanceMatrix.array; let k = 0;
+      for (let i = 0; i < S.n; i++) { const dx = S.c[i * 2] - cx, dz = S.c[i * 2 + 1] - cz; if (dx * dx + dz * dz < R2) { if (k !== i) arr.set(S.all.subarray(i * 16, i * 16 + 16), k * 16); k++; } }
+      S.o.count = k; S.o.instanceMatrix.needsUpdate = true;
+    }
   };
   const crowd = (stage) => { const f = [1, 0.75, 0.55, 0.45][stage]; if (peds) peds.limit = Math.round(PEDS0 * f); traffic.limit = Math.round(CARS0 * f); };
   const applyQuality = () => {
@@ -253,7 +293,7 @@ export async function start(o) {
     if (q === "high") { perf.stage = 0; low = false; crowd(0); }
     else if (q === "low") { low = true; crowd(2); }
     else { low = perf.stage >= 2; crowd(perf.stage); }
-    applyRes();
+    applyRes(); lowKit(low);
   };
   SET.on((k, v, S) => {
     if (k && k !== "quality" && k !== "ps1") return;
@@ -274,7 +314,9 @@ export async function start(o) {
   function loop(now) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
-    const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; t += dt;
+    if (fpsCap && last && now - last < 1000 / fpsCap - 3) return;   // low quality: a steady 30
+    const dt = Math.min(fpsCap ? 0.07 : 0.05, (now - (last || now)) / 1000); last = now; t += dt;
+    cull(dt); const w0 = performance.now();
     // the weapon wheel slows the world down; the camera and the wheel itself run at full speed
     // a car first (it may take E for the door), then the gun, unless you're driving
     clockMin += dt / 2; stats.played += dt;
@@ -312,7 +354,7 @@ export async function start(o) {
     sky.update(t, player.pos, camera.position);
     hud.update(player, rig.yaw);
     { const m = Math.hypot(player.pos.x - px0, player.pos.z - pz0); if (m < 20) stats[inCar ? "drive" : "foot"] += m; }
-    draw();
+    draw(); work.ms += performance.now() - w0; work.n++;
     adapt(dt);
   }
   addEventListener("resize", () => {
@@ -340,7 +382,8 @@ export async function start(o) {
         ["Lamp posts flattened", stats.lamps], ["Hydrants burst", stats.hydrants], ["Times flatlined", stats.deaths], ["Hospital bills", "$" + stats.bills.toLocaleString("en-US")],
         ["Headshots", stats.headshots], ["Highest wanted", stats.maxWanted ? "\u2605".repeat(stats.maxWanted) : "None"], ["Times busted", stats.busted], ["Officers downed", stats.copsDowned]];
     },
-    info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, stage: perf.stage }; },
+    work() { const r = work.n ? work.ms / work.n : 0; work.ms = 0; work.n = 0; return r; },
+    info() { return { calls: seen.calls, tris: seen.tris, ratio, stage: perf.stage }; },
     rig, world, arsenal, vehicles, traffic, life, gore, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it

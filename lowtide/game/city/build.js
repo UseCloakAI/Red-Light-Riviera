@@ -87,7 +87,8 @@ const ROOM_GLSL = `
     if(lit>.5&&t!=tx&&h.y>.99) col+=vec3(.55,.45,.3)*smoothstep(.3,0.,length(h.xz-vec2(.5,.5)));   // the ceiling lamp
     return mix(col,vec3(.28,.34,.42),.14);   // a little glass
   }`;
-export const ROOMS = { value: null };   // a DataTexture: per enterable building, its frame and up to four rooms (world.js)
+export const ROOMS = { value: null };
+export const ROOMS_ON = { value: 1 };   // low quality: plain windows (the per-pixel room trace is the costliest thing on old GPUs)   // a DataTexture: per enterable building, its frame and up to four rooms (world.js)
 /* through the ground-floor windows of a building you can go into: that room, cheaply. The same
    size, the same floor, walls and light, the same counter, shelves, booths, bar, beds and
    desks in the same places as interiors.js builds them, traced as boxes (kind ids match
@@ -164,13 +165,13 @@ const SHOP_GLSL = `
   }`;
 function interiorRooms(mat, t) {
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uWin = { value: t.win }; sh.uniforms.uCells = { value: new THREE.Vector2(...t.cells) }; sh.uniforms.uRoom = { value: new THREE.Vector3(...t.room) }; sh.uniforms.uRooms = ROOMS;
+    sh.uniforms.uWin = { value: t.win }; sh.uniforms.uCells = { value: new THREE.Vector2(...t.cells) }; sh.uniforms.uRoom = { value: new THREE.Vector3(...t.room) }; sh.uniforms.uRooms = ROOMS; sh.uniforms.uRoomsOn = ROOMS_ON;
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vIWP; varying vec3 vIWN; attribute float aBld; varying float vBld;")
       .replace("#include <project_vertex>", "#include <project_vertex>\nvIWP=(modelMatrix*vec4(transformed,1.)).xyz; vIWN=normalize(mat3(modelMatrix)*objectNormal); vBld=aBld;");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uWin; uniform vec2 uCells; uniform vec3 uRoom; varying vec3 vIWP; varying vec3 vIWN;" + ROOM_GLSL + SHOP_GLSL)
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uWin; uniform vec2 uCells; uniform vec3 uRoom; uniform float uRoomsOn; varying vec3 vIWP; varying vec3 vIWN;" + ROOM_GLSL + SHOP_GLSL)
       .replace("#include <opaque_fragment>", `#include <opaque_fragment>
         #ifdef USE_MAP
-        if(texture2D(uWin,vMapUv).r>.5){
+        if(uRoomsOn>.5&&texture2D(uWin,vMapUv).r>.5){
           float litIn=0.;
           #ifdef USE_EMISSIVEMAP
           litIn=step(.15,texture2D(emissiveMap,vEmissiveMapUv).r);
