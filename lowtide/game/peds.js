@@ -18,6 +18,7 @@ import * as THREE from "three";
 import { loadHumanData, Human, randomPerson } from "./human.js?v=dev";
 import { lanePoint, linkPath, laneEndPos } from "./world.js?v=dev";
 import { AMBIENT, BUMP, PANIC, STRUCK, SHOVE, FIGHT, WON, BACKOFF, BRAWL } from "./lines.js?v=dev";
+const HANDS = ["Don't shoot!", "Okay, okay! Take it easy!", "Please, I've got kids!", "Whoa, whoa, whoa!", "I don't want any trouble!"];
 import { findBones, Ragdoll, ik, wpos } from "./rig.js?v=dev";
 
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.35;
@@ -55,6 +56,7 @@ export async function spawnPeds(scene, world, o = {}) {
   const scream = (pd, force) => { const now = performance.now(); if (!force && now - lastScream < 900) return; lastScream = now; if (sfx.scream) sfx.scream(pd.voice, distTo(pd)); };
   const peds = [], tmp = { x: 0, z: 0, dx: 0, dz: 0 };
   let limit = count, quiet = 6;            // seconds until anyone may speak again
+  let refs = {}, player0 = { aimYaw: null };                           // { cars() (every moving car), armed() (is the player holding a gun) }: set by main
   const say = (text, pd, mood) => { quiet = 9 + R() * 8; if (o.onSpeak) o.onSpeak(text, pd, mood); };
   const lineFor = (district) => { const a = AMBIENT.filter((l) => l.d === district || l.d === "any"); return a[(R() * a.length) | 0].t; };
 
@@ -274,8 +276,12 @@ export async function spawnPeds(scene, world, o = {}) {
     pd.act.walk.setEffectiveWeight(pd.wW);
     for (const n of GESTURES) if (pd.act[n]) pd.act[n].setEffectiveWeight(n === pd.gest ? pd.gW : 0);
     pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - (pd.gest ? pd.gW : 0)));
-    pd.mixer.update(dt);
+    pd.mixer.update(dt); pd.mixed = true;
     const facing = glance(pd, g, toPx, toPz, d, dt);
+    // a gun on them: the hands go up (and when it's lowered they break off and run); a phone to the ear
+    if (refs.armed && player0.aimYaw !== null && refs.armed() && d < 20) { const want = Math.atan2(x - px, z - pz), off = Math.abs(Math.atan2(Math.sin(want - player0.aimYaw), Math.cos(want - player0.aimYaw))); if (off < 0.12 + 1.2 / Math.max(2, d)) { if (!(pd.hands > 0)) say(pick(HANDS), pd, "scared"); pd.hands = 1.4; } }
+    if (pd.hands > 0) { pd.hands -= dt; if (pd.hands <= 0) { breakUp(st.lead ? pd : st.mate || pd); pd.fear = { x: px, z: pz, t: 12 }; return; } }
+    poseExtras(pd, g, dt);
     if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z)), pd); }
     if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
   }
@@ -362,17 +368,49 @@ export async function spawnPeds(scene, world, o = {}) {
       }
     }
   }
+  // a step aside, away from (ax, az): a target across the pavement they walk to, not a jump
+  function nudge(pd, ax, az, k) {
+    if (!pd.w) return; pointOn(pd.w, pd.s, tmp); const rx = -tmp.dz, rz = tmp.dx, s = (ax * rx + az * rz) >= 0 ? 1 : -1;
+    pd.nudge = Math.max(-0.9, Math.min(0.9, pd.side + s * k)); pd.nudgeT = 1.6;
+  }
+  // how soon a car gets to the road they're about to cross (seconds; Infinity if nothing's coming)
+  function crossDanger(pd, x, z, hx, hz) {
+    const L = Math.max(4, pd.w.L), mx = x + hx * (L / 2 - pd.s), mz = z + hz * (L / 2 - pd.s); let best = Infinity;
+    for (const c of refs.cars()) {
+      const vx = c.vx ?? Math.sin(c.a) * (c.speed || 0), vz = c.vz ?? Math.cos(c.a) * (c.speed || 0), sp = Math.hypot(vx, vz); if (sp < 1.2) continue;
+      const dx = mx - c.x, dz = mz - c.z; if (Math.abs(dx) > 60 || Math.abs(dz) > 60) continue;
+      const a = (dx * vx + dz * vz) / sp; if (a < -2) continue; const lat = Math.abs(dx * vz - dz * vx) / sp; if (lat > L / 2 + 2.5) continue;
+      best = Math.min(best, Math.max(0, a) / sp);
+    }
+    return best;
+  }
+  // on top of the clips: hands up, a phone to the ear, a look left and right at the kerb
+  let phone = null;
+  function poseExtras(pd, g, dt) {
+    if (!(pd.hands > 0) && !pd.calling && !pd.waiting) { if (pd.phoneOn) { pd.phoneOn = false; if (phone && phone.userData.pd === pd) phone.visible = false; } return; }
+    const B = pd.B || (pd.B = findBones(g)); if (!B) return; g.updateMatrixWorld(true);
+    wpos(B.head, A); F.set(Math.sin(g.rotation.y), 0, Math.cos(g.rotation.y)); RT.set(-F.z, 0, F.x);
+    if (pd.hands > 0) {   // both hands up beside the head
+      for (const [arm, s] of [[B.armR, -1], [B.armL, 1]]) { Bv.copy(A).addScaledVector(U, 0.22).addScaledVector(RT, s * 0.24).addScaledVector(F, 0.06); POLE.set(0, -1, 0).addScaledVector(RT, s * 1); ik(arm, Bv, POLE, Math.min(1, pd.hands * 3)); }
+    } else if (pd.calling) {   // the phone at the ear
+      Bv.copy(A).addScaledVector(RT, -0.1).addScaledVector(U, -0.02).addScaledVector(F, 0.03); POLE.set(0, -1, 0).addScaledVector(RT, -1); ik(B.armR, Bv, POLE, 1);
+      if (!phone) { phone = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.015), new THREE.MeshLambertMaterial({ color: 0x141418, emissive: 0x223344 })); scene.add(phone); }
+      wpos(B.armR[2], C); phone.position.copy(C).addScaledVector(U, 0.04); phone.rotation.set(0, g.rotation.y, 0); phone.visible = true; phone.userData.pd = pd; pd.phoneOn = true;
+    } else if (pd.waiting && pd.mixed) {   // looking up and down the road (only on a frame the clips set the head)
+      const k = Math.sin(clock * 1.6 + (pd.speed * 10)) * 0.9; if (pd.head) pd.head.rotateY(k * 0.7); if (pd.neck) pd.neck.rotateY(k * 0.3);
+    }
+  }
   // the player got too close: a look, a step aside, a word; enough of it and they push back, square up, or go
   function bumped(pd, fromX, fromZ, speed) {
     if (pd.dead || pd.down > 0 || (pd.free && pd.free.mode === "fight")) return;
     if (clock - pd.bumpT < 0.7) return; pd.bumpT = clock;
     const g = pd.h.group.position, ax = g.x - fromX, az = g.z - fromZ, al = Math.hypot(ax, az) || 1;
-    if (speed < 1.2) { pd.anger += 0.25; pd.side += (ax > 0 ? 0.25 : -0.25); return; }   // brushed past: a glance
+    if (speed < 1.2) { pd.anger += 0.25; nudge(pd, ax, az, 0.3); return; }   // brushed past: a glance, a step aside
     const hard = speed > 5.2;
     pd.anger += hard ? 1.5 : 0.8;
     if (pd.st) breakUp(pd.st.lead ? pd : pd.st.mate);
     if (hard && R() < 0.5) { knock(pd, { point: new THREE.Vector3(g.x, g.y + 1.1, g.z), dir: new THREE.Vector3(ax / al, 0.25, az / al), force: 3.2 + speed * 0.25 }); if (sfx.grunt) sfx.grunt(pd.voice, distTo(pd)); return; }
-    pd.stagger = hard ? 1.2 : 0.7; pd.side += (ax > 0 ? -0.4 : 0.4);
+    pd.stagger = hard ? 1.2 : 0.7; nudge(pd, ax, az, 0.45);
     if (pd.anger >= 2.4 && !pd.fear) {
       if (pd.brave > 0.62) return squareUp(pd);
       if (pd.brave < 0.28) { pd.fear = { x: fromX, z: fromZ, t: 10 }; pd.anger = 0; return say(pick(BACKOFF), pd, "scared"); }
@@ -389,6 +427,7 @@ export async function spawnPeds(scene, world, o = {}) {
     set limit(n) { limit = Math.max(0, Math.min(count, n)); },
     get limit() { return limit; },
     update(dt, player) {
+      player0 = player;
       const px = player.pos.x, pz = player.pos.z, pv = player.speed || 0; ear = player.pos;
       quiet -= dt; clock += dt; frameN++;
       peds.forEach((pd, idx) => {
@@ -407,6 +446,8 @@ export async function spawnPeds(scene, world, o = {}) {
           return;
         }
         pd.anger = Math.max(0, pd.anger - dt * 0.08);
+        // on the phone to the police (whatever else they're doing): done when the time's up, unless they're down first
+        if (pd.calling) { if (pd.down > 0) pd.calling = null; else if ((pd.calling.t -= dt) <= 0) { const c = pd.calling; pd.calling = null; c.go(); } }
         if (pd.down > 0) {   // on the floor; then up again
           pd.down -= dt; if (!pd.rag) { pd.down = 0; return; } if (pd.rag.step(dt)) pd.rag.pose();
           if (pd.down <= 0) getUp(pd);
@@ -437,9 +478,33 @@ export async function spawnPeds(scene, world, o = {}) {
         const rx = -hz, rz = hx;                                       // our right-hand side
         const toP = { x: px - x, z: pz - z }, ahead = toP.x * hx + toP.z * hz, lateral = toP.x * rx + toP.z * rz;
         const inPath = ahead > 0 && ahead < 3.2 && Math.abs(lateral) < 1.1;
-        const wantSide = inPath && pv > 3 ? (lateral > 0 ? -0.9 : 0.9) : 0;
-        pd.side += (wantSide - pd.side) * Math.min(1, dt * 5);
+        let wantSide = inPath && pv > 3 ? (lateral > 0 ? -0.9 : 0.9) : (pd.nudgeT > 0 ? pd.nudge : 0);
+        if (pd.nudgeT > 0) pd.nudgeT -= dt;
+        // someone coming the other way on the same line: both keep to their right
+        if (!wantSide && !pd.fear) for (let j = 0; j < Math.min(limit, peds.length); j++) {
+          const o2 = peds[j]; if (o2 === pd || o2.dead || o2.inCar || o2.down > 0 || !o2.h.group.visible) continue;
+          const q2 = o2.h.group.position, ex = q2.x - g.position.x, ez = q2.z - g.position.z; if (Math.abs(ex) > 2.6 || Math.abs(ez) > 2.6) continue;
+          const ah = ex * hx + ez * hz; if (ah < 0.25 || ah > 2.4) continue; const lat = ex * rx + ez * rz;
+          if (Math.abs(lat - pd.side) < 0.65) { wantSide = Math.max(-0.9, Math.min(0.9, pd.side + (lat > pd.side ? -0.6 : 0.6))); break; }
+        }
+        // across the pavement at a walk (or a run), never slid sideways: the body turns and steps into it (below)
+        { const rate = pd.fear ? 2.2 : 0.75, ds = wantSide - pd.side; pd.side += Math.max(-rate * dt, Math.min(rate * dt, ds)); }
         if (pd.fear && (pd.fear.t -= dt) <= 0) pd.fear = null;
+        // a gun pointed at them: hands up, frozen; when it's lowered, they run
+        if (refs.armed && player.aimYaw !== null && refs.armed() && d < 20) {
+          const want = Math.atan2(g.position.x - px, g.position.z - pz), off = Math.abs(Math.atan2(Math.sin(want - player.aimYaw), Math.cos(want - player.aimYaw)));
+          if (off < 0.12 + 1.2 / Math.max(2, d)) { if (!(pd.hands > 0) && quiet <= 0.5) say(pick(HANDS), pd, "scared"); pd.hands = 1.4; }
+        }
+        if (pd.hands > 0) { pd.hands -= dt; pd.pause = Math.max(pd.pause, 0.1); if (pd.hands <= 0) { pd.fear = { x: px, z: pz, t: 12 }; if (pd.w) { pointOn(pd.w, pd.s + 2, tmp); const a1 = Math.hypot(tmp.x - px, tmp.z - pz); pointOn(pd.w, Math.max(0, pd.s - 2), tmp); if (a1 < Math.hypot(tmp.x - px, tmp.z - pz)) reverse(pd); } } }
+        // a phone call to the police: stopped, phone to the ear, until it's made
+        if (pd.calling) pd.pause = Math.max(pd.pause, 0.1);
+        // crossing the road: wait at the kerb while a car's coming, look both ways; hurry if one turns up halfway
+        let hurry = 1; pd.waiting = false;
+        if (pd.w.kind === "cross" && !pd.fear && refs.cars) {
+          const eta = crossDanger(pd, x, z, hx, hz);
+          if (pd.s < 0.7 && eta < 5.5) { pd.pause = Math.max(pd.pause, 0.2); pd.waiting = true; }
+          else if (eta < 2.5) hurry = 2.4;
+        }
         if (pd.cower > 0) { pd.cower -= dt; pd.pause = Math.max(pd.pause, 0.1); }
         if (pd.pause > 0) pd.pause -= dt;
         else if (pd.fear) { /* running: no stopping */ }
@@ -449,29 +514,34 @@ export async function spawnPeds(scene, world, o = {}) {
         const moving = pd.pause <= 0;
 
         if (moving) {   // along the walk; at its end, on to the next
-          pd.s += (pd.fear ? pd.run : pd.speed * (pd.w.kind === "cross" ? 1.15 : 1)) * dt;
+          pd.s += (pd.fear ? pd.run : pd.speed * (pd.w.kind === "cross" ? 1.15 : 1) * hurry) * dt;
           if (pd.s >= pd.w.L) { const over = pd.s - pd.w.L; arrived(pd); pd.s = Math.min(over, pd.w.L); }
         }
         const gy = world.heightAt(x + rx * pd.side, z + rz * pd.side), nx = x + rx * pd.side, nz = z + rz * pd.side;
         if (dt > 0) { pd.vx = (nx - g.position.x) / dt; pd.vz = (nz - g.position.z) / dt; if (Math.hypot(pd.vx, pd.vz) > 8) pd.vx = pd.vz = 0; }
         g.position.set(nx, gy, nz);
-        let yaw = Math.atan2(hx, hz);
+        // facing the way they're actually going (a step aside is a step, not a slide)
+        const vs = Math.hypot(pd.vx, pd.vz);
+        let yaw = vs > 0.25 ? Math.atan2(pd.vx, pd.vz) : Math.atan2(hx, hz);
+        if (pd.hands > 0) yaw = Math.atan2(toP.x, toP.z);                        // facing the gun
         if (pd.stagger > 0) yaw = Math.atan2(toP.x, toP.z);                     // turn to see who did that
         else if (pd.cower > 0 && pd.fear) yaw = Math.atan2(x - pd.fear.x, z - pd.fear.z);   // duck, back to the danger
         let dy = yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
         g.rotation.y += dy * Math.min(1, dt * (pd.stagger > 0 ? 10 : 6));
         g.visible = d < (lod ? 60 : FAR);
         if (d < NEAR) {
-          const k = Math.min(1, dt * 6), running = moving && !!pd.fear;
-          pd.wW += ((moving && !running ? 1 : 0) - pd.wW) * k; pd.rW += ((running ? 1 : 0) - pd.rW) * k; pd.cW += ((pd.cower > 0 ? 1 : 0) - pd.cW) * k * 1.5;
+          // the legs from how fast they're really going: walking, running, or standing
+          const k = Math.min(1, dt * 6), running = vs > 2.6, walking = vs > 0.15 && !running;
+          pd.wW += ((walking ? Math.min(1, vs / 1.1) : 0) - pd.wW) * k; pd.rW += ((running ? 1 : 0) - pd.rW) * k; pd.cW += ((pd.cower > 0 ? 1 : 0) - pd.cW) * k * 1.5;
           pd.act.walk.setEffectiveWeight(pd.wW); pd.act.run.setEffectiveWeight(pd.rW);
           if (pd.act.sneak_pose) pd.act.sneak_pose.setEffectiveWeight(pd.cW);
           pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - pd.rW - pd.cW));
-          pd.act.walk.timeScale = pd.speed / 1.45; pd.act.run.timeScale = pd.run / 4.8;
+          pd.act.walk.timeScale = Math.max(0.6, Math.min(1.6, vs / 1.45)); pd.act.run.timeScale = Math.max(0.7, Math.min(1.4, vs / 4.8));
           if (pd.gW > 0.001) { pd.gW *= Math.max(0, 1 - dt * 4); for (const n of GESTURES) if (pd.act[n]) pd.act[n].setEffectiveWeight(n === pd.gest ? pd.gW : 0); }
           pd.acc = (pd.acc || 0) + dt;
-          if (!lod || d < 16 || ((frameN + idx) & 1)) { pd.mixer.update(pd.acc); pd.acc = 0; }   // low quality: far people animate on alternate frames
+          pd.mixed = false; if (!lod || d < 16 || ((frameN + idx) & 1)) { pd.mixer.update(pd.acc); pd.acc = 0; pd.mixed = true; }   // low quality: far people animate on alternate frames
           const facing = glance(pd, g, toP.x, toP.z, d, dt);
+          poseExtras(pd, g, dt);
           // now and then, someone close says something
           if (quiet <= 0 && d < 4.5 && facing > 0.3 && !pd.spoke && R() < dt * 0.6) { pd.spoke = 40; say(lineFor(world.districtAt(x, z)), pd); }
           if (pd.spoke) pd.spoke = Math.max(0, pd.spoke - dt);
@@ -515,7 +585,7 @@ export async function spawnPeds(scene, world, o = {}) {
     // a car nudged them: a stagger, a step aside and a word for the driver
     bump(pd, x, z) {
       if (pd.dead || pd.stagger > 0) return;
-      const g = pd.h.group.position; pd.stagger = 1.2; pd.side += (g.x - x > 0 ? 0.5 : -0.5);
+      const g = pd.h.group.position; pd.stagger = 1.2; nudge(pd, g.x - x, g.z - z, 0.5);
       if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
@@ -523,6 +593,20 @@ export async function spawnPeds(scene, world, o = {}) {
     // someone you've spoken to: they stop and look, and maybe nod or shake their head
     react(pd, gest, pause = 2) { if (pd.dead || pd.down > 0) return; pd.pause = Math.max(pd.pause || 0, pause); if (gest && pd.act[gest]) { pd.gest = gest; pd.gW = 1; pd.act[gest].time = 0; } },
     get drivers() { return peds.filter((pd) => pd.driver); },
+    bind(r) { Object.assign(refs, r); },
+    /* who could see something happen at (x, z): people about, not police, with a clear line of sight from their eyes */
+    witnesses(x, z, r = 45) {
+      const out = [], to = new THREE.Vector3(x, world.heightAt(x, z) + 1.2, z), eye = new THREE.Vector3();
+      for (let i = 0; i < peds.length; i++) {
+        const pd = peds[i]; if (pd.dead || pd.down > 0 || pd.inCar || pd.cop || pd.npc || !pd.h.group.visible || (i >= limit && !pd.out)) continue;
+        const g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z); if (d > r) continue;
+        eye.set(g.x, g.y + 1.6, g.z); if (d > 3 && world.grid.hit(eye, to).t < 1) continue;
+        out.push({ pd, d });
+      }
+      return out.sort((a, b) => a.d - b.d).map((q) => q.pd);
+    },
+    // a witness calls it in: stops, phone to the ear, says it, and after `secs` it's done (go()); hurt or killed first, it isn't
+    call(pd, line, secs, go) { if (pd.calling) return false; pd.calling = { t: secs, go }; pd.pause = Math.max(pd.pause || 0, secs); if (line) say(line, pd, "scared"); return true; },
     // someone from the crowd walking near (x, z) (not busy, not frightened, not standing about)
     nearest(x, z, r) {
       let best = null, bd = r;

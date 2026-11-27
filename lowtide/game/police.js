@@ -30,8 +30,15 @@ const SAY = {
   arrest: ["Hands where I can see them!", "Get on the ground!", "You're under arrest."],
   chase: ["We've got a runner!", "Don't make this harder!", "Stop running!"],
   lost: ["We lost them.", "Suspect's gone."],
-  heli: ["Air unit is down!", "We lost the chopper!"]
+  heli: ["Air unit is down!", "We lost the chopper!"],
+  cover: ["Get behind the car!", "Cover me!", "I'm pinned!", "Flank them!"],
+  radio: ["Dispatch, suspect is {dir} on {street}.", "All units, suspect last seen {dir} on {street}.", "Suspect heading {dir} on {street}, requesting backup."]
 };
+// what a witness says on the phone
+const CALL = { shots: ["911? Someone's shooting!", "There's a gun, there's a gun! Send someone!", "Police? Shots fired on {street}!"], assault: ["Police? A woman's beating someone up on {street}!", "Someone's getting attacked, hurry!"],
+  murder: ["Oh God, someone's dead! Send an ambulance!", "911? She killed him, she killed him!"], carjack: ["Somebody just stole a car on {street}!", "Police? A woman pulled a guy out of his car!"],
+  explosion: ["A car just blew up on {street}!", "There's been an explosion! Send everyone!"], copcar: ["Someone's stealing a police car!"], copassault: ["She's attacking a cop!"], copkill: ["Officer down, officer down!"] };
+const DIRS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
 const pick = (L) => L[(Math.random() * L.length) | 0];
 
 // a service pistol, small and black, held in the right hand
@@ -95,8 +102,20 @@ export class Police {
       if (kind === "copkill" && this.copKills % 2 === 0) n = Math.max(n, this.level + 1);
       if (kind === "murder" && this.kills % 3 === 0) n = Math.max(n, this.level + 1);
     }
-    const go = () => { this.setLevel(n); if (byCop || this.wanted) { this.seen = true; this.last.set(P.x, P.y, P.z); this.evade = 0; } };
-    if (byCop || this.wanted) go(); else this.pending.push({ t: 1.6 + Math.random() * 1.2, go });   // someone calls it in
+    const go = () => { this.setLevel(n); if (byCop || this.wanted) { this.seen = true; this.last.set(P.x, P.y, P.z); this.evade = 0; } else { this.last.set(x, 0, z); } };
+    if (byCop || this.wanted) { go(); return; }
+    /* nobody in uniform saw it: someone on the street has to call it in. They stop, phone to the ear, and say what
+       they saw; a few seconds later it's done. Stop them first (or scare them off the phone) and it never was */
+    const ws = this.peds.witnesses ? this.peds.witnesses(x, z, 45) : [];
+    if (!ws.length) return;
+    const street = this.streetAt(x, z), line = pick(CALL[kind] || CALL.shots).replace("{street}", street);
+    let placed = false;
+    for (const pd of ws.slice(0, 3)) {
+      if (pd.calling || (pd.brave < 0.15 && pd.fear && Math.random() < 0.5)) continue;
+      if (this.peds.call(pd, placed ? null : line, 3.5 + Math.random() * 2.5, () => { if (!pd.dead && !(pd.down > 0) && (this.level < n)) go(); })) placed = true;
+      if (placed && Math.random() < 0.6) break;
+    }
+    if (!placed) this.pending.push({ t: 2 + Math.random(), go });
   }
   // can a cop (on foot or at a car's wheel) see this spot?
   copSees(x, z, range) {
@@ -229,7 +248,7 @@ export class Police {
       if ((this.recycleT -= dt) <= 0) {
         this.recycleT = 1.5;
         for (const u of this.units) { const c = u.car; if (!c.pursue || !c.active) continue; const d = Math.hypot(c.x - P.x, c.z - P.z); c.slow = c.speed < 2 ? (c.slow || 0) + 1.5 : 0;
-          if (d > 170 || c.slow > 7.5) { this.recall(u); } }
+          if (d > 200 || (c.slow > 18 && d > 50)) { this.recall(u); } }
       }
       this.tickStrips(dt);
       // cars on their way aim for you if they can see you, or where they think you are
@@ -237,7 +256,18 @@ export class Police {
         const c = u.car; if (!c.pursue) continue;
         c.target = this.seen ? null : { x: this.hunt.x || this.last.x, z: this.hunt.z || this.last.z };
         if (c.deployed || !c.ai) this.deploy(u);   // stopped by you (or knocked out of the chase): out they get
+        // three stars and up: the passenger shoots from the window when they're close and can see you
+        else if (this.level >= 3 && this.seen && c.mode === "direct" && u.cops.length > 1 && !c.wreck) {
+          const d = Math.hypot(c.x - P.x, c.z - P.z); c.fireT = (c.fireT ?? 1.2) - dt;
+          if (d < 24 && c.fireT <= 0) { c.fireT = 0.9 + Math.random() * 0.9; this.carShoot(c, d); }
+        }
       }
+    }
+    // the radio: where you are and which way you're going, now and then while they can see you
+    if (this.level > 0 && this.seen && (this.radioT = (this.radioT ?? 6) - dt) <= 0) {
+      this.radioT = 12 + Math.random() * 8; const v = this.vehicles.car ? { x: this.vehicles.car.vx || 0, z: this.vehicles.car.vz || 0 } : this.player.vel;
+      if (Math.hypot(v.x, v.z) > 2) { const a = Math.atan2(v.x, -v.z), dir = DIRS[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8], cop = this.cops.find((q) => q.active && !q.dead) || this.cops[0];
+        if (cop) this.line(pick(SAY.radio).replace("{dir}", dir).replace("{street}", this.streetAt(P.x, P.z)), cop); }
     }
     // sirens follow their cars
     for (const u of this.units) { const c = u.car; if (c.sirenSfx) c.sirenSfx.set(Math.hypot(c.x - P.x, c.z - P.z), c.siren && c.active); }
@@ -349,8 +379,27 @@ export class Police {
         const sees = this.world.grid.hit(A.set(g.position.x, g.position.y + 1.6, g.position.z), C.set(tx, P.y + 1.2, tz)).t >= 1;
         const arrest = this.level === 1 && !this.armed() && !driving;
         const keep = arrest ? 1.1 : lethal ? (sees ? (pd.arm === "shotgun" ? 5 : 9) + (pd.k % 3) : 2) : 3;
-        if (d > keep) { goal = { x: tx, z: tz }; speed = d > 10 ? pd.run * 1.08 : pd.speed * 1.6; }
+        /* where to stand: in a firefight, behind their own car (the side away from you) if it's near enough to use,
+           otherwise a spot on a ring round you, each officer at their own angle so they spread out and flank */
+        let spot = null;
+        if (lethal && sees && !arrest) {
+          const car = pd.unit && pd.unit.car;
+          if (car && car.active && !car.wreck && car.S && Math.hypot(car.x - tx, car.z - tz) < 26 && Math.hypot(car.x - tx, car.z - tz) > 5) {
+            const ax = car.x - tx, az = car.z - tz, al = Math.hypot(ax, az), side = (pd.unit.cops.indexOf(pd) === 0 ? 1 : -1);
+            spot = { x: car.x + ax / al * (car.S.hw + 0.7) - az / al * side * 1.2, z: car.z + az / al * (car.S.hw + 0.7) + ax / al * side * 1.2, cover: true };
+          } else {
+            const base = Math.atan2(g.position.x - tx, g.position.z - tz), slot = ((pd.k % 4) - 1.5) * 0.55;
+            spot = { x: tx + Math.sin(base + slot * 0.4) * keep, z: tz + Math.cos(base + slot * 0.4) * keep };
+          }
+        }
+        const sd = spot ? Math.hypot(spot.x - g.position.x, spot.z - g.position.z) : 0;
+        if (spot && sd > 0.6) { goal = spot; speed = sd > 6 ? pd.run : pd.speed * 1.4; }
+        else if (!spot && d > keep) { goal = { x: tx, z: tz }; speed = d > 10 ? pd.run * 1.08 : pd.speed * 1.6; }
+        pd.inCover = !!(spot && spot.cover && sd < 0.8);
         aiming = !arrest && sees && d < 45;
+        // nobody walks backwards or sideways with a gun up: on the move to somewhere that isn't at you, the gun drops and they run there
+        if (goal && aiming) { const ga = Math.atan2(goal.x - g.position.x, goal.z - g.position.z), fa = Math.atan2(tx - g.position.x, tz - g.position.z); if (Math.abs(Math.atan2(Math.sin(ga - fa), Math.cos(ga - fa))) > 0.7) aiming = false; }
+        if (pd.inCover && Math.random() < dt * 0.15) this.line(pick(SAY.cover), pd);
         if (arrest && d < 4) this.line(pick(SAY.arrest), pd);
         // fire
         if (lethal && aiming) {
@@ -369,7 +418,10 @@ export class Police {
       let dy = face - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); g.rotation.y += dy * Math.min(1, dt * 9);
       const mv = goal && speed > 0, run = mv && speed > pd.speed * 1.5, k = Math.min(1, dt * 8);
       pd.wW += ((mv && !run ? 1 : 0) - pd.wW) * k; pd.rW += ((run ? 1 : 0) - pd.rW) * k;
-      pd.act.walk.setEffectiveWeight(pd.wW); pd.act.run.setEffectiveWeight(pd.rW); pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - pd.rW));
+      // behind the car between shots: down low; up to fire
+      const duck = pd.inCover && !mv && pd.fireT > 0.45 ? 1 : 0; pd.cW = (pd.cW || 0) + (duck - (pd.cW || 0)) * k;
+      if (pd.act.sneak_pose) pd.act.sneak_pose.setEffectiveWeight(pd.cW);
+      pd.act.walk.setEffectiveWeight(pd.wW); pd.act.run.setEffectiveWeight(pd.rW); pd.act.idle.setEffectiveWeight(Math.max(0, 1 - pd.wW - pd.rW - pd.cW));
       pd.act.walk.timeScale = 1.2; pd.act.run.timeScale = pd.run / 4.8;
       pd.mixer.update(dt);
       // arms: the gun up on you while aiming (two hands), down by the side otherwise
@@ -389,6 +441,24 @@ export class Police {
         gun.position.copy(hand).addScaledVector(dir, sg ? -0.12 : 0.05); gun.lookAt(gun.position.clone().add(dir)); gun.visible = true;
         pd.muzzle = gun.position.clone().addScaledVector(dir, sg ? 0.85 : 0.18);
       }
+    }
+  }
+  // the street at (x, z) by name (for the radio and the 911 calls)
+  streetAt(x, z) {
+    let best = null, bd = Infinity; const R = this.world.roads; if (!R) return "the street";
+    for (const e of R.edges) { if (!e.name) continue; const pl = e.pl.pts; for (let i = 0; i < pl.length; i += 2) { const p = pl[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; best = e.name; } } }
+    return best || "the street";
+  }
+  // fired from a pursuing car's window (three stars and up)
+  carShoot(c, d) {
+    const P = this.player.pos, m = new THREE.Vector3(c.x, (c.y || 0) + 1.25, c.z), dir = new THREE.Vector3(P.x - m.x, 0, P.z - m.z).normalize();
+    if (this.world.grid.hit(m, new THREE.Vector3(P.x, P.y + 1.1, P.z)).t < 1) return;
+    if (this.sfx.shot) this.sfx.shot(d, 0);
+    if (this.fx) this.fx.sparks(m.clone().addScaledVector(dir, 0.9), 4, dir, 2, 0xffd080, 0.08);
+    const inCar = !!this.vehicles.car, odds = 0.3 * Math.max(0.15, 1 - d / 30) * (inCar ? 0.8 : 1) * (this.player.speed > 3 ? 0.6 : 1);
+    if (Math.random() < odds) {
+      if (inCar) { const v = this.vehicles.car; this.vehicles.hurt(v, 5); this.vehicles.impactCar(v, P.x - dir.x, P.z - dir.z, dir.x, dir.z, 3); if (Math.random() < 0.2) this.life.damage(6, { dir, force: 0 }); }
+      else this.life.damage(7 + this.level, { point: new THREE.Vector3(P.x, P.y + 1.2, P.z), dir, force: 1.5, cause: "cop" });
     }
   }
   // a cop fires at you: the odds fall with distance, with you moving, and with you in a car

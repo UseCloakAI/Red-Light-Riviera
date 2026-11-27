@@ -127,6 +127,10 @@ export async function start(o) {
   police = new Police({ scene, world, player, peds, traffic, vehicles, life, hud, sfx: o.sfx || {}, fx: arsenal.fx, arsenal, cops, camera, rig,
     say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "angry"); } });
   vehicles.onCarDestroyed = (c) => police.carDestroyed(c);
+  // what the street knows about you: every moving car (for people crossing) and whether you've a gun out (people and drivers react)
+  const armedNow = () => { const w = arsenal.weapon; return !!(w && !w.melee); };
+  if (peds && peds.bind) peds.bind({ cars: () => vehicles.all().filter((c) => !c.hidden && (c.ai || c === vehicles.car || vehicles.dyn.has(c))), armed: armedNow });
+  traffic.armed = armedNow;
   traffic.life = life; vehicles.life = life; life.gore = gore; if (peds) peds.fx = arsenal.fx;
   traffic.onImpact = (c, x, z, dx, dz, v) => vehicles.impactCar(c, x, z, dx, dz, v);
   // gunfire: drivers panic, and cars take rounds (enough of them and they go up)

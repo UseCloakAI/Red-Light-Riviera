@@ -281,6 +281,14 @@ export class Vehicles {
   settle(c) {
     this.dyn.delete(c); c.vx = c.vz = c.om = 0; c.speed = 0;
     // back into traffic if whoever's driving can (and isn't you); otherwise it stays where it is, solid
+    // road rage: a brave driver you've bumped gets out and comes for you; the rest lean on the horn and drive on
+    if (c.rage && c.wasAi && c.occ && !c.occ.dead && c.occ.pd && c.occ.pd.brave > 0.45 && this.car && Math.hypot(this.car.x - c.x, this.car.z - c.z) < 25) {
+      c.rage = false; c.wasAi = false; c.ai = false; c.taken = true; const pd = c.occ.pd;
+      if (!c.obb && !c.hidden) { c.obb = this.world.grid.obb(c.x, c.z, c.S.hw, c.S.hl, -c.a, (c.y || 0) + c.m.cab.roof); c.obb.car = c; }
+      this.npcExit(c, false, () => { if (this.peds && !pd.dead) { pd.anger = 4; this.peds.squareUp(pd); } });
+      return;
+    }
+    if (c.rage && this.sfx.horn) { this.sfx.horn(Math.hypot(c.x - this.player.pos.x, c.z - this.player.pos.z)); } c.rage = false;
     if (c.wasAi && c.ai && !c.wreck && c.occ && !c.occ.dead && c.health > 25 && this.traffic && this.traffic.resume(c)) { c.wasAi = false; return; }
     c.wasAi = false;
     if (c.ai) { c.ai = false; c.taken = true; }
@@ -367,6 +375,8 @@ export class Vehicles {
   }
   contact(c, o, ct, v) {
     this.hit(c, ct.p, ct.n, v, o);
+    // you ran into them: some drivers get out about it
+    if (o && o === this.car && c.occ && !c.occ.player && v > 2 && v < 12) c.rage = true;
     if (o && o.ai && v > 3) { o.stun = 3; o.panic = Math.max(o.panic || 0, 0); }
     // the sound, once a hit (not every substep)
     const now = performance.now();
