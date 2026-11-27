@@ -7,8 +7,10 @@
    never overestimates and A* stays exact.
 
    Drivers ask for a route to somewhere (a lane, or the lane nearest a point) and follow it turn by turn; they ask
-   again when they're knocked off it. Cops ask with a bias: lanes another unit is already using cost more, so a
-   few cars sent after you come in down different streets instead of nose to tail. */
+   again when they're knocked off it. How much a turn costs is the driver's own taste (opt.turn): someone out on
+   an errand would rather stay on the same street than save ten seconds with three turns, a cop wouldn't. Cops
+   also ask with a bias: lanes another unit is already using cost more, so a few cars sent after you come in down
+   different streets instead of nose to tail. */
 import { createGraph, aStar } from "../vendor/ngraph/ngraph.module.min.js";
 
 const VMAX = 30;   // fastest anyone plans to go (m/s), for the heuristic
@@ -28,11 +30,11 @@ export class Nav {
     lanes.forEach((l, i) => { l.nid = i; l.mid = l.pts[l.pts.length >> 1]; l.time = l.L / Math.max(1, l.cruise); });
     const g = this.g = createGraph();
     for (const l of lanes) g.addNode(l.nid, l);
-    for (const l of lanes) for (const m of l.out) g.addLink(l.nid, m.nid, { cost: m.time + turnCost(l, m) + (this.signalled(l.to) ? 2.5 : 0) });
-    this.bias = null;   // (lane) => extra seconds, set around a biased search
+    for (const l of lanes) for (const m of l.out) g.addLink(l.nid, m.nid, { t: m.time, turn: turnCost(l, m), sig: this.signalled(l.to) ? 2.5 : 0 });
+    this.bias = null; this.turnK = 1;   // set around a search: (lane) => extra seconds, and how much turns count
     this.finder = aStar(g, {
       oriented: true,
-      distance: (a, b, link) => link.data.cost + (this.bias ? this.bias(b.data) : 0),
+      distance: (a, b, link) => { const d = link.data; return d.t + d.sig + d.turn * this.turnK + (this.bias ? this.bias(b.data) : 0); },
       heuristic: (a, b) => Math.hypot(a.data.mid.x - b.data.mid.x, a.data.mid.z - b.data.mid.z) / VMAX,
     });
   }
@@ -47,12 +49,13 @@ export class Nav {
     }
     return best;
   }
-  /* lanes to drive from `from` to `to` (from first, to last), or null. bias(lane) adds seconds to a lane. */
-  route(from, to, bias = null) {
+  /* lanes to drive from `from` to `to` (from first, to last), or null.
+     opt.bias(lane): extra seconds on a lane; opt.turn: how much the turns count (1 as they are, 0 not at all) */
+  route(from, to, opt = {}) {
     if (!from || !to) return null;
     if (from === to) return [from];
-    this.bias = bias;
-    let p; try { p = this.finder.find(from.nid, to.nid); } finally { this.bias = null; }
+    this.bias = opt.bias || null; this.turnK = opt.turn ?? 1;
+    let p; try { p = this.finder.find(from.nid, to.nid); } finally { this.bias = null; this.turnK = 1; }
     if (!p || !p.length) return null;
     return p.map((n) => n.data).reverse();
   }
