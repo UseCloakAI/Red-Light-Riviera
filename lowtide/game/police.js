@@ -487,6 +487,8 @@ export class Police {
     const want = this.level >= 3, P = this.player.pos;
     if (!this.heli && want && !(this.heliWaitNext > 0)) { this.heli = heliModel(); this.scene.add(this.heli); this.scene.add(this.heli.userData.beam); this.heli.visible = false; this.heliWait = 0; }
     const h = this.heli; if (!h) return;
+    // no helicopter up (or it's coming down): no lock, but rockets already away keep flying
+    if (!h.visible || h.crash) { if (this.rWarn) { this.rWarn.classList.remove("on"); this.rLaser.visible = false; } if (this.rk) this.rk.state = "idle"; this.tickRockets(dt); }
     if (this.heliWait > 0) this.heliWait -= dt;
     if (want && !h.visible && this.heliWait <= 0) {
       h.visible = true; h.leave = false; h.crash = null; h.hp = HELI_HP; h.rotorSpeed = 28; h.rotation.set(0, 0, 0); h.userData.beam.visible = true;
@@ -511,9 +513,10 @@ export class Police {
     beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), aim.clone().sub(beam.position).normalize());
     const sp = beam.userData.spot; if (sp.parent !== this.scene) { beam.remove(sp); this.scene.add(sp); } sp.position.set(aim.x, aim.y + 0.12, aim.z); sp.visible = beam.visible && !blocked;
     if (this.heliSfx) this.heliSfx.set(Math.hypot(h.position.x - P.x, h.position.z - P.z), h.position.y);
-    // the gunner, from four stars
+    // the gunner, from four stars (holding fire while the rockets are being laid on)
     const hd = h.position.distanceTo(new THREE.Vector3(P.x, P.y + 1, P.z));
-    if (this.level >= 4 && this.seen && !h.leave && (this.gunT -= dt) <= 0) {
+    this.rocketLock(h, dt);
+    if (this.level >= 4 && this.seen && !h.leave && !(this.rk && this.rk.state === "lock") && (this.gunT -= dt) <= 0) {
       this.gunT = 1.1 + Math.random() * 0.8;
       if (this.sfx.shot) this.sfx.shot(Math.hypot(h.position.x - P.x, h.position.z - P.z), 0);
       if (this.fx) this.fx.sparks(h.position.clone().add(new THREE.Vector3(0, -0.8, 0)), 4, new THREE.Vector3(0, -1, 0), 2, 0xffd080, 0.1);
@@ -522,6 +525,59 @@ export class Police {
       else if (this.fx) { const q = new THREE.Vector3(P.x + (Math.random() - 0.5) * 4, 0, P.z + (Math.random() - 0.5) * 4); q.y = this.world.heightAt(q.x, q.z); this.fx.puff(q, new THREE.Vector3(0, 0.6, 0), 0.25, 0.6, 0x9a948a, 0.5); }
     }
     if (h.leave && Math.hypot(h.position.x - P.x, h.position.z - P.z) > 260) { h.visible = false; beam.visible = false; beam.userData.spot.visible = false; if (this.heliSfx) { this.heliSfx.stop(); this.heliSfx = null; } }
+  }
+  /* rockets, from four stars: the helicopter locks on (a red line on you, the beeping, HELICOPTER LOCKED ON) for two
+     seconds while it can see you, then lets go a pair. They fly at where you were heading, with a little error, and
+     steer only gently after launch: move hard sideways once they're away and they go past. */
+  rocketLock(h, dt) {
+    const P = this.player.pos, rk = this.rk || (this.rk = { state: "idle", t: 0, cd: 6, beepT: 0 });
+    if (!this.rLaser) {
+      const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3));
+      this.rLaser = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.85, depthWrite: false })); this.rLaser.frustumCulled = false; this.scene.add(this.rLaser);
+      this.rWarn = document.createElement("div"); this.rWarn.className = "drone-warn heli"; this.rWarn.textContent = "HELICOPTER LOCKED ON"; if (this.hud.root || this.root) (this.hud.root || this.root).appendChild(this.rWarn);
+    }
+    const car = this.vehicles.car, T = car ? new THREE.Vector3(car.x, (car.y || 0) + 0.9, car.z) : new THREE.Vector3(P.x, P.y + 1, P.z);
+    const sees = this.seen && this.world.grid.hit(h.position, T).t >= 1;
+    if (rk.state === "idle") {
+      rk.cd -= dt;
+      if (this.level >= 4 && !h.leave && !h.crash && sees && rk.cd <= 0) { rk.state = "lock"; rk.t = 0; }
+    } else if (rk.state === "lock") {
+      if (!sees || h.leave || h.crash || this.level < 4) { rk.lost = (rk.lost || 0) + dt; if (rk.lost > 0.6) { rk.state = "idle"; rk.cd = 2; rk.lost = 0; } }
+      else { rk.lost = 0; rk.t += dt; }
+      const p = rk.t / 2.0; rk.beepT -= dt; if (rk.beepT <= 0) { rk.beepT = Math.max(0.08, 0.4 * (1 - p)); if (this.sfx.beep) this.sfx.beep(0, p > 0.7); }
+      if (rk.t >= 2.0) { rk.state = "idle"; rk.cd = 7 + Math.random() * 4; this.fireRocket(h, T, 0); setTimeout(() => { if (this.heli === h && !h.crash) this.fireRocket(h, T, 1); }, 380); this.line(pick(["Firing!", "Rockets away!", "Light them up!"]), this.cops[0]); }
+    }
+    const on = rk.state === "lock";
+    this.rLaser.visible = on; this.rWarn.classList.toggle("on", on);
+    if (on) { const a = this.rLaser.geometry.attributes.position; a.setXYZ(0, h.position.x, h.position.y - 1, h.position.z); a.setXYZ(1, T.x, T.y, T.z); a.needsUpdate = true; }
+    this.tickRockets(dt);
+  }
+  fireRocket(h, T, k) {
+    const P = this.player.pos, car = this.vehicles.car, v = car ? new THREE.Vector3(car.vx || 0, 0, car.vz || 0) : this.player.vel.clone().setY(0);
+    const from = h.position.clone().add(new THREE.Vector3(k ? -0.9 : 0.9, -1.1, 0)), d0 = from.distanceTo(T), tHit = d0 / 48;
+    const a = Math.random() * 6.28, r = (k ? 2.2 : 1.4) + Math.random() * 2.2, err = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), aim = T.clone().addScaledVector(v, tHit * 0.6).add(err);
+    const m = new THREE.Group(), body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 6).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xd8d4c8 }));
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.15), new THREE.MeshLambertMaterial({ color: 0x3a3a3e })); fin.position.z = -0.4; const fin2 = fin.clone(); fin2.rotation.z = Math.PI / 2;
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.45, 6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffb040 })); flame.position.z = -0.65;
+    m.add(body, fin, fin2, flame); m.position.copy(from); this.scene.add(m);
+    (this.rockets || (this.rockets = [])).push({ m, v: aim.sub(from).normalize().multiplyScalar(48), t: 0, err });
+    if (this.sfx.boom) this.sfx.boom(Math.hypot(from.x - P.x, from.z - P.z) * 0.6, 0);
+  }
+  tickRockets(dt) {
+    if (!this.rockets) return; const P = this.player.pos, car = this.vehicles.car;
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i], m = r.m; r.t += dt;
+      const T = car ? new THREE.Vector3(car.x, (car.y || 0) + 0.9, car.z) : new THREE.Vector3(P.x, P.y + 1, P.z);
+      // a little homing (not much: it can't make a hard turn)
+      const want = T.clone().add(r.err).sub(m.position).normalize().multiplyScalar(48); if (m.position.distanceTo(T) > 14) r.v.lerp(want, Math.min(1, dt * 0.5)).setLength(48);
+      const prev = m.position.clone(); m.position.addScaledVector(r.v, dt); m.lookAt(m.position.clone().add(r.v));
+      if (this.fx && Math.random() < dt * 40) this.fx.puff(prev, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), 0.5, 1.4, 0xb8b2a8, 0.45);
+      const gy = this.world.heightAt(m.position.x, m.position.z) + 0.2, wall = this.world.grid.hit(prev, m.position).t < 1;
+      if (m.position.distanceTo(T) < 1.6 || m.position.y < gy || wall || r.t > 5) {
+        this.scene.remove(m); this.rockets.splice(i, 1);
+        if (this.vehicles.blast) this.vehicles.blast(m.position.x, Math.max(gy, m.position.y), m.position.z, 0.9, null, 0.55);
+      }
+    }
   }
   heliFall(h, dt) {
     const k = h.crash, P = this.player.pos;
