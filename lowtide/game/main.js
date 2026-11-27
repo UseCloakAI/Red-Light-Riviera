@@ -429,7 +429,7 @@ export async function start(o) {
     },
     work() { const r = work.n ? work.ms / work.n : 0; work.ms = 0; work.n = 0; return r; },
     info() { return { calls: seen.calls, tris: seen.tris, ratio, stage: perf.stage }; },
-    rig, world, arsenal, vehicles, traffic, life, gore, get peds() { return peds; }
+    rig, world, arsenal, vehicles, traffic, life, gore, get peds() { return peds; }, get police() { return police; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };

@@ -129,15 +129,17 @@ export class Seats {
   enterPose(a, t, fire, dt) {
     const c = a.c, w = a.w, k = this.keys(c), B = w.body, hs = w.hs || 0.95, jack = a.kind === "jack";
     const J = jack ? 0.95 : 0;   // the carjack slots in after the door's open
+    // a.side -1: in by the passenger's door, everything mirrored (no wheel to take hold of)
+    const sd = jack ? 1 : (a.side || 1), X = (p) => new THREE.Vector3(p.x * sd, p.y, p.z), dk = sd > 0 ? "door" : "door2", L = sd > 0 ? "L" : "R", Rr = sd > 0 ? "R" : "L";
     // where the feet stand, outside: the approach, then the gap by the open door
-    const A = this.ground(c, k.A.x, k.A.z), Gp = this.ground(c, k.Gp.x, k.Gp.z);
-    const toHandle = Math.atan2(-(k.A.x - k.hw), (k.zD + 0.18) - k.A.z);
+    const A = this.ground(c, k.A.x * sd, k.A.z), Gp = this.ground(c, k.Gp.x * sd, k.Gp.z);
+    const toHandle = Math.atan2(-(k.A.x - k.hw) * sd, (k.zD + 0.18) - k.A.z);
     // 1. walk up to the handle
     const app = seg(t, 0, 0.35), walk = t < 0.35 ? Math.sin(Math.PI * Math.min(1, t / 0.35)) * 0.9 : 0;
     // 2. the door: pulled, then swung wide (yanked, for a carjack)
     const openT = jack ? seg(t, 0.36, 0.56) * 1.15 : seg(t, 0.42, 0.56) * 0.32 + seg(t, 0.58, 0.82) * 0.8;
     const closeK = seg(t, 1.72 + J, 1.95 + J);
-    c.door = Math.max(0, openT * (1 - closeK * closeK));
+    c[dk] = Math.max(0, openT * (1 - closeK * closeK));
     fire("click", 0.45, () => a.onSfx && a.onSfx("open"));
     fire("slam", 1.95 + J, () => a.onSfx && a.onSfx("close"));
     // 3. into the gap and turn to face the front (a carjack: face the driver first)
@@ -148,7 +150,7 @@ export class Seats {
     const hands = {}, handW = { L: 0, R: 0 }, feet = {};
     // the hand on the handle while the door's opening
     const onHandle = seg(t, 0.3, 0.42) * (1 - seg(t, 0.8, 0.92));
-    if (onHandle > 0) { hands.L = this.handle(c, c.door); handW.L = onHandle; }
+    if (onHandle > 0) { hands[L] = this.handle(c, c[dk], false, undefined, sd); handW[L] = onHandle; }
     // 4. a carjack: both hands in for the collar, haul them out, sling them away
     if (jack && t > 0.8 && t < 0.8 + J + 0.2) {
       const reach = seg(t, 0.82, 1.02), pull = seg(t, 1.02, 1.62), recover = seg(t, 1.62, 1.75);
@@ -165,20 +167,20 @@ export class Seats {
     }
     // 5. in: duck, inside leg first, hips over the sill and down, the other leg in
     const t0 = 0.86 + J, inside = seg(t, t0 + 0.1, t0 + 0.6);
-    const Sf = this.seatS(w, c), hipK = seg(t, t0 + 0.02, t0 + 0.68), hip = hipK < 1 ? Q(hipStand, this.body(c, k.O), this.body(c, Sf), hipK) : this.body(c, Sf);
+    const Sf = X(this.seatS(w, c)), hipK = seg(t, t0 + 0.02, t0 + 0.68), hip = hipK < 1 ? Q(hipStand, this.body(c, X(k.O)), this.body(c, Sf), hipK) : this.body(c, Sf);
     yaw = angLerp(yaw, 0, seg(t, t0, t0 + 0.3));
     lean += 0.5 * seg(t, t0 + 0.02, t0 + 0.25) * (1 - seg(t, t0 + 0.45, t0 + 0.7)) - (0.22 + this.fit(w, c).back) * seg(t, t0 + 0.45, t0 + 0.7);
-    const fR0 = floor.clone().add(this.dir(c, -0.11, 0)), fL0 = floor.clone().add(this.dir(c, 0.11, 0));
+    const fR0 = floor.clone().add(this.dir(c, -0.11 * sd, 0)), fL0 = floor.clone().add(this.dir(c, 0.11 * sd, 0));
     const rIn = seg(t, t0 + 0.03, t0 + 0.3), lIn = seg(t, t0 + 0.45, t0 + 0.72);
-    feet.R = rIn > 0 ? step(fR0, this.body(c, k.footR), rIn, 0.28) : null; feet.L = lIn > 0 ? step(fL0, this.body(c, k.footL), lIn, 0.3) : (t > t0 ? fL0 : null);
-    const fl = V3(floor, this.body(c, _v.set(k.sx, k.floor - 0.1, k.sz - 0.1)), inside);
+    feet[Rr] = rIn > 0 ? step(fR0, this.body(c, X(k.footR)), rIn, 0.28) : null; feet[L] = lIn > 0 ? step(fL0, this.body(c, X(k.footL)), lIn, 0.3) : (t > t0 ? fL0 : null);
+    const fl = V3(floor, this.body(c, _v.set(k.sx * sd, k.floor - 0.1, k.sz - 0.1)), inside);
     // hands: the right to the wheel, the left out for the door and back
     const toWheel = seg(t, t0 + 0.35, t0 + 0.65);
-    if (toWheel > 0) { hands.R = this.rim(c, -1.05); handW.R = toWheel; }
+    if (toWheel > 0 && sd > 0) { hands.R = this.rim(c, -1.05); handW.R = toWheel; }
     const grab = seg(t, t0 + 0.7, t0 + 0.84) * (1 - seg(t, 1.97 + J, 2.12 + J));
-    if (grab > 0) { hands.L = this.handle(c, c.door, true); handW.L = grab; }
-    const lw = seg(t, 1.97 + J, 2.13 + J); if (lw > 0) { hands.L = this.rim(c, 1.05); handW.L = lw; }
-    if (t > t0 + 0.7 && grab <= 0 && lw <= 0) { hands.L = this.rim(c, 1.05); handW.L = 0.3; }
+    if (grab > 0) { hands[L] = this.handle(c, c[dk], true, undefined, sd); handW[L] = grab; }
+    const lw = sd > 0 ? seg(t, 1.97 + J, 2.13 + J) : 0; if (lw > 0) { hands.L = this.rim(c, 1.05); handW.L = lw; }
+    if (sd > 0 && t > t0 + 0.7 && grab <= 0 && lw <= 0) { hands.L = this.rim(c, 1.05); handW.L = 0.3; }
     // pose
     clips(w, walk, dt); B.reset();
     this.put(w, c, fl, yaw, inside);

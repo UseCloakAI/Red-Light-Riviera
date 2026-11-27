@@ -160,6 +160,18 @@ export class Police {
     if (pd.shotgun) pd.shotgun.visible = false;
     pd.hp = 100; pd.stagger = 0;
   }
+  // which door is theirs (the first in a unit drives), and the spot outside it to walk to
+  doorFor(pd, c) {
+    if (!c || !c.m || !this.vehicles.doorSpot || c.ai || Math.hypot(c.vx || 0, c.vz || 0) > 0.5) return null;
+    const k = pd.unit ? pd.unit.cops.indexOf(pd) : 0; return this.vehicles.doorSpot(c, k === 1 ? -1 : 1);
+  }
+  // into the car by their door (vehicles.js animates it), then done()
+  climbIn(pd, c, done, rate = 1.3) {
+    const k = pd.unit ? pd.unit.cops.indexOf(pd) : 0;
+    if (!this.vehicles.copIn || k > 1) return false;
+    pd.gun.visible = false; pd.boarding = true;
+    return this.vehicles.copIn(c, pd, k === 1 ? -1 : 1, () => { pd.boarding = false; if (pd.active === "foot" && !pd.dead) done(); }, rate) || (pd.boarding = false);
+  }
   // a police car blown up: the officers still in it die in it (and the ones climbing out are caught by the blast)
   carDestroyed(c) {
     for (const u of this.units) {
@@ -310,7 +322,7 @@ export class Police {
     const P = this.player.pos, driving = this.vehicles.car, lethal = this.level >= 2 || (this.level === 1 && this.armed()) || !!(driving && this.level >= 2);
     const A = new THREE.Vector3(), C = new THREE.Vector3(), F = new THREE.Vector3(), U = new THREE.Vector3(0, 1, 0), RT = new THREE.Vector3();
     for (const pd of this.cops) {
-      if (pd.active !== "foot") continue;
+      if (pd.active !== "foot" || pd.boarding) continue;
       const g = pd.h.group;
       if (pd.dead) { pd.gun.visible = false; if (Math.hypot(g.position.x - P.x, g.position.z - P.z) > 140) this.despawnCop(pd); continue; }
       const tx = driving ? driving.x : P.x, tz = driving ? driving.z : P.z, dx = tx - g.position.x, dz = tz - g.position.z, d = Math.hypot(dx, dz) || 1;
@@ -318,22 +330,18 @@ export class Police {
       if (pd.state === "return" || this.level === 0) {   // back to the car, in, gone
         const c = pd.unit && pd.unit.car;
         if (!c || !c.active) { this.despawnCop(pd); continue; }
-        goal = { x: c.x, z: c.z }; speed = pd.speed;
-        if (Math.hypot(c.x - g.position.x, c.z - g.position.z) < 2.2) {
-          pd.active = "car"; g.visible = false; pd.gun.visible = false;
-          if (pd.unit.cops.every((q) => q.active !== "foot")) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.siren = false; c.pursue = false; c.taken = false; c.occ = { shirt: 0x1d2a4a, own: true }; this.snapToLane(c); for (const q of pd.unit.cops) q.active = false; }
-          continue;
-        }
+        const door = this.doorFor(pd, c); goal = door || { x: c.x, z: c.z }; speed = pd.speed;
+        const done = () => { pd.active = "car"; g.visible = false; pd.gun.visible = false;
+          if (pd.unit.cops.every((q) => q.active !== "foot")) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.siren = false; c.pursue = false; c.taken = false; c.occ = { shirt: 0x1d2a4a, own: true }; this.snapToLane(c); for (const q of pd.unit.cops) q.active = false; } };
+        if (Math.hypot(goal.x - g.position.x, goal.z - g.position.z) < (door ? 0.45 : 2.2)) { if (!this.climbIn(pd, c, done)) done(); continue; }
         face = Math.atan2(goal.x - g.position.x, goal.z - g.position.z);
       } else if (pd.state === "board") {   // back in the car to chase you
         const c = pd.unit && pd.unit.car;
         if (!c || !c.active || c.wreck) { pd.state = "chase"; continue; }
-        goal = { x: c.x, z: c.z }; speed = pd.run; face = Math.atan2(c.x - g.position.x, c.z - g.position.z);
-        if (Math.hypot(c.x - g.position.x, c.z - g.position.z) < 2.4) {
-          pd.active = "car"; g.visible = false; pd.gun.visible = false; if (pd.shotgun) pd.shotgun.visible = false;
-          if (pd.unit.cops.every((q) => q.active !== "foot" || q.dead)) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.pursue = true; c.siren = true; c.deployed = false; c.mode = "direct"; c.taken = false; c.speed = 0; c.stopT = 0; c.occ = { shirt: 0x1d2a4a, own: true }; this.snapToLane(c); }
-          continue;
-        }
+        const door = this.doorFor(pd, c); goal = door || { x: c.x, z: c.z }; speed = pd.run; face = Math.atan2(goal.x - g.position.x, goal.z - g.position.z);
+        const done = () => { pd.active = "car"; g.visible = false; pd.gun.visible = false; if (pd.shotgun) pd.shotgun.visible = false;
+          if (pd.unit.cops.every((q) => q.active !== "foot" || q.dead)) { if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } c.ai = true; c.pursue = true; c.siren = true; c.deployed = false; c.mode = "direct"; c.taken = false; c.speed = 0; c.stopT = 0; c.occ = { shirt: 0x1d2a4a, own: true }; this.snapToLane(c); } };
+        if (Math.hypot(goal.x - g.position.x, goal.z - g.position.z) < (door ? 0.5 : 2.4)) { if (pd.shotgun) pd.shotgun.visible = false; if (!this.climbIn(pd, c, done, 1.5)) done(); continue; }
       } else {
         // you've got away from us on foot, or driven off: everyone back in the car
         const car0 = pd.unit && pd.unit.car;

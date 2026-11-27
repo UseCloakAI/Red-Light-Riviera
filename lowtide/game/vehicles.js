@@ -167,7 +167,7 @@ export class Vehicles {
     if (this.act && this.act.c === c) { this.act = null; if (this.life) this.life.damage(9999, { point: at, dir: new THREE.Vector3(this.player.pos.x - c.x, 1.2, this.player.pos.z - c.z).normalize(), force: 11, cause: "blast" }); }
     // anyone mid-door: out of the animation and into a ragdoll, blown clear
     for (let i = this.npcActs.length - 1; i >= 0; i--) {
-      const a = this.npcActs[i].a; if (a.c !== c) continue; this.npcActs.splice(i, 1);
+      const a = this.npcActs[i].a; if (a.c !== c) continue; this.npcActs.splice(i, 1); if (a.cop) a.cop.boarding = a.cop.exiting = false;
       const d = this.drivers.find((x) => x.w === a.w), pd = d ? d.pd : a.cop || (a.w && this.peds && this.peds.peds.find((q) => q.h.group === a.w.g));
       if (d) this.releaseDriver(d.pd);
       if (pd && this.peds) { pd.inCar = null; pd.exiting = false; const g = pd.h.group.position; this.peds.damage(pd, { point: g.clone().setY(g.y + 1), dir: new THREE.Vector3(g.x - c.x, 1.3, g.z - c.z).normalize(), damage: 9999, from: { x: c.x, z: c.z }, force: 11 }); }
@@ -610,7 +610,7 @@ export class Vehicles {
       this.seats.drive(d.w, c, { steer: c.steer, dead: c.occ.dead, react, look, dt });
     }
     // other people's comings and goings
-    for (let i = this.npcActs.length - 1; i >= 0; i--) { const n = this.npcActs[i]; if (n.a.cop && (n.a.cop.dead || n.a.cop.rag)) { n.a.cop.exiting = false; this.npcActs.splice(i, 1); continue; } if (!this.seats.step(n.a, dt)) this.npcActs.splice(i, 1); }
+    for (let i = this.npcActs.length - 1; i >= 0; i--) { const n = this.npcActs[i]; if (n.a.cop && (n.a.cop.dead || n.a.cop.rag)) { n.a.cop.exiting = false; n.a.cop.boarding = false; this.npcActs.splice(i, 1); continue; } if (!this.seats.step(n.a, dt)) this.npcActs.splice(i, 1); }
   }
   seat(d, c) { d.car = c; c.occ.pd = d.pd; d.pd.inCar = c; d.pd.out = false; d.pd.dead = false; d.pd.rag = null; d.pd.h.group.visible = true; }
   unseat(d) { if (d.car && d.car.occ && d.car.occ.pd === d.pd) d.car.occ.pd = null; d.car = null; d.pd.inCar = null; if (!d.pd.out) d.pd.h.group.visible = false; }
@@ -639,6 +639,15 @@ export class Vehicles {
     const a = this.seats.start("exit", w, c, { side, rate: 1.35, onSfx: () => { if (this.sfx.door && Math.hypot(c.x - this.player.pos.x, c.z - this.player.pos.z) < 40) this.sfx.door(); },
       onDone: () => { pd.h.group.rotation.set(0, pd.h.group.rotation.y, 0); done(); } });
     a.cop = pd; this.npcActs.push({ a }); return true;
+  }
+  // the spot outside a car's door to walk up to (side 1 the driver's, -1 the passenger's)
+  doorSpot(c, side = 1) { const k = this.seats.keys(c); return this.seats.ground(c, k.A.x * side, k.A.z); }
+  // a police officer back into a stopped car by their side's door, then done()
+  copIn(c, pd, side, done, rate = 1.3) {
+    if (!c.m || c.hidden || !pd.h || !pd.mixer) return false;
+    const w = person(pd.h.group, pd.mixer, pd.act); if (!w.body || !w.body.ok) return false;
+    const a = this.seats.start("enter", w, c, { side, rate, onSfx: () => { if (this.sfx.door && Math.hypot(c.x - this.player.pos.x, c.z - this.player.pos.z) < 40) this.sfx.door(); }, onDone: () => done() });
+    a.from = pd.h.group.position.clone(); a.yaw0 = pd.h.group.rotation.y; a.cop = pd; this.npcActs.push({ a }); return true;
   }
   // someone from the crowd walks to a parked car near you, gets in and drives off
   unpark() {
