@@ -483,7 +483,7 @@ export async function buildWorld(scene, opts = {}) {
       for (let t = e.s0 + 10 + R() * 20; t < e.s1 - 6; t += 30 + R() * 40) {
         const p = at(e.pl, t), o = e.w / 2 + SIDEWALK - 0.45, x = p.x + p.nx * s * o, z = p.z + p.nz * s * o, a = Math.atan2(-p.nx * s, -p.nz * s), r = R();
         if (r < 0.4) { benches.push({ x, z, a }); grid.obb(x, z, 0.9, 0.3, -a, 0.5); }
-        else if (r < 0.75) { bins.push({ x, z }); grid.circle(x, z, 0.3, 1); }
+        else if (r < 0.75) { bins.push({ x, z, a, obj: grid.circle(x, z, 0.3, 1) }); }
         else { const o2 = e.w / 2 + 0.5; const hx = p.x + p.nx * s * o2, hz = p.z + p.nz * s * o2; hydrants.push({ x: hx, z: hz, obj: grid.circle(hx, hz, 0.2, 0.8) }); }
       }
       // power poles and sagging lines in the port and Bellwether
@@ -523,7 +523,6 @@ export async function buildWorld(scene, opts = {}) {
   /* ---- props: instanced ---- */
   const dark = L({ color: 0x2b2e35 });
   instanced(scene, mergeGeometries([new THREE.BoxGeometry(1.8, 0.08, 0.45).translate(0, 0.45, 0), new THREE.BoxGeometry(1.8, 0.45, 0.06).translate(0, 0.72, 0.2), new THREE.BoxGeometry(0.08, 0.45, 0.4).translate(-0.8, 0.22, 0), new THREE.BoxGeometry(0.08, 0.45, 0.4).translate(0.8, 0.22, 0)]), L({ color: 0x6a4a32 }), benches);
-  instanced(scene, new THREE.CylinderGeometry(0.28, 0.24, 0.9, 7).translate(0, 0.45, 0), L({ color: 0x2f5d4a }), bins);
   const hydrantMesh = instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.12, 0.15, 0.7, 6).translate(0, 0.35, 0), new THREE.SphereGeometry(0.13, 6, 4).translate(0, 0.72, 0), new THREE.BoxGeometry(0.4, 0.08, 0.08).translate(0, 0.5, 0)]), L({ color: 0xc23b2a }), hydrants);
   instanced(scene, mergeGeometries([new THREE.CylinderGeometry(0.1, 0.14, 10, 6).translate(0, 5, 0), new THREE.BoxGeometry(1.8, 0.1, 0.1).translate(0, 9.2, 0)]), L({ color: 0x5a4632 }), poles);
   { const pts = []; for (const [a, b, dy] of wires) for (let k = 0; k < 4; k++) { const t0 = k / 4, t1 = (k + 1) / 4, y = (t) => dy - Math.sin(t * Math.PI) * 0.7; pts.push(a[0] + (b[0] - a[0]) * t0, y(t0), a[1] + (b[1] - a[1]) * t0, a[0] + (b[0] - a[0]) * t1, y(t1), a[1] + (b[1] - a[1]) * t1); }
@@ -660,7 +659,7 @@ export async function buildWorld(scene, opts = {}) {
   // Hollis's place: the nearest apartment, dressed so you can tell from the street (home.js)
   const homeE = pickHome(entrances, spawn); if (homeE) homeFront(scene, grid, homeE);
   return { chunks, entrances, grid, heightAt, districtAt: districtOf, spawn, map, EDGE, PIER, SHORE, roads, lanes: roads.lanes, mask, outline, cars: { list: carList, meshes: carMeshes }, parking,
-    props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh } };
+    props: { lamps: lampList, lampMeshes, hydrants, hydrantMesh, signals, redMesh, greenMesh, bins } };   // bins: streetlife.js draws them (they can go over)
 }
 function buildPalms(scene, palms, R, add) {
   // trunk: a tapered, slightly bent cylinder; crown: drooping fronds

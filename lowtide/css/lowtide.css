@@ -258,6 +258,9 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 @media (prefers-reduced-motion:reduce){.health.low i{animation:none}.wasted b{transition:none}}
 .prompt{position:absolute;left:0;top:0;opacity:0;transition:opacity .15s;pointer-events:none}
 .prompt.on{opacity:1}
+.talkp .tk{position:absolute;left:0;top:0;translate:-50% -100%;display:flex;gap:8px;align-items:center;white-space:nowrap;font:800 13px/1 var(--fu);color:#FFF5EA;background:rgba(7,9,12,.85);border:2px solid var(--gold);padding:6px 9px;box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.talkp .tk kbd{position:static;translate:none;animation:none;display:inline-block;padding:3px 6px;font-size:12px;box-shadow:none;border-width:1px}
+.talkp .tk kbd::after{display:none}
 .prompt kbd{position:absolute;left:0;top:0;translate:-50% -100%;display:block;font:800 15px/1 var(--fu);padding:6px 9px;background:rgba(7,9,12,.85);color:#FFF5EA;border:2px solid var(--gold);box-shadow:0 3px 0 rgba(0,0,0,.4);animation:promptbob 1.4s ease-in-out infinite}
 .prompt kbd::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:8px;margin-left:-1px;background:var(--gold)}
 @keyframes promptbob{50%{translate:-50% calc(-100% - 4px)}}

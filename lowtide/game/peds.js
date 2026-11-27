@@ -184,6 +184,26 @@ export async function spawnPeds(scene, world, o = {}) {
     Object.assign(pd, { out: false, inCar: null, dead: false, rag: null, hp: 100, fear: null, cower: 0, stagger: 0, pause: 0, down: 0, free: null, anger: 0 });
     pd.h.group.visible = false;
   }
+  // the nearest pavement lane to where they are, to walk on from (without moving them)
+  function lane(pd) {
+    const g = pd.h.group.position; let best = null, bd = Infinity;
+    for (const l of lanes) { if (Math.abs(l.pts[0].x - g.x) > 160 || Math.abs(l.pts[0].z - g.z) > 160) continue; for (let i = 0; i < l.pts.length; i++) { const q = l.pts[i], d = (q.x - g.x) ** 2 + (q.z - g.z) ** 2; if (d < bd) { bd = d; best = { l, s: l.cum[i] }; } } }
+    if (!best) { const sp = spot(pd, g); best = { l: sp.l, s: sp.s }; }
+    pd.w = laneWalk(best.l.ends[R() < 0.5 ? 0 : 1], best.s); pd.s = 0; pd.side = 0;
+  }
+  // someone sleeping rough: worn, dirty clothes; streetlife.js places them
+  async function makeHomeless() {
+    const p = randomPerson(R); p.age = 30 + ((R() * 35) | 0);
+    const h = new Human(D, p, { lod: p.sex < 0.5 ? "female1605" : "male1591" });
+    const grime = [0x5a5040, 0x4a4a3a, 0x6a5a48, 0x3a3a40][(R() * 4) | 0];
+    h.group.traverse((m) => { if (!m.isMesh) return; m.receiveShadow = false; if (m.name === "outfit" || m.name === "shoes" || m.name === "hat") { m.material = m.material.clone(); m.material.color.multiply(new THREE.Color(grime)).multiplyScalar(1.6); } });
+    const mixer = new THREE.AnimationMixer(h.group), act = {};
+    for (const c of h.clips) { act[c.name] = mixer.clipAction(c); act[c.name].play(); act[c.name].setEffectiveWeight(0); }
+    act.idle.setEffectiveWeight(1);
+    const pd = { extra: true, homeless: true, out: false, voice: { female: p.sex < 0.5, pitch: 0.86 + R() * 0.12, age: p.age }, h, mixer, act, head: h.bones.find((b) => b.name === "head"), neck: h.bones.find((b) => b.name === "neck01"),
+      speed: 1.0 + R() * 0.3, run: 3.8 + R() * 1.0, wW: 0, rW: 0, cW: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0, side: 0, stagger: 0, down: 0, free: null, anger: 0, bumpT: -9, brave: R(), fear: null, cower: 0, pause: 0, w: null, s: 0, gW: 0, gT: 0, gest: null, look: 0, st: null };
+    h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
+  }
   // onto the street at (x, z): back to the nearest pavement and on with their day (running if scared)
   function toStreet(pd, x, z, opt = {}) {
     let best = null, bd = Infinity;
@@ -376,10 +396,13 @@ export async function spawnPeds(scene, world, o = {}) {
         if (pd.inCar) return;   // at the wheel (or getting in or out): vehicles.js has them
         if (pd.cop || pd.npc) { if (pd.dead && pd.rag && g.visible && pd.rag.step(dt)) pd.rag.pose(); return; }
         if (pd.driver && !pd.out) { g.visible = false; return; }
-        if (idx >= limit && !pd.driver) { g.visible = false; return; }
+        // someone living on the street (streetlife.js seats and poses them): theirs until something happens to them,
+        // then they're up and away like anyone else
+        if (pd.extra && !pd.out) { if (!(pd.rag || pd.dead || pd.down > 0 || pd.fear || pd.free)) return; pd.out = true; if (!pd.w) lane(pd); }
+        if (idx >= limit && !pd.driver && !pd.extra) { g.visible = false; return; }
         if (pd.dead) {   // a body: let it fall and settle; clear it away once nobody can see
           const dd = Math.hypot(g.position.x - px, g.position.z - pz);
-          if (dd > FAR * 0.6) { if (pd.driver) toPool(pd); else revive(pd, player.pos); return; }
+          if (dd > FAR * 0.6) { if (pd.driver || pd.extra) toPool(pd); else revive(pd, player.pos); return; }
           if (dd < NEAR && pd.rag && pd.rag.step(dt)) pd.rag.pose();
           return;
         }
@@ -408,7 +431,7 @@ export async function spawnPeds(scene, world, o = {}) {
           if (!pd.st) return;                                        // the lead just walked off with us
           return standing(pd, g, x, z, d, px, pz, dt);
         }
-        if (d > FAR) { if (pd.driver) { toPool(pd); return; } place(pd, player.pos); pointOn(pd.w, 0, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx; hz = tmp.dz; d = Math.hypot(x - px, z - pz); }
+        if (d > FAR) { if (pd.driver || pd.extra) { toPool(pd); return; } place(pd, player.pos); pointOn(pd.w, 0, tmp); x = tmp.x; z = tmp.z; hx = tmp.dx; hz = tmp.dz; d = Math.hypot(x - px, z - pz); }
 
         // the player a step ahead: wait; the player running at us: sidestep instead
         const rx = -hz, rz = hx;                                       // our right-hand side
@@ -496,7 +519,9 @@ export async function spawnPeds(scene, world, o = {}) {
       if (quiet <= 0) say(BUMP[(R() * BUMP.length) | 0], pd, "angry");
     },
     // kind: what happened ("gun", or "car" when someone's been hit by one) picks what they shout
-    knock, bumped, squareUp, makeCop, makeNpc, makeDriver, toStreet,
+    knock, bumped, squareUp, makeCop, makeNpc, makeDriver, makeHomeless, toStreet,
+    // someone you've spoken to: they stop and look, and maybe nod or shake their head
+    react(pd, gest, pause = 2) { if (pd.dead || pd.down > 0) return; pd.pause = Math.max(pd.pause || 0, pause); if (gest && pd.act[gest]) { pd.gest = gest; pd.gW = 1; pd.act[gest].time = 0; } },
     get drivers() { return peds.filter((pd) => pd.driver); },
     // someone from the crowd walking near (x, z) (not busy, not frightened, not standing about)
     nearest(x, z, r) {

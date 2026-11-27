@@ -71,6 +71,15 @@ Six original models (the Marlin saloon, Skiff hatchback, Heron estate, Tarpon pi
 
 `tools/carlab/index.html` renders every model side by side for checking them.
 
+## The street (`game/streetlife.js`)
+
+Pavement bins go over when you run into them, a car hits them or something blows up near them: the drum tips about its foot, the lid flies, the rubbish spills out (they're put back up once you're far away). Litter in the gutters and on the pavements (more in the port and downtown), cans and bottles you and cars kick down the street, black bags by the walls, sheets of paper blown along by the wind. People sleeping rough by shop fronts in the poorer districts, on cardboard with a blanket and a bag, some asking for change, some asleep, some with a shopping cart; hurt or scared, they get up and go. Cats on the pavements ("Simple Cat" by Drummyfish, CC0, `assets/models/cat/`), walking, sitting, washing, bolting from you, gunfire and cars.
+
+| Key | On foot |
+|---|---|
+| G (hold) | Lock on to the person in front of you |
+| Q / E (while holding G) | Greet / taunt them |
+
 ## The intro
 
 1. **Cloak Studios.** A cold open in the style of a big studio logo. Black, with room tone and a reversed swell sucking everything in. A line of light opens across the frame, the sound cuts to silence for a beat, then a hit (sub drop, punch, crack, a low D-minor braam and a struck-metal shimmer in a big dark hall) hard-cuts to the on-dark CL(O)AK lockup, over-exposed and split for a few frames. It pushes in slowly while it holds, a light sweep rakes across it, and the orb blinks twice (a soft tick on each close, a water-drop note on each open: D, then A). Then it all sinks to black.

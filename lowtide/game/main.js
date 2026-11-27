@@ -23,6 +23,7 @@ import { makeVoice } from "./voice.js?v=dev";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman, lockStory } from "./human.js?v=dev";
 import { HomeLife } from "./homelife.js?v=dev";
+import { StreetLife } from "./streetlife.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
 import { ROOMS_ON } from "./city/build.js?v=dev";
 
@@ -207,9 +208,18 @@ export async function start(o) {
     melee: "Unarmed, click or {F} throws punches. Land three in a row for a knockout. {4} or the wheel gets the bat.",
     "equip:melee": "The bat swings wide and hits hard. Click or {F}.",
     wanted: "Wanted. Get out of the flashing area on the radar and stay out of sight to lose them. One star, unarmed and still: they'll arrest you.",
-    "in-car": "{W} drives, {S} brakes and reverses, {A} {D} steer, {Space} is the handbrake. {E} gets out."
+    "in-car": "{W} drives, {S} brakes and reverses, {A} {D} steer, {Space} is the handbrake. {E} gets out.",
+    "near-person": "Hold {G} to talk to someone: the camera locks on them, then {Q} greets them and {E} taunts them."
   };
   vehicles.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
+  // the street's small life: bins, litter, people sleeping rough, cats, and talking to people
+  const HOLLIS = { female: true, pitch: 1.04, age: 30 };
+  const street = new StreetLife({ scene, world, player, rig, peds, vehicles, sfx: o.sfx || {}, root: o.hud, low: lowLoad,
+    say: (t, pd, mood) => { hud.subtitle(t); voice.speak(t, pd ? pd.voice : HOLLIS, pd ? heard(pd) : 0, mood); } });
+  street.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
+  try { await street.load(); await street.makePeople(); } catch (e) { console.warn("Lowtide: street life failed to load", e); }
+  wrap(vehicles, "blast", (x, y, z) => street.blast(x, z));
+  { const shot1 = arsenal.onShot; arsenal.onShot = (pos, hit) => { shot1(pos, hit); street.scare(pos.x, pos.z, 35); }; }
   arsenal.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); if (e === "equip:shotgun") hud.tipOnce("equip:pistol", TIPS["equip:pistol"]); };
   let tipClock = 0;
   const startTips = (dt) => {
@@ -300,7 +310,7 @@ export async function start(o) {
   };
   /* static scenery drawn as instances (palms, trees, benches, bins, containers, poles): one batch each, so
      no culling; on low, each batch is compacted to the instances within the view, a few times a second */
-  const dynamic = new Set([world.props.hydrantMesh, world.props.redMesh, world.props.greenMesh, ...vehicles.fleet.meshes, gore.splats, arsenal.fx.holes, arsenal.fx.brass, arsenal.fx.hulls]);
+  const dynamic = new Set([world.props.hydrantMesh, world.props.redMesh, world.props.greenMesh, ...vehicles.fleet.meshes, ...street.meshes, gore.splats, arsenal.fx.holes, arsenal.fx.brass, arsenal.fx.hulls]);
   if (world.props.lampMeshes) for (const k of ["pI", "hI", "lI"]) dynamic.add(world.props.lampMeshes[k]);
   const statics = [];
   scene.traverse((o) => { if (o.isInstancedMesh && !dynamic.has(o) && o.count > 8) { const n = o.count, m = new THREE.Matrix4(), c = new Float32Array(n * 2); for (let i = 0; i < n; i++) { o.getMatrixAt(i, m); c[i * 2] = m.elements[12]; c[i * 2 + 1] = m.elements[14]; } statics.push({ o, all: o.instanceMatrix.array.slice(), c, n }); } });
@@ -382,15 +392,17 @@ export async function start(o) {
     const indoors = !!interiors.inside;   // inside, the street holds still until you come back out
     if (!indoors) traffic.update(dw, player, vehicles, peds);
     life.update(dt, input, dw); gore.update(dw);
-    const usedDoor = input.locked && !life.down && !vehicles.driving && interiors.update(dt, input, camera);
+    // hold G to talk to someone (it takes Q and E while you do)
+    const talking = street.update(dw, input, { onFoot: input.locked && !life.down && !vehicles.driving && !vehicles.busy && !homeLife.active && !interiors.watching, indoors });
+    const usedDoor = input.locked && !life.down && !vehicles.driving && !talking && interiors.update(dt, input, camera);
     const down = life.down;   // dead or knocked flat: the body's a ragdoll, nobody's driving it
-    if (input.locked && !down) { const used = usedDoor || interiors.watching || homeLife.active || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used) arsenal.update(dt, input); startTips(dt); }
+    if (input.locked && !down) { const used = usedDoor || interiors.watching || homeLife.active || (indoors ? false : vehicles.update(dw, input)); inCar = vehicles.driving; if (!inCar && !used && !talking) arsenal.update(dt, input); startTips(dt); }
     else if (down) { vehicles.update(dw, { hit: () => false, down: () => false, keys: new Set() }); arsenal.tickFx(dw); player.aimYaw = null; rig.aim = 0; }
     if (inCar) { player.aimYaw = null; rig.aim = 0; arsenal.tickFx(dt); }
     rig.car = vehicles.car;
     if (homeLife.active) { player.animate(dw); homeLife.pose(dt); }
     else if (interiors.watching) { interiors.watchStep(dt); player.animate(dw); interiors.poseWatcher(dt); }
-    else if (input.locked && !inCar && !down && !vehicles.busy) { player.update(dw, input, rig.yaw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
+    else if (input.locked && !inCar && !down && !vehicles.busy) { player.update(dw, input, rig.yaw); street.afterPlayer(dw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down && !vehicles.busy) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);
     if (police && !indoors) police.update(dw);
@@ -412,7 +424,7 @@ export async function start(o) {
     pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); interiors.pauseTV(true); },
     lock() { input.lock(); },
     drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL, station: STATION, home: interiors.home }, opt)); },
-    get police() { return police; },
+    get police() { return police; }, get street() { return street; },
     // fast travel: check a map pick, why not now, go (done() once you've landed)
     travelCheck(x, z) { return travel.check(x, z); },
     travelBlock() { return travel.blocked(); },
@@ -429,7 +441,7 @@ export async function start(o) {
     },
     work() { const r = work.n ? work.ms / work.n : 0; work.ms = 0; work.n = 0; return r; },
     info() { return { calls: seen.calls, tris: seen.tris, ratio, stage: perf.stage }; },
-    rig, world, arsenal, vehicles, traffic, life, gore, get peds() { return peds; }, get police() { return police; }
+    rig, world, arsenal, vehicles, traffic, life, gore, get peds() { return peds; }
   };
   window.__lowtide = api;   // handy in the console; tests drive the player through it
   input.onLock = (locked) => { if (o.onLock) o.onLock(locked); };
