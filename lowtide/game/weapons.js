@@ -342,6 +342,8 @@ export class Arsenal {
       if (pull && !this.wheelOpen) { this.quick = 1.1; if (this.aim > 0.7) this.fire(); else this.pending = true; }
       if (this.pending && this.aim > 0.7) { this.pending = false; this.fire(); }
       if (input.down("Mouse0", "KeyE")) this.quick = Math.max(this.quick, 0.6);
+      // debug: the pistol on full auto (held down, it keeps going)
+      if (this.rapid && w.id === "pistol" && input.down("Mouse0", "KeyE") && !this.wheelOpen && this.aim > 0.7) { if (w.ammo <= 0) w.ammo = w.mag; this.fire(); }
     }
     // the pump: back, then forward; the spent hull flies out at the back of the stroke
     if (this.pumpT > 0) {
@@ -530,7 +532,7 @@ export class Arsenal {
     const w = this.weapon; if (!w || this.cool > 0) return;
     if (this.reloading > 0) { if (w.perShell && w.ammo > 0) this.reloading = 0; else return; }   // a shotgun can stop loading to shoot
     if (w.ammo <= 0) { if (this.sfx.dry) this.sfx.dry(); this.cool = 0.25; this.startReload(); this.hudSync(); return; }
-    w.ammo--; this.cool = w.rate; if (!w.ammo) this.emit("empty");
+    w.ammo--; this.cool = this.rapid && w.id === "pistol" ? 0.045 : w.rate; if (this.rapid && w.id === "pistol") w.ammo++; if (!w.ammo) this.emit("empty");
     const g = this.gun, muzzle = g.localToWorld(g.userData.muzzle.clone());
     this.camera.getWorldDirection(_dir); const base = _dir.clone(), sp = this.spread();
     const shots = [];
