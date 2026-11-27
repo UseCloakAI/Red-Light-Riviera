@@ -150,6 +150,13 @@ export class Hud {
     }
     if (this.blips) for (const b of this.blips()) {
       const bx = (b.x - player.pos.x) * S, bz = (b.z - player.pos.z) * S, rr = (b.heli ? 9 : b.foot ? 5 : 7) / k;
+      if (b.drone) {   // drones: a diamond (loudspeaker) or a triangle (strike: red, flashing once it's locked on), kept on the rim when off it
+        let dx = bx, dz = bz; const lim = (r - 12) / k, L = Math.hypot(dx, dz); if (L > lim) { dx *= lim / L; dz *= lim / L; }
+        const q = (b.drone === "strike" ? 8 : 7) / k; g.strokeStyle = "#0A0A0A"; g.lineWidth = 2 / k;
+        g.fillStyle = b.drone === "pa" ? "#3C6EFF" : b.locked ? (flash ? "#FF2A2A" : "#FFE0E0") : "#E5484D";
+        g.beginPath(); if (b.drone === "pa") { g.moveTo(dx, dz - q); g.lineTo(dx + q, dz); g.lineTo(dx, dz + q); g.lineTo(dx - q, dz); } else { g.moveTo(dx, dz - q); g.lineTo(dx + q * 0.9, dz + q * 0.75); g.lineTo(dx - q * 0.9, dz + q * 0.75); }
+        g.closePath(); g.fill(); g.stroke(); continue;
+      }
       g.fillStyle = ((b.x * 7 + b.z) | 0) % 2 === flash ? "#E5484D" : "#3C6EFF"; g.strokeStyle = "#0A0A0A"; g.lineWidth = 2 / k;
       g.beginPath(); if (b.heli) { g.rect(bx - rr, bz - rr, rr * 2, rr * 2); } else g.arc(bx, bz, rr, 0, Math.PI * 2); g.fill(); g.stroke();
     }

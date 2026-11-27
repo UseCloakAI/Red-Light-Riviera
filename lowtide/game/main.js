@@ -192,7 +192,7 @@ export async function start(o) {
   interiors.on = (e) => { if (e === "near-door") hud.tipOnce("door", "{E} goes in. Nearly every door on the island opens."); };
   // the police's hooks into everything else
   const homeLife = new HomeLife({ interiors, player, hud, sfx: o.sfx || {}, camera }); interiors.life = homeLife;
-  hud.home = interiors.home || null; hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets().concat(drones.targets());
+  hud.home = interiors.home || null; hud.blips = () => police.blips().concat(drones.blips()); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets().concat(drones.targets());
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
   { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }
@@ -228,7 +228,7 @@ export async function start(o) {
   const PA = { female: true, pitch: 0.82, age: 45 };
   const drones = new Drones({ scene, world, player, police, vehicles, life, hud, sfx: o.sfx || {}, rig, root: o.hud, low: lowLoad,
     describe: () => describe(player.human && player.human.p),
-    say: (t, dist, radio) => { hud.subtitle((radio ? "" : "Police drone: ") + t); voice.speak(t, PA, Math.min(dist, 40), "calm"); } });
+    say: (t, dist, radio) => { hud.subtitle((radio ? "" : "Police drone: ") + t); voice.speak(t, PA, 0, "calm", radio ? undefined : { pa: true }); } });
   { const shot1 = arsenal.onShot; arsenal.onShot = (pos, hit) => { shot1(pos, hit); street.scare(pos.x, pos.z, 35); }; }
   arsenal.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); if (e === "equip:shotgun") hud.tipOnce("equip:pistol", TIPS["equip:pistol"]); };
   let tipClock = 0;

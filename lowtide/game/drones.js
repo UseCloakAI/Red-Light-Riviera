@@ -176,9 +176,11 @@ export class Drones {
       return true;
     } else if (s.state === "dive") {
       // at where you'll be, steering hard until the last few metres; then committed
-      const tHit = dist / Math.max(12, sp), lead = this.targetVel.multiplyScalar(Math.min(1.1, tHit) * 0.85), aim = T.clone().add(lead);
+      // (not a perfect shot: it under-leads you, and each dive carries its own error of up to a couple of metres)
+      if (!s.err) { const a = Math.random() * 6.28, r = 0.6 + Math.random() * 1.6; s.err = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r); }
+      const tHit = dist / Math.max(12, sp), lead = this.targetVel.multiplyScalar(Math.min(1.0, tHit) * 0.5), aim = T.clone().add(lead).add(s.err);
       const wantDir = aim.sub(m.position).normalize(), cur = sp > 0.1 ? s.v.clone().normalize() : wantDir;
-      if (dist > 16) { const turn = Math.min(1, dt * 2.4); cur.lerp(wantDir, turn).normalize(); }   // inside 16 m it's committed
+      if (dist > 22) { const turn = Math.min(1, dt * 1.6); cur.lerp(wantDir, turn).normalize(); }   // inside 22 m it's committed
       const speed = Math.min(30, Math.max(sp, 8) + dt * 36); s.v.copy(cur).multiplyScalar(speed);
       const prev = m.position.clone(); m.position.addScaledVector(s.v, dt);
       m.lookAt(m.position.clone().add(s.v));
@@ -194,6 +196,13 @@ export class Drones {
   boom(at, harm) {
     if (this.vehicles.blast) this.vehicles.blast(at.x, at.y, at.z, 0.75, null, harm);
     if (this.rig) this.rig.shake = Math.max(this.rig.shake || 0, 1.2);
+  }
+  // on the radar: the loudspeakers (blue diamonds), the strike drones (red, flashing when they've got you)
+  blips() {
+    const out = [];
+    for (const d of this.pa) if (!d.leave) out.push({ x: d.m.position.x, z: d.m.position.z, drone: "pa" });
+    for (const s of this.strikes) if (!s.leave) out.push({ x: s.m.position.x, z: s.m.position.z, drone: "strike", locked: s.state === "lock" || s.state === "tip" || s.state === "dive" });
+    return out;
   }
   // things the guns can hit (weapons.js): every drone; a strike drone goes up at one round, a loudspeaker takes four
   targets() {

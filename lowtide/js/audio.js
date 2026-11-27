@@ -32,7 +32,7 @@
     g.gain.exponentialRampToValueAtTime(peak, t + a);
     g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
   }
-  var slowRate = 1, beatT = 0;
+  var slowRate = 1, beatT = 0, voices = [], paUntil = 0;
   function noise(kind, t, dur, loop) {
     var s = ctx.createBufferSource(); s.buffer = NZ[kind]; s.loop = !!loop; if (slowRate !== 1 && !loop) s.playbackRate.value = slowRate;
     if (loop) s.start(t, rnd() * 4); else s.start(t, rnd() * 2, dur);
@@ -628,7 +628,17 @@
       for (var i = 0; i < n; i++) { py = data[i] - px + 0.995 * py; px = data[i]; x[i] = py; }
       for (var j = 0; j < fade; j++) { var w = j / fade; x[j] *= w; x[n - 1 - j] *= w; }
       var buf = ctx.createBuffer(1, n, rate), src = ctx.createBufferSource(); buf.copyToChannel(x, 0); src.buffer = buf; src.playbackRate.value = slowRate;
+      // a police broadcast: everyone else stops talking, nobody else speaks until it's done; through a loudhailer, off the buildings
+      if (opt && opt.pa) {
+        for (var k = 0; k < voices.length; k++) { try { voices[k].g.gain.setTargetAtTime(0, t - 0.02, 0.03); voices[k].src.stop(t + 0.2); } catch (e) {} } voices = [];
+        var len = n / rate; paUntil = t + len + 0.4;
+        var pg = G(1.6 * (gain || 0.9)), hp = F("highpass", 450, 0.8), bp2 = F("lowpass", 3400, 0.9), pk2 = F("peaking", 1800, 1.2), shp = ctx.createWaveShaper(); pk2.gain.value = 8; shp.curve = SAT2;
+        chain(src, hp, pk2, bp2, shp, pg, out); send(pg, street(), 0.9); var ec = ctx.createDelay(1.2); ec.delayTime.value = 0.42; var eg = G(0.32); chain(pg, ec, eg, out); send(eg, street(), 0.6);
+        duck(len + 0.3, 0.3); src.start(t); return;
+      }
+      if (t < paUntil) return;
       var g = G((gain || 0.5) * att), lp = F("lowpass", 7000 / (1 + d / 25), 0.4), p = P(pan || 0);
+      var rec = { src: src, g: g }; voices.push(rec); src.onended = function () { var i = voices.indexOf(rec); if (i >= 0) voices.splice(i, 1); };
       if (opt && opt.scream) {   // a scream: driven into distortion, a fast shake on it, the throat's rasp brought up
         var pre = G(3.2), sh = ctx.createWaveShaper(), trem = G(1), tl = O("sine", 8 + rnd() * 5, t), tg = G(0.38), pk = F("peaking", 2900, 1.1);
         sh.curve = SAT2; pk.gain.value = 7; chain(tl, tg, trem.gain); tl.start(t); tl.stop(t + n / rate + 0.2);
@@ -841,14 +851,17 @@
     // the city-wide alert: an air-raid siren winding up and down across the whole island, far off and everywhere
     citySiren: function () {
       if (!ctx) return null; var t = now(), a = O("sawtooth", 220, t), b = O("sawtooth", 223, t), lp = F("lowpass", 1400, 0.7), g = G(0);
-      chain(a, lp); chain(b, lp); chain(lp, g, B.loop); send(g, street(), 0.8); a.start(t); b.start(t);
+      chain(a, lp); chain(b, lp); chain(lp, g, out); send(g, street(), 0.9); a.start(t); b.start(t);
+      // over everything: the street, the engines and the guns pulled down under it while it's going
+      B.sfx.gain.setTargetAtTime(0.5, t, 1.5); if (B.btrim) B.btrim.gain.setTargetAtTime(0.4, t, 1.5);
       var lfo = function () { var t2 = now(); for (var k = 0; k < 6; k++) { var s = t2 + k * 7; a.frequency.setTargetAtTime(640, s, 1.6); b.frequency.setTargetAtTime(646, s, 1.6); a.frequency.setTargetAtTime(230, s + 3.6, 1.8); b.frequency.setTargetAtTime(233, s + 3.6, 1.8); } };
       lfo(); var iv = setInterval(lfo, 40000);
-      return { set: function (v) { g.gain.setTargetAtTime(0.05 * v, now(), 0.5); }, stop: function () { clearInterval(iv); var t2 = now(); g.gain.setTargetAtTime(0, t2, 1.2); a.stop(t2 + 5); b.stop(t2 + 5); } };
+      return { set: function (v) { g.gain.setTargetAtTime(0.16 * v, now(), 0.5); }, stop: function () { clearInterval(iv); var t2 = now(); g.gain.setTargetAtTime(0, t2, 1.2); a.stop(t2 + 5); b.stop(t2 + 5); B.sfx.gain.setTargetAtTime(1, t2, 1.2); if (B.btrim) B.btrim.gain.setTargetAtTime(1, t2, 1.2); } };
     },
     // a lock-on beep (the drones), quieter with distance
     beep: function (dist, hi) {
-      if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 25), o = O("square", hi ? 1760 : 1320, t), g = G(0); perc(g, t, 0.002, 0.05 * v, 0.06); chain(o, g, B.sfx); o.start(t); o.stop(t + 0.12);
+      if (!ctx) return; var t = now(), o = O("square", hi ? 1980 : 1480, t), o2 = O("square", hi ? 2970 : 2220, t), g = G(0), lp = F("lowpass", 5200, 0.7);
+      perc(g, t, 0.002, hi ? 0.34 : 0.26, hi ? 0.09 : 0.07); chain(o, lp); var g2 = G(0.35); chain(o2, g2, lp); chain(lp, g, B.ui); o.start(t); o2.start(t); o.stop(t + 0.16); o2.stop(t + 0.16);
     },
     // a drone's motors: a whine that climbs as it dives (set by speed and distance)
     whine: function () {

@@ -42,11 +42,12 @@ export function makeVoice(sfx) {
   const render = (text, opt, done) => { if (!worker) return; const id = ++seq; waiting.set(id, done); worker.postMessage({ id, text, opt }); if (waiting.size > 12) waiting.delete(waiting.keys().next().value); };
   return {
     // text in person v's voice (v: { female, pitch, age }), heard from dist metres; mood: calm | scared | angry
-    speak(text, v, dist = 0, mood = "calm") {
-      if (!sfx || !sfx.pcm || !text || !v || dist > 60) return;
+    // opt.pa: a police broadcast (it cuts everyone else off, and nobody talks over it)
+    speak(text, v, dist = 0, mood = "calm", opt) {
+      if (!sfx || !sfx.pcm || !text || !v || (dist > 60 && !(opt && opt.pa))) return;
       const b = settingsFor(v), m = MOOD[mood] || MOOD.calm, line = clean(text); if (!line) return;
-      render(line, { variant: b.variant, pitch: clamp(b.pitch + m.pitch, 0, 99), speed: clamp(b.speed + m.speed, 80, 320), amplitude: m.amp, wordgap: mood === "calm" ? 1 : 0 },
-        (pcm, rate) => sfx.pcm(pcm, rate, mood === "calm" ? 0.9 : 1.05, dist, 0));
+      render(line, { variant: b.variant, pitch: clamp(b.pitch + m.pitch, 0, 99), speed: clamp(b.speed + m.speed - (opt && opt.pa ? 25 : 0), 80, 320), amplitude: m.amp, wordgap: mood === "calm" ? 1 : 0 },
+        (pcm, rate) => sfx.pcm(pcm, rate, mood === "calm" ? 0.9 : 1.05, dist, 0, opt));
     },
     // a scream in their own voice: high, fast, stretched, distorted and shaking
     scream(v, dist = 0) {
