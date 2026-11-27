@@ -9,6 +9,10 @@
    acceleration and braking, slows for bends, and brakes smoothly for whatever's
    ahead: the car in front, a red light, a queue, you, people in the road.
 
+   Routes: every driver is going somewhere. They pick a destination across town and plan the way there with A*
+   over the lanes (nav.js, on ngraph.path): quickest by time, turning left costs more than turning right, signals
+   cost a little. Get there and they pick somewhere new; get knocked off the route and they plan again.
+
    Junctions: on the avenues the signals cycle (a green for each pair of roads,
    then a moment of all-red to clear the box). Elsewhere drivers take turns: they
    look for anyone already in the junction or arriving sooner, avenues before
@@ -40,6 +44,7 @@ import * as THREE from "three";
 import { at } from "./city/roads.js?v=dev";
 import { MODEL, pickModel, pickPaint } from "./carmodels.js?v=dev";
 import { kin, ride } from "./carphys.js?v=dev";
+import { Nav } from "./nav.js?v=dev";
 
 const POOL = 44, NEAR_SPAWN = 80, FAR_SPAWN = 190, RECYCLE = 245, WB = 2.6;
 const CRUISE = { avenue: 13.5, ring: 8.5, street: 10, port: 8.5 };
@@ -92,6 +97,8 @@ export class Traffic {
     }
     for (const l of this.lanes) l.out = this.lanes.filter((m) => m.from === l.to && (m.e !== l.e || l.to.deg === 1));
     this.total = this.lanes.reduce((a, l) => a + l.L, 0);
+    // route planning over the lanes (nav.js): drivers head somewhere, cops take the quickest way to you
+    this.nav = new Nav(this.lanes, { signalled: (n) => this.signalled(n) });
     // the cars: a pool, each one of the island's models (vehicles.js gives them their model and physics: attach)
     this.cars = [];
     for (let i = 0; i < POOL; i++) this.cars.push({ i, active: false, ai: false, x: 0, z: 0, y: 0, a: 0, speed: 0, steer: 0, roll: 0, health: 100, hidden: true });
@@ -149,12 +156,28 @@ export class Traffic {
     return false;
   }
   // choose the street after the junction and lay the curve onto it
-  chooseNext(c) {
+  // the next lane on this driver's route: a cop's plan to you, or a driver's way to wherever they're going
+  // (somewhere new once they get there; a fresh route when they've been knocked off the old one)
+  nextLane(c) {
+    const l = c.w; if (!this.nav || l.turn) return null;
+    if (c.cop && c.pursue) { const r = c.croute, i = r ? r.indexOf(l) : -1, m = i >= 0 ? r[i + 1] : null; return m && l.out.includes(m) ? m : null; }
+    if (c.dest === l) c.dest = null;
+    if (!c.dest) { c.dest = this.nav.destination(l, this.R); c.route = null; }
+    let i = c.route ? c.route.indexOf(l) : -1;
+    if (i < 0 || i + 1 >= c.route.length) { c.route = this.nav.route(l, c.dest); i = 0; if (!c.route || c.route.length < 2) { c.dest = c.route = null; return null; } }
+    const m = c.route[i + 1]; return l.out.includes(m) ? m : null;
+  }
+  // choose the street after the junction (the route's, else a likely one at random) and lay the curve onto it
+  chooseNext(c, want = this.nextLane(c)) {
     const l = c.w, outs = l.out; if (!outs.length) return null;
     const P = l.pts[l.pts.length - 1], P0 = l.pts[l.pts.length - 2], h = Math.atan2(P.x - P0.x, P.z - P0.z);
-    const ws = outs.map((m) => { const d = Math.abs(Math.atan2(Math.sin(Math.atan2(m.pts[1].x - m.pts[0].x, m.pts[1].z - m.pts[0].z) - h), Math.cos(Math.atan2(m.pts[1].x - m.pts[0].x, m.pts[1].z - m.pts[0].z) - h))); return d < 0.5 ? 3 : d < 2.4 ? 1.2 : 0.15; });
-    let r = this.R() * ws.reduce((a, b) => a + b, 0), k = 0; while (r > ws[k] && k < ws.length - 1) r -= ws[k++];
-    const m = outs[k], Q = m.pts[0], Q1 = m.pts[1], t1 = { x: P.x - P0.x, z: P.z - P0.z }, t2 = { x: Q1.x - Q.x, z: Q1.z - Q.z };
+    let m = want && outs.includes(want) ? want : null;
+    if (!m) {
+      const ws = outs.map((m) => { const d = Math.abs(Math.atan2(Math.sin(Math.atan2(m.pts[1].x - m.pts[0].x, m.pts[1].z - m.pts[0].z) - h), Math.cos(Math.atan2(m.pts[1].x - m.pts[0].x, m.pts[1].z - m.pts[0].z) - h))); return d < 0.5 ? 3 : d < 2.4 ? 1.2 : 0.15; });
+      let r = this.R() * ws.reduce((a, b) => a + b, 0), k = 0; while (r > ws[k] && k < ws.length - 1) r -= ws[k++];
+      m = outs[k];
+    }
+    const Q = m.pts[0], Q1 = m.pts[1], t1 = { x: P.x - P0.x, z: P.z - P0.z }, t2 = { x: Q1.x - Q.x, z: Q1.z - Q.z };
     let C = null; const den = t1.x * t2.z - t1.z * t2.x;
     if (Math.abs(den) > 0.05) { const u = ((Q.x - P.x) * t2.z - (Q.z - P.z) * t2.x) / den; if (u > 0 && u < 60) C = { x: P.x + t1.x * u, z: P.z + t1.z * u }; }
     if (!C) C = { x: (P.x + Q.x) / 2 * 0.5 + l.to.x * 0.5, z: (P.z + Q.z) / 2 * 0.5 + l.to.z * 0.5 };
@@ -207,7 +230,7 @@ export class Traffic {
   // a pool car made over as a new one: a model, a paint, no dents, nobody's yet
   fresh(c, m) {
     if (this.V) { this.V.fleet.drop(c); this.V.dyn.delete(c); this.V.init(c, m, pickPaint(m, this.R)); }
-    Object.assign(c, { hidden: false, charred: false, camber: null, bent: null, flip: 0, flipV: 0, held: false, park: null, unpark: null, occ: null, door: 0, door2: 0, coast: false, wasAi: false, aimed: false, rage: false, swerve: 0 });
+    Object.assign(c, { route: null, dest: null, croute: null, planT: 0, hidden: false, charred: false, camber: null, bent: null, flip: 0, flipV: 0, held: false, park: null, unpark: null, occ: null, door: 0, door2: 0, coast: false, wasAi: false, aimed: false, rage: false, swerve: 0 });
   }
   // out of the pool (parked for good, or gone)
   release(c) { if (this.V) { this.V.fleet.drop(c); this.V.dyn.delete(c); } Object.assign(c, { active: false, ai: false, taken: false, hidden: true, occ: null, park: null, unpark: null, held: false }); if (c.obb) { this.world.grid.remove(c.obb); c.obb = null; } }
@@ -462,7 +485,7 @@ export class Traffic {
   }
   /* ---- police cars ---- */
   get sirens() { return this._sir || (this._sir = []); }
-  uncop(c) { c.cop = false; c.pursue = false; c.siren = false; c.deployed = false; c.target = null; c.yieldT = 0; }
+  uncop(c) { c.cop = false; c.pursue = false; c.siren = false; c.deployed = false; c.target = null; c.yieldT = 0; c.croute = null; }
   // a patrol car out of sight around `near`, sent after `target` ({x, z}); returns the car or null
   spawnCop(near, target, opt = {}) {
     const lo = opt.min ?? 70, hi = opt.max ?? 140;
@@ -488,8 +511,22 @@ export class Traffic {
     for (const l of this.lanes) for (let i = 0; i < l.pts.length - 1; i += 2) { const p = l.pts[i], n = l.pts[i + 1], d = Math.hypot(p.x - c.x, p.z - c.z) - ((n.x - p.x) * fx + (n.z - p.z) * fz) * 2; if (d < bd) { bd = d; best = { l, s: l.cum[i] }; } }
     if (best) { c.w = best.l; c.s = best.s; c.next = null; }
   }
-  /* a car in pursuit. On the road network while the target's far or out of sight: lane by lane, taking the turn at
-     each junction that gets closer, through red lights with the siren going, but at speeds the tyres can hold through
+  /* a cop's route to you (A* over the lanes, nav.js), planned again every second or so. Aimed a little ahead of where
+     you're driving, and steered off the streets the other units are already coming down (plus a bit of their own
+     taste in streets), so a few cars come at you from different sides and cut you off rather than queue behind. */
+  planCop(c, tx, tz, driving) {
+    c.planT = 0.9 + this.R() * 0.4;
+    if (driving) { const lead = Math.min(3, 1 + Math.hypot(tx - c.x, tz - c.z) / 60); tx += (driving.vx ?? Math.sin(driving.a) * driving.speed) * lead; tz += (driving.vz ?? Math.cos(driving.a) * driving.speed) * lead; }
+    const from = c.w.turn ? c.w.lane : c.w, goal = this.nav.nearest(tx, tz); if (!from || !goal) return;
+    const used = new Map();
+    for (const o of this.cars) if (o !== c && o.active && o.cop && o.pursue && o.croute) o.croute.slice(0, -2).forEach((l) => used.set(l, (used.get(l) || 0) + 1));
+    const r = this.nav.route(from, goal, (l) => (used.get(l) || 0) * 7 + ((l.nid * 7 + c.i * 13) % 5) * 0.5);
+    const old = c.croute; c.croute = r;
+    // changed our mind about the next junction while there's still room to: pick it again
+    if (r && c.next && c.next.lane && old && c.w.L - c.s > 8 && r[r.indexOf(from) + 1] !== c.next.lane) c.next = null;
+  }
+  /* a car in pursuit. On the road network while the target's far or out of sight: lane by lane along an A* route to
+     you (planCop) that's planned again every second, through red lights with the siren going, but at speeds the tyres can hold through
      a bend, following slower traffic until the other side of the road is clear to pass. Close and with a clear line:
      straight at where you'll be (your speed and heading, further ahead the further off they are), up beside you on
      foot and out; in a car, onto your rear quarter for a PIT, or into you to box you in. */
@@ -503,10 +540,12 @@ export class Traffic {
     let tx, tz, want;
     if (!c.los || c.mode === "road" && d > 30) {
       if (c.mode !== "road") { c.mode = "road"; this.snapCop(c); }
+      if ((c.planT = (c.planT || 0) - dt) <= 0) this.planCop(c, tx0, tz0, driving);
       if (!c.w.turn && !c.next && c.w.L - c.s < 25) {
-        const outs = c.w.out; let best = null, bd = Infinity;
-        for (const m of outs) { const e = m.pts[m.pts.length - 1], dd = Math.hypot(e.x - tx0, e.z - tz0); if (dd < bd) { bd = dd; best = m; } }
-        if (best) { const save = c.w.out; c.w.out = [best]; c.next = this.chooseNext(c); c.w.out = save; }
+        // the planned turn; with no plan, whichever way ends up nearest
+        let best = this.nextLane(c);
+        if (!best) { let bd = Infinity; for (const m of c.w.out) { const e = m.pts[m.pts.length - 1], dd = Math.hypot(e.x - tx0, e.z - tz0); if (dd < bd) { bd = dd; best = m; } } }
+        if (best) c.next = this.chooseNext(c, best);
       }
       // the bend ahead sets the speed (a cop car can corner harder than traffic, not through walls)
       const k = Math.max(bend(c, c.s, 10), bend(c, c.s + 8, 14), bend(c, c.s + 18, 16));
