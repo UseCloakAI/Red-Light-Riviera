@@ -71,11 +71,15 @@ export class Hud {
     this.tip(text);
   }
   // a line of overheard speech, bottom centre, like film subtitles
-  subtitle(text) {
+  // opt.priority: a police broadcast; it holds the line until it's been read, and nothing else replaces it meanwhile
+  subtitle(text, opt) {
     const el = this.subEl || (this.subEl = this.root.querySelector(".subtitle"));
     if (!el) return;
-    el.textContent = text; el.classList.add("on");
-    clearTimeout(this.subT); this.subT = setTimeout(() => el.classList.remove("on"), 2400 + text.length * 45);
+    const now = performance.now(), hold = 2400 + text.length * 45;
+    if (!(opt && opt.priority) && now < (this.subLock || 0)) return;
+    if (opt && opt.priority) this.subLock = now + 1200 + text.length * 62;
+    el.textContent = text; el.classList.add("on"); el.classList.toggle("pa", !!(opt && opt.priority));
+    clearTimeout(this.subT); this.subT = setTimeout(() => el.classList.remove("on", "pa"), Math.max(hold, opt && opt.priority ? this.subLock - now : 0));
   }
   // armed: { name, ammo, left, reloading } or null
   weapon(w) {

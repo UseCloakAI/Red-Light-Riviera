@@ -481,8 +481,8 @@ export class Arsenal {
   findTarget(cone, range) {
     if (!this.peds) return null;
     this.camera.getWorldDirection(_dir); let best = null, ba = cone;
-    for (let i = 0; i < Math.min(this.peds.limit, this.peds.peds.length); i++) {
-      const pd = this.peds.peds[i]; if (pd.dead || !pd.h.group.visible) continue;
+    for (let i = 0; i < this.peds.peds.length; i++) {
+      const pd = this.peds.peds[i]; if (pd.dead || !pd.h.group.visible || pd.inCar || (i >= this.peds.limit && !pd.cop && !pd.npc && !pd.extra && !pd.driver)) continue;
       pd.B = pd.B || findBones(pd.h.group); if (!pd.B) continue;
       const c = wpos(pd.B.chest, _t), to = _v.copy(c).sub(this.camera.position), d = to.length();
       if (d > range || d < 1) continue;
@@ -614,7 +614,7 @@ export class Arsenal {
     if (this.peds) {
       const P = this.peds.peds;
       for (let i = 0; i < P.length; i++) {
-        const pd = P[i], g = pd.h.group; if (pd.dead || !g.visible || (i >= this.peds.limit && !pd.cop && !pd.npc)) continue;
+        const pd = P[i], g = pd.h.group; if (pd.dead || !g.visible || (i >= this.peds.limit && !pd.cop && !pd.npc && !pd.extra && !pd.driver)) continue;
         const gp = g.position; if (Math.abs(gp.x - o.x) > best + 1 || Math.abs(gp.z - o.z) > best + 1) continue;
         pd.B = pd.B || findBones(g); if (!pd.B) continue;
         const hc = wpos(pd.B.head, _hc); hc.y += 0.07;

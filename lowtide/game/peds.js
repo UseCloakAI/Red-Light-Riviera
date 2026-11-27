@@ -20,6 +20,13 @@ import { lanePoint, linkPath, laneEndPos } from "./world.js?v=dev";
 import { AMBIENT, BUMP, PANIC, STRUCK, SHOVE, FIGHT, WON, BACKOFF, BRAWL } from "./lines.js?v=dev";
 const HANDS = ["Don't shoot!", "Okay, okay! Take it easy!", "Please, I've got kids!", "Whoa, whoa, whoa!", "I don't want any trouble!"];
 import { findBones, Ragdoll, ik, wpos } from "./rig.js?v=dev";
+import { crunch } from "./ps1.js?v=dev";
+// the same diet main.js puts everyone on at startup, for people made after it (the street's sleepers): no sheen or clearcoat
+// (left on, they were the only people on the big physical shader, which some GPUs at high quality turned into a smear across the screen)
+function lean(g) {
+  g.traverse((m) => { const mt = m.material; if (mt && mt.isMeshPhysicalMaterial) { mt.sheen = 0; mt.clearcoat = 0; mt.iridescence = 0; mt.transmission = 0; mt.specularIntensity = 0.5; mt.needsUpdate = true; } });
+  try { crunch(g, !(window.LT_SET && LT_SET.get("ps1") === false)); } catch (e) { /* fine without */ }
+}
 
 const NEAR = 70, FAR = 150, SPAWN_MIN = 45, SPAWN_MAX = 120, CROSS_CHANCE = 0.35;
 const PAIRS = 0.14, SOLO = 0.08;          // share of the crowd standing about, in pairs and alone
@@ -204,7 +211,7 @@ export async function spawnPeds(scene, world, o = {}) {
     act.idle.setEffectiveWeight(1);
     const pd = { extra: true, homeless: true, out: false, voice: { female: p.sex < 0.5, pitch: 0.86 + R() * 0.12, age: p.age }, h, mixer, act, head: h.bones.find((b) => b.name === "head"), neck: h.bones.find((b) => b.name === "neck01"),
       speed: 1.0 + R() * 0.3, run: 3.8 + R() * 1.0, wW: 0, rW: 0, cW: 0, hp: 100, dead: false, rag: null, vx: 0, vz: 0, side: 0, stagger: 0, down: 0, free: null, anger: 0, bumpT: -9, brave: R(), fear: null, cower: 0, pause: 0, w: null, s: 0, gW: 0, gT: 0, gest: null, look: 0, st: null };
-    h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
+    lean(h.group); h.group.visible = false; scene.add(h.group); peds.push(pd); return pd;
   }
   // onto the street at (x, z): back to the nearest pavement and on with their day (running if scared)
   function toStreet(pd, x, z, opt = {}) {

@@ -154,7 +154,15 @@ export class Ragdoll {
         else { const k = Math.max(0, 1 - (MU_K * d + 1e-4) / t); p.x = o.x + tx * k; p.z = o.z + tz * k; }
       }
     }
+    // a blown-up solve (NaN, or a point flung off into the sky) would smear the body across the map: put it back
+    if (!this.sane()) { for (let i = 0; i < this.p.length; i++) { if (this.good && this.good[i]) this.p[i].copy(this.good[i]); this.o[i].copy(this.p[i]); } this.sleep = 2; return false; }
+    if (!this.good) this.good = this.p.map((p) => p.clone()); else for (let i = 0; i < this.p.length; i++) this.good[i].copy(this.p[i]);
     this.sleep = moved < 2e-7 ? this.sleep + dt : 0;
+    return true;
+  }
+  sane() {
+    const h = this.p[0]; if (!isFinite(h.x + h.y + h.z) || Math.abs(h.y) > 500) return false;
+    for (const p of this.p) if (!isFinite(p.x + p.y + p.z) || p.distanceToSquared(h) > 9) return false;
     return true;
   }
   fix(a, b, L, minOnly) {
@@ -197,6 +205,7 @@ export class Ragdoll {
   }
   // turn the skeleton to match the points
   pose() {
+    if (!this.sane()) return;
     const B = this.B, P = this.p, d = (a, b) => _T.copy(P[I[b]]).sub(P[I[a]]).normalize();
     // pelvis: full orientation from up (pelvis to neck) and across (left hip to right hip)
     const want = basis(P[I.hips], P[I.neck], P[I.thL], P[I.thR], _m1);
