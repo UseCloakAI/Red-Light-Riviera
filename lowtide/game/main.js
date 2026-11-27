@@ -24,6 +24,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createHuman, lockStory } from "./human.js?v=dev";
 import { HomeLife } from "./homelife.js?v=dev";
 import { StreetLife } from "./streetlife.js?v=dev";
+import { Drones, describe } from "./drones.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
 import { ROOMS_ON } from "./city/build.js?v=dev";
 
@@ -191,7 +192,7 @@ export async function start(o) {
   interiors.on = (e) => { if (e === "near-door") hud.tipOnce("door", "{E} goes in. Nearly every door on the island opens."); };
   // the police's hooks into everything else
   const homeLife = new HomeLife({ interiors, player, hud, sfx: o.sfx || {}, camera }); interiors.life = homeLife;
-  hud.home = interiors.home || null; hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets();
+  hud.home = interiors.home || null; hud.blips = () => police.blips(); travel.police = police; interiors.police = police; travel.interiors = interiors; arsenal.targets = () => police.targets().concat(drones.targets());
   life.onRespawn = (jail) => { police.reset(); if (jail) stats.busted++; };
   police.onLevel = (n) => { stats.maxWanted = Math.max(stats.maxWanted, n); if (n > 0) hud.tipOnce("wanted", TIPS.wanted); };
   { const enter0 = vehicles.enter.bind(vehicles); vehicles.enter = (c) => { if (c.cop) police.crime("copcar", c); else if (c.ai) police.crime("carjack", c); return enter0(c); }; }
@@ -223,6 +224,11 @@ export async function start(o) {
   street.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
   try { await street.load(); await street.makePeople(); } catch (e) { console.warn("Lowtide: street life failed to load", e); }
   wrap(vehicles, "blast", (x, y, z) => street.blast(x, z));
+  // five stars: the drones (loudspeakers with your description, a citywide siren, strike drones that dive at you)
+  const PA = { female: true, pitch: 0.82, age: 45 };
+  const drones = new Drones({ scene, world, player, police, vehicles, life, hud, sfx: o.sfx || {}, rig, root: o.hud, low: lowLoad,
+    describe: () => describe(player.human && player.human.p),
+    say: (t, dist, radio) => { hud.subtitle((radio ? "" : "Police drone: ") + t); voice.speak(t, PA, Math.min(dist, 40), "calm"); } });
   { const shot1 = arsenal.onShot; arsenal.onShot = (pos, hit) => { shot1(pos, hit); street.scare(pos.x, pos.z, 35); }; }
   arsenal.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); if (e === "equip:shotgun") hud.tipOnce("equip:pistol", TIPS["equip:pistol"]); };
   let tipClock = 0;
@@ -410,6 +416,7 @@ export async function start(o) {
     else if (!inCar && !down && !vehicles.busy) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);
     if (police && !indoors) police.update(dw);
+    drones.update(dw, indoors);
     if (!input.locked || life.down || vehicles.driving) interiors.update(dt, { hit: () => false }, camera);
     rig.update(dt, input, player); interiors.watchCam(camera, dt); homeLife.cam(camera, dt);
     sky.update(t, player.pos, camera.position);
@@ -428,7 +435,7 @@ export async function start(o) {
     pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); interiors.pauseTV(true); },
     lock() { input.lock(); },
     drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL, station: STATION, home: interiors.home }, opt)); },
-    get police() { return police; }, get street() { return street; },
+    get police() { return police; }, get street() { return street; }, get __drones() { return drones; },
     // fast travel: check a map pick, why not now, go (done() once you've landed)
     travelCheck(x, z) { return travel.check(x, z); },
     travelBlock() { return travel.blocked(); },

@@ -181,7 +181,7 @@ export class Vehicles {
     if (this.onCarDestroyed) this.onCarDestroyed(c);
   }
   // a blast at (x, y, z): the show, and everything nearby takes it
-  blast(x, y, z, size = 1, from = null) {
+  blast(x, y, z, size = 1, from = null, harm = 1) {
     const at = new THREE.Vector3(x, y, z), P = this.player, dist = Math.hypot(x - P.pos.x, z - P.pos.z);
     if (this.flash) { this.flash.position.set(x, y + 1, z); this.flash.visible = true; this.flashT = 0.4; }
     if (this.fx) {
@@ -195,8 +195,8 @@ export class Vehicles {
     if (this.sfx.explosion) this.sfx.explosion(dist); else if (this.sfx.boom) this.sfx.boom(dist * 0.3, 0);
     if (this.rig) { const k = Math.max(0, 1 - dist / 90); this.rig.shake = Math.max(this.rig.shake || 0, 2.2 * k); this.rig.recoil = (this.rig.recoil || 0) + 0.06 * k; }
     // the people: you, the street
-    if (this.life && dist < 11) { const k = 1 - dist / 11; this.life.damage((this.driving ? 70 : 130) * Math.pow(k, 1.2), { point: at, dir: new THREE.Vector3(P.pos.x - x, 1.4, P.pos.z - z).normalize(), force: 10 * k, cause: "blast" }); }
-    if (this.peds) { for (const pd of this.peds.peds) { if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z); if (d < 9) this.peds.damage(pd, { point: g.clone().setY(g.y + 1), dir: new THREE.Vector3(g.x - x, 1.3, g.z - z).normalize(), damage: d < 6 ? 300 : 60, from: { x, z }, force: 10 * (1 - d / 9) + 2 }); } this.peds.alarm(x, z, 80); }
+    if (this.life && dist < 11) { const k = 1 - dist / 11; this.life.damage((this.driving ? 70 : 130) * harm * Math.pow(k, 1.2 + (1 - harm) * 2), { point: at, dir: new THREE.Vector3(P.pos.x - x, 1.4, P.pos.z - z).normalize(), force: 10 * k, cause: "blast" }); }
+    if (this.peds) { for (const pd of this.peds.peds) { if (pd.dead || !pd.h.group.visible) continue; const g = pd.h.group.position, d = Math.hypot(g.x - x, g.z - z); if (d < 9) this.peds.damage(pd, { point: g.clone().setY(g.y + 1), dir: new THREE.Vector3(g.x - x, 1.3, g.z - z).normalize(), damage: (d < 6 ? 300 : 60) * harm, from: { x, z }, force: 10 * (1 - d / 9) + 2 }); } this.peds.alarm(x, z, 80); }
     if (this.traffic) this.traffic.panic(x, z, 90);
     // other cars take it: shoved away, dented on the near side (and may go up too); lamp posts go over
     for (const o of this.all()) {

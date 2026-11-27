@@ -377,3 +377,9 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .cc-row.more button{width:100%;display:flex;justify-content:space-between;background:none;border:1px dashed rgba(247,242,234,.25);color:rgba(247,242,234,.75);font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:10px 12px;cursor:pointer}
 .cc-row.more button:hover{color:var(--gold);border-color:var(--gold)}
 .cc-row.note p{margin:0;font-size:12px;line-height:1.5;opacity:.65}
+
+/* five stars: the strike drone's lock */
+.drone-warn{position:absolute;left:50%;top:14%;translate:-50% 0;font:900 22px/1 var(--fu);letter-spacing:.12em;color:#ff3030;text-shadow:0 0 10px rgba(255,40,40,.8),2px 2px 0 #000;opacity:0;pointer-events:none;z-index:25}
+.drone-warn.on{opacity:1;animation:dronewarn .35s steps(2) infinite}
+@keyframes dronewarn{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.drone-warn.on{animation:none}}

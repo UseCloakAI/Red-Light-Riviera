@@ -71,6 +71,10 @@ Six original models (the Marlin saloon, Skiff hatchback, Heron estate, Tarpon pi
 
 `tools/carlab/index.html` renders every model side by side for checking them.
 
+## Five stars (`game/drones.js`)
+
+A citywide siren winds up and down over the island. Police loudspeaker drones cruise the streets round you with searchlights, broadcasting a wanted notice that describes you as you look right now (a woman or a man, roughly how old, the hair, the outfit you're wearing, change it in the wardrobe and the description changes) and where you were last seen. Strike drones come in high, lock on (a red line on you, a beep that speeds up, DRONE LOCKED ON), nose over, and dive at where you'll be, steering until the last 16 m. Break the line of sight during the lock (cover, indoors) and it has to find you again; cut sideways the moment it noses over and it misses (the blast still knocks you about); stand still and it won't. They can be shot down: one round for a strike drone, four for a loudspeaker.
+
 ## The street (`game/streetlife.js`)
 
 Pavement bins go over when you run into them, a car hits them or something blows up near them: the drum tips about its foot, the lid flies, the rubbish spills out (they're put back up once you're far away). Litter in the gutters and on the pavements (more in the port and downtown), cans and bottles you and cars kick down the street, black bags by the walls, sheets of paper blown along by the wind. People sleeping rough by shop fronts in the poorer districts, on cardboard with a blanket and a bag, some asking for change, some asleep, some with a shopping cart; hurt or scared, they get up and go. Cats on the pavements ("Simple Cat" by Drummyfish, CC0, `assets/models/cat/`), walking, sitting, washing, bolting from you, gunfire and cars.

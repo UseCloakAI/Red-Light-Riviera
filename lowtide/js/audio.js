@@ -838,6 +838,24 @@
       if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 2600, 0.6), g = G(0); chain(n, bp, g, B.loop);
       return { set: function (s, d) { g.gain.setTargetAtTime(0.06 * s / (1 + d / 10), now(), 0.1); }, stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.3); n.stop(t2 + 1.5); } };
     },
+    // the city-wide alert: an air-raid siren winding up and down across the whole island, far off and everywhere
+    citySiren: function () {
+      if (!ctx) return null; var t = now(), a = O("sawtooth", 220, t), b = O("sawtooth", 223, t), lp = F("lowpass", 1400, 0.7), g = G(0);
+      chain(a, lp); chain(b, lp); chain(lp, g, B.loop); send(g, street(), 0.8); a.start(t); b.start(t);
+      var lfo = function () { var t2 = now(); for (var k = 0; k < 6; k++) { var s = t2 + k * 7; a.frequency.setTargetAtTime(640, s, 1.6); b.frequency.setTargetAtTime(646, s, 1.6); a.frequency.setTargetAtTime(230, s + 3.6, 1.8); b.frequency.setTargetAtTime(233, s + 3.6, 1.8); } };
+      lfo(); var iv = setInterval(lfo, 40000);
+      return { set: function (v) { g.gain.setTargetAtTime(0.05 * v, now(), 0.5); }, stop: function () { clearInterval(iv); var t2 = now(); g.gain.setTargetAtTime(0, t2, 1.2); a.stop(t2 + 5); b.stop(t2 + 5); } };
+    },
+    // a lock-on beep (the drones), quieter with distance
+    beep: function (dist, hi) {
+      if (!ctx) return; var t = now(), v = 1 / (1 + (dist || 0) / 25), o = O("square", hi ? 1760 : 1320, t), g = G(0); perc(g, t, 0.002, 0.05 * v, 0.06); chain(o, g, B.sfx); o.start(t); o.stop(t + 0.12);
+    },
+    // a drone's motors: a whine that climbs as it dives (set by speed and distance)
+    whine: function () {
+      if (!ctx) return null; var t = now(), o = O("sawtooth", 180, t), o2 = O("square", 361, t), bp = F("bandpass", 900, 1.5), g = G(0); chain(o, bp); chain(o2, bp); chain(bp, g, B.loop); o.start(t); o2.start(t);
+      return { set: function (sp, dist) { var t2 = now(), f = 160 + sp * 22; o.frequency.setTargetAtTime(f, t2, 0.08); o2.frequency.setTargetAtTime(f * 2.01, t2, 0.08); bp.frequency.setTargetAtTime(600 + sp * 40, t2, 0.1); g.gain.setTargetAtTime(0.06 / (1 + dist / 18), t2, 0.1); },
+        stop: function () { var t2 = now(); g.gain.setTargetAtTime(0, t2, 0.05); o.stop(t2 + 0.4); o2.stop(t2 + 0.4); } };
+    },
     // tyres letting go: a squeal (narrow noise, a little wobble), set by how much they're sliding
     skid: function () {
       if (!ctx) return null; var t = now(), n = noise("white", t, 0, true), bp = F("bandpass", 1300, 7), bp2 = F("bandpass", 1300, 3), g = G(0); chain(n, bp, bp2, g, B.loop);
