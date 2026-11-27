@@ -396,3 +396,6 @@ kbd{display:inline-block;font:700 10px/1 var(--fu);letter-spacing:.06em;border:1
 .dbg-hold{position:absolute;left:50%;bottom:16%;translate:-50% 0;width:180px;height:6px;background:rgba(0,0,0,.5);border:1px solid var(--gold);opacity:0;z-index:60}
 .dbg-hold.on{opacity:1}
 .dbg-hold::after{content:"";position:absolute;inset:0;transform-origin:left;transform:scaleX(var(--k,0));background:var(--gold)}
+
+/* a police broadcast on the subtitle line */
+.subtitle.pa{color:#ffd9d9;text-shadow:0 0 8px rgba(255,40,40,.55),2px 2px 0 #000}

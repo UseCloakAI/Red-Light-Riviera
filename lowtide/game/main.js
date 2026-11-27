@@ -231,7 +231,7 @@ export async function start(o) {
   const PA = { female: true, pitch: 0.82, age: 45 };
   const drones = new Drones({ scene, world, player, police, vehicles, life, hud, sfx: o.sfx || {}, rig, root: o.hud, low: lowLoad,
     describe: () => describe(player.human && player.human.p),
-    say: (t, dist, radio) => { hud.subtitle((radio ? "" : "Police drone: ") + t); voice.speak(t, PA, 0, "calm", radio ? undefined : { pa: true }); } });
+    say: (t, dist, radio) => { hud.subtitle((radio ? "" : "Police drone: ") + t, { priority: !radio }); voice.speak(t, PA, 0, "calm", radio ? undefined : { pa: true }); } });
   { const shot1 = arsenal.onShot; arsenal.onShot = (pos, hit) => { shot1(pos, hit); street.scare(pos.x, pos.z, 35); }; }
   arsenal.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); if (e === "equip:shotgun") hud.tipOnce("equip:pistol", TIPS["equip:pistol"]); };
   let tipClock = 0;
