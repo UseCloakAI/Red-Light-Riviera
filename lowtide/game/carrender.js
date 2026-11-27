@@ -45,28 +45,34 @@ class Detail {
     this.c = c; this.G = G;
     this.mat = bodyMaterial(false); this.mat.userData.u.uPaint.value.set(c.paint ?? 0xffffff);
     this.glassMat = fleet.glassMat;
-    this.body = own(G.body); this.glass = own(G.glass); this.door = own(G.door); this.doorGlass = own(G.doorGlass);
+    this.body = own(G.body); this.glass = own(G.glass); this.door = own(G.door); this.doorGlass = own(G.doorGlass); this.door2 = own(G.door2); this.doorGlass2 = own(G.doorGlass2);
     this.group = new THREE.Group(); this.group.matrixAutoUpdate = false;
     const bm = new THREE.Mesh(this.body, this.mat), gm = new THREE.Mesh(this.glass, this.glassMat);
     gm.renderOrder = 3;
     this.pivot = new THREE.Group(); this.pivot.position.copy(G.hinge);
     const dm = new THREE.Mesh(this.door, this.mat), dg = new THREE.Mesh(this.doorGlass, this.glassMat); dg.renderOrder = 3;
     dm.position.copy(G.hinge).negate(); dg.position.copy(G.hinge).negate();
-    this.pivot.add(dm, dg); this.group.add(bm, gm, this.pivot);
-    for (const o of [bm, gm, dm, dg]) o.frustumCulled = false;
+    this.pivot.add(dm, dg);
+    // the passenger's door, on its own hinge
+    this.pivot2 = new THREE.Group(); this.pivot2.position.copy(G.hinge2);
+    const dm2 = new THREE.Mesh(this.door2, this.mat), dg2 = new THREE.Mesh(this.doorGlass2, this.glassMat); dg2.renderOrder = 3;
+    dm2.position.copy(G.hinge2).negate(); dg2.position.copy(G.hinge2).negate(); this.pivot2.add(dm2, dg2);
+    this.group.add(bm, gm, this.pivot, this.pivot2);
+    for (const o of [bm, gm, dm, dg, dm2, dg2]) o.frustumCulled = false;
     fleet.scene.add(this.group);
     this.lamps = { head0: true, head1: true, tail0: true, tail1: true };
     this.panes = G.glass.userData.ranges.map((r) => ({ ...r, ok: true }));
     this.doorPanes = G.doorGlass.userData.ranges.map((r) => ({ ...r, ok: true }));
+    this.doorPanes2 = G.doorGlass2.userData.ranges.map((r) => ({ ...r, ok: true }));
     this.dirty = false; this.charred = false;
   }
   set paint(v) { this.mat.userData.u.uPaint.value.set(v); }
-  place(M, open) {
+  place(M, open, open2 = 0) {
     this.group.matrix.copy(M); this.group.matrixWorldNeedsUpdate = true; this.group.visible = true;
-    this.pivot.rotation.y = -open * 1.15;
+    this.pivot.rotation.y = -open * 1.15; this.pivot2.rotation.y = open2 * 1.15;
   }
   hide() { this.group.visible = false; }
-  dispose(scene) { scene.remove(this.group); for (const g of [this.body, this.glass, this.door, this.doorGlass]) g.dispose(); this.mat.dispose(); }
+  dispose(scene) { scene.remove(this.group); for (const g of [this.body, this.glass, this.door, this.doorGlass, this.door2, this.doorGlass2]) g.dispose(); this.mat.dispose(); }
   /* a blow at p (car space), pushing along dir (car space, into the car), closing speed v (m/s), how hard
      relative to this car (k ~ the other mass over both). Returns what broke: { glass, lamps } */
   hit(p, dir, v, k = 0.5) {
@@ -74,7 +80,7 @@ class Detail {
     if (v < 1.5) return out;
     const R = Math.min(1.45, 0.38 + v * 0.045), D = Math.min(0.5, (v - 1.2) * 0.034 * (0.6 + k * 0.8));
     const scrape = v > 3.5;
-    for (const g of [this.body, this.door]) {
+    for (const g of [this.body, this.door, this.door2]) {
       const P = g.attributes.position, A = P.array, O = g.userData.orig, S = g.userData.shell, col = g.attributes.color.array, pa = g.attributes.aPaint.array;
       let any = false;
       for (let i = 0; i < P.count; i++) {
@@ -96,7 +102,7 @@ class Detail {
     }
     // glass near a hard hit goes
     if (v > 6.5) {
-      for (const [list, g] of [[this.panes, this.glass], [this.doorPanes, this.doorGlass]]) for (const pn of list) {
+      for (const [list, g] of [[this.panes, this.glass], [this.doorPanes, this.doorGlass], [this.doorPanes2, this.doorGlass2]]) for (const pn of list) {
         if (!pn.ok) continue; const d = Math.hypot(pn.c[0] - p.x, pn.c[1] - p.y, pn.c[2] - p.z);
         if (d < R * 1.1 || (v > 16 && d < R * 1.8)) { this.smash(g, pn); out.glass++; }
       }
@@ -124,6 +130,7 @@ class Detail {
     this.mat.color.setRGB(0.13, 0.12, 0.11); this.mat.userData.u.uGlow.value = 0;
     for (const pn of this.panes) if (pn.ok) this.smash(this.glass, pn);
     for (const pn of this.doorPanes) if (pn.ok) this.smash(this.doorGlass, pn);
+    for (const pn of this.doorPanes2) if (pn.ok) this.smash(this.doorGlass2, pn);
     for (const k in this.lamps) this.lamps[k] = false;
   }
   // a hurt car's paint dulls a little (soot, dirt), not a different car
@@ -138,7 +145,7 @@ export class Fleet {
     const inst = (geo, mat, n, order = 0) => { const im = new THREE.InstancedMesh(geo, mat, n); im.frustumCulled = false; im.count = 0; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.renderOrder = order; scene.add(im); return im; };
     this.inst = inst;
     this.batches = MODELS.map((m) => {
-      const G = buildModel(m, 0), body = join([G.body, G.door]), glass = join([G.glass, G.doorGlass]);
+      const G = buildModel(m, 0), body = join([G.body, G.door, G.door2]), glass = join([G.glass, G.doorGlass, G.doorGlass2]);
       const b = { m, G, cap: 32, body: inst(body, bodyMaterial(true), 32), glass: inst(glass, this.glassMat, 32, 3), n: 0 };
       b.body.setColorAt(0, _c.set(0xffffff)); b.body.instanceColor.setUsage(THREE.DynamicDrawUsage);
       return b;
@@ -193,8 +200,8 @@ export class Fleet {
       _sp.center.set(c.x, (c.y || 0) + 0.8, c.z); _sp.radius = c.S ? c.S.hl + 0.6 : 3;
       if (!_fr.intersectsSphere(_sp)) { if (c.detail) c.detail.hide(); continue; }
       const M = this.matrix(c, _w), m = c.m, G = this.byId[m.id].G;
-      if (c.door > 0.01 && !c.detail) this.detail(c);
-      if (c.detail) c.detail.place(M, c.door || 0);
+      if ((c.door > 0.01 || c.door2 > 0.01) && !c.detail) this.detail(c);
+      if (c.detail) c.detail.place(M, c.door || 0, c.door2 || 0);
       else {
         let b = this.byId[m.id]; if (b.n >= b.cap) { b.cap *= 2; this.grow(b, "body", b.cap); this.grow(b, "glass", b.cap); }
         b.body.setMatrixAt(b.n, M); b.glass.setMatrixAt(b.n, M); b.body.setColorAt(b.n, _c.set(c.paint ?? 0xffffff)); b.n++;

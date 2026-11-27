@@ -160,15 +160,25 @@ export class Police {
     if (pd.shotgun) pd.shotgun.visible = false;
     pd.hp = 100; pd.stagger = 0;
   }
+  // a police car blown up: the officers still in it die in it (and the ones climbing out are caught by the blast)
+  carDestroyed(c) {
+    for (const u of this.units) {
+      if (u.car !== c) continue;
+      for (const pd of u.cops) if (pd.active === "car" && !pd.exiting && !pd.dead) { pd.dead = true; pd.hp = 0; pd.active = false; pd.h.group.visible = false; if (pd.gun) pd.gun.visible = false; this.copsDown = (this.copsDown || 0) + 1; }
+    }
+  }
   /* cops out of a stopped car, by its doors */
   deploy(u) {
     const c = u.car, lx = Math.cos(c.a), lz = -Math.sin(c.a);
+    // out they get, each by their own door (vehicles.js animates it); on their feet when they're clear of it
+    const onFoot = (pd, k) => { pd.active = "foot"; pd.state = "chase"; pd.fireT = 0.4 + Math.random() * 0.6; pd.unit = u; pd.dead = false; pd.hp = 100; pd.exiting = false; pd.arm = this.level >= 3 && (k === 0 || this.level >= 4) ? "shotgun" : "pistol"; };
     u.cops.forEach((pd, k) => {
-      if (pd.active !== "car") return;
-      const side = k === 0 ? 1 : -1, x = c.x + lx * 1.4 * side, z = c.z + lz * 1.4 * side;
+      if (pd.active !== "car" || pd.exiting) return;
+      const side = k === 0 ? 1 : -1;
+      if (k < 2 && this.vehicles.copOut && this.vehicles.copOut(c, pd, side, () => { pd.exiting = false; if (pd.active === "car") onFoot(pd, k); else if (!pd.active) pd.h.group.visible = false; })) { pd.exiting = true; pd.unit = u; return; }
+      const x = c.x + lx * 1.4 * side, z = c.z + lz * 1.4 * side;
       const g = pd.h.group; g.position.set(x, this.world.heightAt(x, z), z); g.rotation.y = c.a; g.visible = true;
-      pd.active = "foot"; pd.state = "chase"; pd.fireT = 0.8 + Math.random(); pd.unit = u; pd.dead = false; pd.hp = 100;
-      pd.arm = this.level >= 3 && (k === 0 || this.level >= 4) ? "shotgun" : "pistol";
+      onFoot(pd, k);
     });
     // the car stays where it stopped, solid
     c.ai = false; c.pursue = false; c.speed = 0; c.occ = null; c.obb = this.world.grid.obb(c.x, c.z, 0.95, 2.2, -c.a, 1.5);

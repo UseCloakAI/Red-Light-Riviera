@@ -154,6 +154,18 @@ function bake(list, maxEdge) {
   return out;
 }
 
+// the passenger's door: the driver's, mirrored across the car (and turned right side out again)
+function mirrorX(g) {
+  const out = new THREE.BufferGeometry();
+  for (const n of ["position", "color", "aPaint", "aGlow"]) out.setAttribute(n, g.attributes[n].clone());
+  const P = out.attributes.position, A = P.array; for (let i = 0; i < P.count; i++) A[i * 3] = -A[i * 3];
+  for (const n of ["position", "color", "aPaint", "aGlow"]) { const at = out.attributes[n], k = at.itemSize, a = at.array; for (let t = 0; t < at.count; t += 3) for (let j = 0; j < k; j++) { const x = a[(t + 1) * k + j]; a[(t + 1) * k + j] = a[(t + 2) * k + j]; a[(t + 2) * k + j] = x; } }
+  out.computeVertexNormals(); out.computeBoundingSphere();
+  const sh = g.userData.shell, sh2 = new Uint8Array(sh.length); for (let t = 0; t < sh.length; t += 3) { sh2[t] = sh[t]; sh2[t + 1] = sh[t + 2]; sh2[t + 2] = sh[t + 1]; }
+  out.userData = { shell: sh2, ranges: g.userData.ranges.map((r) => ({ ...r, c: [-r.c[0], r.c[1], r.c[2]] })) };
+  return out;
+}
+
 /* the model's geometry: { body, glass, door (the driver's door, for the moved-apart copy), lamps, seat, ... } */
 const CACHE = new Map();
 export function buildModel(m, fine = 0.22) {
@@ -178,8 +190,9 @@ export function buildModel(m, fine = 0.22) {
   // opening is really open when it swings)
   const zDoor0 = c.zB !== undefined ? c.zB : (c.zr + c.zf) / 2;
   const mid = clipZ(sil, c.zr, c.zf).map(([z, y]) => [z, Math.min(y, c.belt)]), midRear = clipZ(sil, c.zr, zDoor0 + 0.02).map(([z, y]) => [z, Math.min(y, c.belt)]);
-  for (const s of [-1, 1]) P.add(extrude(s > 0 ? midRear : mid, s < 0 ? -hw : hw - 0.07, s < 0 ? -hw + 0.07 : hw, 0.03), DOORC, PAINT, 0, true);
-  { const lo = m.clear + 0.06, front = clipZ(sil, zDoor0, c.zf).map(([z, y]) => [z, Math.min(y, lo + 0.1)]); P.add(extrude(front, hw - 0.07, hw - 0.01, 0.01), [0.12, 0.12, 0.13]); }   // the sill under the door
+  // (both front doors are their own parts, the passenger's a mirror of the driver's)
+  for (const s of [-1, 1]) P.add(extrude(midRear, s < 0 ? -hw : hw - 0.07, s < 0 ? -hw + 0.07 : hw, 0.03), DOORC, PAINT, 0, true);
+  { const lo = m.clear + 0.06, front = clipZ(sil, zDoor0, c.zf).map(([z, y]) => [z, Math.min(y, lo + 0.1)]); for (const s of [-1, 1]) P.add(extrude(front, s > 0 ? hw - 0.07 : -hw + 0.01, s > 0 ? hw - 0.01 : -hw + 0.07, 0.01), [0.12, 0.12, 0.13]); }   // the sills under the doors
   P.add(extrude(clipZ(mid.map(([z, y]) => [z, Math.min(y, m.clear + 0.16)]), c.zr, c.zf), -hw + 0.05, hw - 0.05, 0.01), [0.14, 0.14, 0.15]);
   // the greenhouse: pillars, roof, frames
   const V = (x, y, z) => new THREE.Vector3(x, y, z), hb = hw - 0.05, hr = hw - c.inset;
@@ -191,8 +204,7 @@ export function buildModel(m, fine = 0.22) {
     if (c.zB2 !== undefined) P.bar(V(s * hb, c.belt, c.zB2), V(s * hr, c.roof - 0.03, c.zB2), 0.08, TRIM);
     P.bar(V(s * hr, c.roof - 0.03, roofR), V(s * hr, c.roof - 0.03, roofF), 0.07, BODY, PAINT, true);   // the roof rail
     // the window's waist trim (on the driver's side, the front part rides on the door)
-    if (s > 0) { P.bar(V(hb, c.belt + 0.01, c.zr), V(hb, c.belt + 0.01, zDoor0 + 0.02), 0.035, TRIM); D.bar(V(hb, c.belt + 0.01, zDoor0 + 0.03), V(hb, c.belt + 0.01, c.zf - 0.03), 0.035, TRIM); }
-    else P.bar(V(s * hb, c.belt + 0.01, c.zr), V(s * hb, c.belt + 0.01, c.zf), 0.035, TRIM);
+    P.bar(V(s * hb, c.belt + 0.01, c.zr), V(s * hb, c.belt + 0.01, zDoor0 + 0.02), 0.035, TRIM); if (s > 0) D.bar(V(hb, c.belt + 0.01, zDoor0 + 0.03), V(hb, c.belt + 0.01, c.zf - 0.03), 0.035, TRIM);
   }
   { // the roof: a slab with a slight crown
     const pts = [], seg = 4;
@@ -214,7 +226,7 @@ export function buildModel(m, fine = 0.22) {
   const lerpTop = (z) => { if (z >= roofF) return c.belt + (c.roof - c.belt) * Math.max(0, 1 - (z - roofF) / Math.max(0.01, c.zf - roofF)); if (z <= roofR) return c.belt + (c.roof - c.belt) * Math.max(0, 1 - (roofR - z) / Math.max(0.01, roofR - c.zr)); return c.roof; };
   for (const s of [-1, 1]) {
     const front = side(s, zDoor + 0.05, c.zf - 0.1, lerpTop(zDoor) - 0.06, c.roof - 0.06);
-    if (s > 0) DG.poly(front, [1, 1, 1]); else G.poly(front, [1, 1, 1]);
+    if (s > 0) DG.poly(front, [1, 1, 1]);
     if (!m.cargo && zDoor - c.zr > 0.4) { const z0 = c.zB2 !== undefined ? c.zB2 + 0.05 : c.zr + 0.12, z1 = zDoor - 0.05; G.poly(side(s, z0, z1, lerpTop(z0) - 0.06, lerpTop(z1) - 0.06), [1, 1, 1]); if (c.zB2 !== undefined) G.poly(side(s, c.zr + 0.1, c.zB2 - 0.05, lerpTop(c.zr + 0.1) - 0.06, lerpTop(c.zB2 - 0.05) - 0.06), [1, 1, 1]); }
   }
   // the driver's door: its skin, its handle, its mirror; its own part so it can swing open (carrender.js)
@@ -230,8 +242,7 @@ export function buildModel(m, fine = 0.22) {
     const fr1 = V3(hr2, c.roof - 0.05, c.zrf), fr0 = V3(hb2, c.belt, dz1 - 0.06);
     if (!c.flatBack || true) { D.bar(rp0, rp1, 0.04, TRIM); D.bar(rp1, fr1, 0.04, police ? DOORC : BODY, police ? 0 : PAINT); D.bar(fr1, fr0, 0.035, TRIM); } }
   D.box(0.03, 0.03, 0.16, hw + 0.02, c.belt - 0.12, zDoor + 0.18, police ? TRIM : CHROME);   // handle
-  for (const s of [-1, 1]) { const mz = c.zf - 0.08; (s > 0 ? D : P).box(0.18, 0.1, 0.08, s * (hw + 0.07), c.belt + 0.06, mz, police ? TRIM : BODY, police ? 0 : PAINT); }   // mirrors
-  P.box(0.03, 0.03, 0.16, -hw - 0.012, c.belt - 0.12, zDoor + 0.18, police ? TRIM : CHROME);
+  D.box(0.18, 0.1, 0.08, hw + 0.07, c.belt + 0.06, c.zf - 0.08, police ? TRIM : BODY, police ? 0 : PAINT);   // the mirror
   if (m.doors === 4 && c.zB !== undefined) for (const s of [-1, 1]) P.box(0.03, 0.03, 0.14, s * (hw + 0.012), c.belt - 0.12, c.zr + 0.36, police ? TRIM : CHROME);
   // bumpers, grille, plates, arch liners, sills, exhaust
   P.box(m.W - 0.12, 0.17, 0.14, 0, m.clear + 0.18, zEnd + 0.02, police ? TRIM : m.kind === "coupe" ? BODY : TRIM, m.kind === "coupe" ? PAINT : 0);
@@ -242,8 +253,8 @@ export function buildModel(m, fine = 0.22) {
   const py = m.clear + 0.3, ty0 = m.lamps.tail[1] - 0.24;
   P.box(0.34, 0.11, 0.02, 0, py, Math.max(fz(py), zEnd + 0.1), [0.92, 0.9, 0.84]); P.box(0.34, 0.11, 0.02, 0, ty0, Math.min(rz(ty0), zTail - 0.1), [0.92, 0.9, 0.84]);
   for (const az of m.axle) P.box(m.W - 0.5, m.wheelR + 0.08, m.wheelR * 2 + 0.1, 0, m.wheelR + 0.06, az, [0.035, 0.035, 0.04]);
-  P.box(0.04, 0.06, c.zf - c.zr - 0.2, -(hw + 0.005), m.clear + 0.06, (c.zf + c.zr) / 2, TRIM);   // rocker trim (the driver's side: under the door, on the door)
-  { const z0 = c.zr + 0.1, z1 = zDoor0; if (z1 - z0 > 0.1) P.box(0.04, 0.06, z1 - z0, hw + 0.005, m.clear + 0.06, (z0 + z1) / 2, TRIM); D.box(0.04, 0.06, c.zf - 0.1 - zDoor0 - 0.04, hw + 0.005, m.clear + 0.2, (zDoor0 + 0.02 + c.zf - 0.1) / 2, TRIM); }
+  // rocker trim: behind the doors on the body, under them on the doors
+  { const z0 = c.zr + 0.1, z1 = zDoor0; if (z1 - z0 > 0.1) for (const s of [-1, 1]) P.box(0.04, 0.06, z1 - z0, s * (hw + 0.005), m.clear + 0.06, (z0 + z1) / 2, TRIM); D.box(0.04, 0.06, c.zf - 0.1 - zDoor0 - 0.04, hw + 0.005, m.clear + 0.2, (zDoor0 + 0.02 + c.zf - 0.1) / 2, TRIM); }
   P.add(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 6).rotateX(Math.PI / 2).translate(-hw * 0.55, m.clear + 0.06, zTail - 0.05), [0.3, 0.3, 0.32]);
   // lamps: headlamps, tail lamps (the brake lights are fleet's), indicators
   const [, hy, hx] = m.lamps.head, [, ty, tx] = m.lamps.tail, hz = faceZ(m, hy, true) + 0.04, tz = faceZ(m, ty, false) - 0.04;
@@ -272,7 +283,7 @@ export function buildModel(m, fine = 0.22) {
   if (m.doors === 4 && !m.cargo && c.zr < sz - 0.8) { const bz = Math.max(c.zr + 0.4, sz - 0.95); P.box(m.W - 0.32, 0.14, 0.5, 0, sy - 0.1, bz, seatC); P.box(m.W - 0.32, 0.46, 0.1, 0, sy + 0.18, bz - 0.28, seatC); }
   const fineEdge = fine;
   const body = bake(P.list, fineEdge), glass = bake(G.list, 0), door = bake(D.list, fineEdge), doorGlass = bake(DG.list, 0);
-  const out = { m, body, glass, door, doorGlass, hinge: new THREE.Vector3(hw, 0, c.zf - 0.02), zDoor,
+  const out = { m, body, glass, door, doorGlass, door2: mirrorX(door), doorGlass2: mirrorX(doorGlass), hinge: new THREE.Vector3(hw, 0, c.zf - 0.02), hinge2: new THREE.Vector3(-hw, 0, c.zf - 0.02), zDoor,
     seat: new THREE.Vector3(sx, sy, sz), wheel: new THREE.Vector3(wx, wy, wz),
     wheels: [[m.track / 2, m.axle[0]], [-m.track / 2, m.axle[0]], [m.track / 2, m.axle[1]], [-m.track / 2, m.axle[1]]],
     tails: [[tx, ty, tz], [-tx, ty, tz]], ind: [[hx + 0.24, hy - 0.02, hz], [hx + 0.24, ty, tz]], half: [hw, Math.max(zEnd, -zTail)], height: c.roof };

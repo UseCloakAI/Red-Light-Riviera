@@ -131,7 +131,7 @@ export class Vehicles {
     const k = this.seats.keys(c), d = this.fleet.detail(c); this.fleet.matrix(c, _m); _mi.copy(_m).invert();
     const lp = _v.set(x, y, z).applyMatrix4(_mi), ln = _u.set(dx, 0, dz).transformDirection(_mi);
     d.hit(lp, ln, 3, 0.25);
-    if (lp.y > k.belt - 0.05) for (const [list, g] of [[d.panes, d.glass], [d.doorPanes, d.doorGlass]]) for (const pn of list) if (pn.ok && Math.hypot(pn.c[0] - lp.x, pn.c[1] - lp.y, pn.c[2] - lp.z) < 0.75) { d.smash(g, pn); if (this.sfx.glass) this.sfx.glass(0.6); if (this.fx) this.fx.sparks(new THREE.Vector3(x, y, z), 12, new THREE.Vector3(dx, 0.4, dz), 2.2, 0xbfe2ff, 0.45); }
+    if (lp.y > k.belt - 0.05) for (const [list, g] of [[d.panes, d.glass], [d.doorPanes, d.doorGlass], [d.doorPanes2, d.doorGlass2]]) for (const pn of list) if (pn.ok && Math.hypot(pn.c[0] - lp.x, pn.c[1] - lp.y, pn.c[2] - lp.z) < 0.75) { d.smash(g, pn); if (this.sfx.glass) this.sfx.glass(0.6); if (this.fx) this.fx.sparks(new THREE.Vector3(x, y, z), 12, new THREE.Vector3(dx, 0.4, dz), 2.2, 0xbfe2ff, 0.45); }
     if (c.occ && !c.occ.player && !c.occ.dead && lp.y > k.belt - 0.25 && Math.abs(lp.x - k.sx) < 0.5 && lp.z > k.sz - 0.6 && lp.z < k.sz + 0.5) {
       c.occ.dead = true; if (c.occ.pd) { c.occ.pd.dead = true; c.occ.pd.hp = 0; }
       if (this.peds && this.peds.fx && this.life && this.life.gore) this.life.gore.hit(new THREE.Vector3(x, y, z), new THREE.Vector3(dx, 0, dz), 1.6, this.peds.fx);
@@ -152,12 +152,33 @@ export class Vehicles {
     c.wreck = true; c.health = 0; c.charred = true; this.burning.delete(c);
     this.fleet.detail(c).char();
     const was = this.car === c; if (was) this.exit(true);
-    if (c.occ && !c.occ.player) c.occ.dead = true;
+    this.killInside(c, was);
     // thrown into the air, turning over
     this.wake(c); c.vy = 6 + Math.random() * 3; c.airT = 0.01; c.flipV = (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 4); c.om += (Math.random() - 0.5) * 3;
     this.burning.add(c); c.smoke = 18;
     this.blast(c.x, (c.y || 0) + 1, c.z, 1, c);
     if (c.ai && this.traffic) { c.ai = false; c.taken = true; }
+  }
+  // everyone in (or getting in or out of) a car that goes up dies with it: at the wheel, slumped and burnt in their
+  // seat; halfway out of a door, thrown by the blast; police riding in it; you
+  killInside(c, you) {
+    const at = new THREE.Vector3(c.x, (c.y || 0) + 1, c.z);
+    if (you && this.life) this.life.damage(9999, { point: this.player.pos.clone().setY(this.player.pos.y + 1), dir: new THREE.Vector3(Math.random() - 0.5, 1.2, Math.random() - 0.5).normalize(), force: 11, cause: "blast" });
+    if (this.act && this.act.c === c) { this.act = null; if (this.life) this.life.damage(9999, { point: at, dir: new THREE.Vector3(this.player.pos.x - c.x, 1.2, this.player.pos.z - c.z).normalize(), force: 11, cause: "blast" }); }
+    // anyone mid-door: out of the animation and into a ragdoll, blown clear
+    for (let i = this.npcActs.length - 1; i >= 0; i--) {
+      const a = this.npcActs[i].a; if (a.c !== c) continue; this.npcActs.splice(i, 1);
+      const d = this.drivers.find((x) => x.w === a.w), pd = d ? d.pd : a.cop || (a.w && this.peds && this.peds.peds.find((q) => q.h.group === a.w.g));
+      if (d) this.releaseDriver(d.pd);
+      if (pd && this.peds) { pd.inCar = null; pd.exiting = false; const g = pd.h.group.position; this.peds.damage(pd, { point: g.clone().setY(g.y + 1), dir: new THREE.Vector3(g.x - c.x, 1.3, g.z - c.z).normalize(), damage: 9999, from: { x: c.x, z: c.z }, force: 11 }); }
+    }
+    // whoever's at the wheel
+    if (c.occ && !c.occ.player) {
+      c.occ.dead = true;
+      if (c.occ.pd && this.peds) this.peds.damage(c.occ.pd, { point: at, dir: new THREE.Vector3(0, 1, 0), damage: 9999, from: { x: c.x, z: c.z } });
+    }
+    // the police riding in it (police.js)
+    if (this.onCarDestroyed) this.onCarDestroyed(c);
   }
   // a blast at (x, y, z): the show, and everything nearby takes it
   blast(x, y, z, size = 1, from = null) {
@@ -589,7 +610,7 @@ export class Vehicles {
       this.seats.drive(d.w, c, { steer: c.steer, dead: c.occ.dead, react, look, dt });
     }
     // other people's comings and goings
-    for (let i = this.npcActs.length - 1; i >= 0; i--) { const n = this.npcActs[i]; if (!this.seats.step(n.a, dt)) this.npcActs.splice(i, 1); }
+    for (let i = this.npcActs.length - 1; i >= 0; i--) { const n = this.npcActs[i]; if (n.a.cop && (n.a.cop.dead || n.a.cop.rag)) { n.a.cop.exiting = false; this.npcActs.splice(i, 1); continue; } if (!this.seats.step(n.a, dt)) this.npcActs.splice(i, 1); }
   }
   seat(d, c) { d.car = c; c.occ.pd = d.pd; d.pd.inCar = c; d.pd.out = false; d.pd.dead = false; d.pd.rag = null; d.pd.h.group.visible = true; }
   unseat(d) { if (d.car && d.car.occ && d.car.occ.pd === d.pd) d.car.occ.pd = null; d.car = null; d.pd.inCar = null; if (!d.pd.out) d.pd.h.group.visible = false; }
@@ -609,6 +630,15 @@ export class Vehicles {
     const a = this.seats.start("exit", d.w, c, { onSfx: () => { const dist = Math.hypot(c.x - this.player.pos.x, c.z - this.player.pos.z); if (this.sfx.door && dist < 30) this.sfx.door(); },
       onDone: () => { const g = d.pd.h.group.position; this.releaseDriver(d.pd); c.occ = null; if (this.peds) this.peds.toStreet(d.pd, g.x, g.z, { scared }); if (done) done(c); } });
     this.npcActs.push({ a });
+  }
+  // a police officer out of a stopped car by their side's door, then done(); false if it can't be animated
+  copOut(c, pd, side, done) {
+    if (!c.m || c.hidden || !pd.h || !pd.mixer) return false;
+    const w = person(pd.h.group, pd.mixer, pd.act); if (!w.body || !w.body.ok) return false;
+    pd.h.group.visible = true; if (pd.gun) pd.gun.visible = false;
+    const a = this.seats.start("exit", w, c, { side, rate: 1.35, onSfx: () => { if (this.sfx.door && Math.hypot(c.x - this.player.pos.x, c.z - this.player.pos.z) < 40) this.sfx.door(); },
+      onDone: () => { pd.h.group.rotation.set(0, pd.h.group.rotation.y, 0); done(); } });
+    a.cop = pd; this.npcActs.push({ a }); return true;
   }
   // someone from the crowd walks to a parked car near you, gets in and drives off
   unpark() {

@@ -57,11 +57,12 @@ export class Seats {
     return out.set(wx, this.world.heightAt(wx, wz), wz);
   }
   // the door handles at a given opening (outside, and the pull inside)
-  handle(c, open, inner = false, out = new THREE.Vector3()) {
+  // (side -1: the passenger's door, the mirror image)
+  handle(c, open, inner = false, out = new THREE.Vector3(), side = 1) {
     const k = this.keys(c), hz = k.G.hinge.z, th = -open * 1.15;
     const lx = inner ? -0.1 : 0.03, lz = (inner ? k.zD + 0.42 : k.zD + 0.18) - hz, y = k.belt - (inner ? 0.1 : 0.12);
     const x = k.hw + lx * Math.cos(th) + lz * Math.sin(th), z = hz - lx * Math.sin(th) + lz * Math.cos(th);
-    return this.body(c, _v.set(x, y, z), out);
+    return this.body(c, _v.set(x * side, y, z), out);
   }
   // a point on the wheel's rim, at angle phi from the top (+ toward the left), in the world
   rim(c, phi, out = new THREE.Vector3()) {
@@ -117,7 +118,7 @@ export class Seats {
   }
   // advance and pose; returns false once it's over
   step(a, dt) {
-    a.t += dt; const t = a.t, c = a.c;
+    dt *= a.rate || 1; a.t += dt; const t = a.t, c = a.c;
     const fire = (k, at, fn) => { if (!a.fired[k] && t >= at) { a.fired[k] = true; fn(); } };
     if (a.kind === "enter" || a.kind === "jack") this.enterPose(a, t, fire, dt);
     else if (a.kind === "exit") this.exitPose(a, t, fire, dt);
@@ -200,29 +201,34 @@ export class Seats {
     vw.body.place({ hip, lean: 0.25 + 0.4 * pull, twist: -0.6 * pull, side: 0.25 * pull, feet, hands, handW: { L: 0.9, R: 0.9 }, grip: 0.6, look: a.w.g.position.clone().add(_v.set(0, 1.5, 0)) });
     v.place && v.place(vw.g.position);
   }
+  /* out of the car. a.side: 1 the driver's side (the default), -1 the passenger's (everything mirrored across the
+     car: the other door, the other leg first, no wheel to let go of). a.rate speeds the whole move (the police) */
   exitPose(a, t, fire, dt) {
-    const c = a.c, w = a.w, k = this.keys(c), B = w.body, hs = w.hs || 0.95;
-    const Gp = this.ground(c, k.Gp.x, k.Gp.z), Out = this.ground(c, k.Out.x, k.Out.z);
+    const c = a.c, w = a.w, k = this.keys(c), B = w.body, hs = w.hs || 0.95, sd = a.side || 1, X = (p) => new THREE.Vector3(p.x * sd, p.y, p.z);
+    const L = sd > 0 ? "L" : "R", Rr = sd > 0 ? "R" : "L", dk = sd > 0 ? "door" : "door2";   // the outside hand/foot, the inside one, which door
+    const Gp = this.ground(c, k.Gp.x * sd, k.Gp.z), Out = this.ground(c, k.Out.x * sd, k.Out.z);
     // the door: pushed open, later pushed shut from outside
     const open = seg(t, 0.28, 0.58) * 1.1, shut = seg(t, 1.32, 1.52);
-    c.door = Math.max(0, open * (1 - shut * shut));
+    c[dk] = Math.max(0, open * (1 - shut * shut));
     fire("click", 0.3, () => a.onSfx && a.onSfx("open"));
     fire("slam", 1.52, () => a.onSfx && a.onSfx("close"));
     const hands = {}, handW = { L: 0, R: 0 };
-    const onWheel = 1 - seg(t, 0, 0.2);
-    hands.R = this.rim(c, -1.05); handW.R = 1 - seg(t, 0.5, 0.7);
-    if (onWheel > 0) { hands.L = this.rim(c, 1.05); handW.L = onWheel; }
-    const push = seg(t, 0.12, 0.28) * (1 - seg(t, 0.56, 0.68)); if (push > 0) { hands.L = this.handle(c, c.door, true); handW.L = push; }
+    if (sd > 0) {
+      const onWheel = 1 - seg(t, 0, 0.2);
+      hands.R = this.rim(c, -1.05); handW.R = 1 - seg(t, 0.5, 0.7);
+      if (onWheel > 0) { hands.L = this.rim(c, 1.05); handW.L = onWheel; }
+    }
+    const push = seg(t, 0.12, 0.28) * (1 - seg(t, 0.56, 0.68)); if (push > 0) { hands[L] = this.handle(c, c[dk], true, undefined, sd); handW[L] = push; }
     // out: the near leg first, the hips up over the sill, standing in the gap
-    const hipK = seg(t, 0.55, 1.12), Sw = this.body(c, this.seatS(w, c)), Ow = this.body(c, k.O), Hs = Gp.clone().add(_v.set(0, hs, 0));
+    const Ss = this.seatS(w, c), hipK = seg(t, 0.55, 1.12), Sw = this.body(c, X(Ss)), Ow = this.body(c, X(k.O)), Hs = Gp.clone().add(_v.set(0, hs, 0));
     const hip = Q(Sw, Ow, Hs, hipK);
     const inside = 1 - seg(t, 0.6, 1.05), lean = 0.45 * seg(t, 0.55, 0.75) * (1 - seg(t, 0.95, 1.15)) - (0.22 + this.fit(w, c).back) * (1 - seg(t, 0.5, 0.7));
-    const fL1 = Gp.clone().add(this.dir(c, 0.12, 0.05)), fR1 = Gp.clone().add(this.dir(c, -0.1, 0.0));
-    const feet = { L: step(this.body(c, k.footL), fL1, seg(t, 0.42, 0.72), 0.3), R: step(this.body(c, k.footR), fR1, seg(t, 0.86, 1.12), 0.3) };
+    const fOut = Gp.clone().add(this.dir(c, 0.12 * sd, 0.05)), fIn = Gp.clone().add(this.dir(c, -0.1 * sd, 0.0));
+    const feet = {}; feet[L] = step(this.body(c, X(k.footL)), fOut, seg(t, 0.42, 0.72), 0.3); feet[Rr] = step(this.body(c, X(k.footR)), fIn, seg(t, 0.86, 1.12), 0.3);
     // then a step away and a turn, and the door pushed shut
-    const away = seg(t, 1.12, 1.5), yaw = angLerp(0, Math.PI * 0.62, away);
-    const floor = V3(V3(this.body(c, _v.set(k.sx, k.floor - 0.1, k.sz - 0.1)), Gp, 1 - inside), Out, away);
-    const shove = seg(t, 1.18, 1.32) * (1 - seg(t, 1.5, 1.62)); if (shove > 0) { hands.R = this.handle(c, c.door).add(this.dir(c, 0.02, -0.25)); handW.R = shove; }
+    const away = seg(t, 1.12, 1.5), yaw = angLerp(0, Math.PI * 0.62 * sd, away);
+    const floor = V3(V3(this.body(c, _v.set(k.sx * sd, k.floor - 0.1, k.sz - 0.1)), Gp, 1 - inside), Out, away);
+    const shove = seg(t, 1.18, 1.32) * (1 - seg(t, 1.5, 1.62)); if (shove > 0) { hands[Rr] = this.handle(c, c[dk], false, undefined, sd).add(this.dir(c, 0.02 * sd, -0.25)); handW[Rr] = shove; }
     clips(w, away > 0 && away < 1 ? Math.sin(Math.PI * away) * 0.8 : 0, dt); B.reset();
     this.put(w, c, floor, yaw, inside);
     B.place({ hip: away > 0 ? floor.clone().add(_v.set(0, hs, 0)) : hip, hipW: away > 0 ? 1 - away : 1, lean: away > 0 ? 0 : lean, feet: away > 0 ? null : feet, legW: 1 - away, hands, handW, grip: 0.6 });
