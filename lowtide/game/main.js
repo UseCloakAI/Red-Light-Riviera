@@ -25,6 +25,7 @@ import { createHuman, lockStory } from "./human.js?v=dev";
 import { HomeLife } from "./homelife.js?v=dev";
 import { StreetLife } from "./streetlife.js?v=dev";
 import { Drones, describe } from "./drones.js?v=dev";
+import { DebugMenu } from "./debug.js?v=dev";
 import { PS1, configure, makeBlit, crunch } from "./ps1.js?v=dev";
 import { ROOMS_ON } from "./city/build.js?v=dev";
 
@@ -224,6 +225,8 @@ export async function start(o) {
   street.on = (e) => { if (TIPS[e]) hud.tipOnce(e, TIPS[e]); };
   try { await street.load(); await street.makePeople(); } catch (e) { console.warn("Lowtide: street life failed to load", e); }
   wrap(vehicles, "blast", (x, y, z) => street.blast(x, z));
+  // the debug menu: hold 1 2 3 8 9 0 for three seconds
+  const debug = new DebugMenu({ root: o.hud, input, police, arsenal, life, player, hud });
   // five stars: the drones (loudspeakers with your description, a citywide siren, strike drones that dive at you)
   const PA = { female: true, pitch: 0.82, age: 45 };
   const drones = new Drones({ scene, world, player, police, vehicles, life, hud, sfx: o.sfx || {}, rig, root: o.hud, low: lowLoad,
@@ -415,6 +418,7 @@ export async function start(o) {
     else if (input.locked && !inCar && !down && !vehicles.busy) { player.update(dw, input, rig.yaw); street.afterPlayer(dw); if (peds) peds.push(player.pos, 0.32, player.speed); traffic.push(player.pos, 0.32); }
     else if (!inCar && !down && !vehicles.busy) player.animate(dw);
     if (peds && !indoors) peds.update(dw, player);
+    debug.update(dt);
     if (police && !indoors) police.update(dw);
     drones.update(dw, indoors);
     if (!input.locked || life.down || vehicles.driving) interiors.update(dt, { hit: () => false }, camera);
@@ -435,7 +439,7 @@ export async function start(o) {
     pause() { running = false; cancelAnimationFrame(raf); input.active = false; input.keys.clear(); interiors.pauseTV(true); },
     lock() { input.lock(); },
     drawMap(ctx, w, h, opt = {}) { return hud.drawFull(ctx, w, h, player, Object.assign({ hospital: HOSPITAL, station: STATION, home: interiors.home }, opt)); },
-    get police() { return police; }, get street() { return street; }, get __drones() { return drones; },
+    get police() { return police; }, get street() { return street; }, get __drones() { return drones; }, get debug() { return debug; },
     // fast travel: check a map pick, why not now, go (done() once you've landed)
     travelCheck(x, z) { return travel.check(x, z); },
     travelBlock() { return travel.blocked(); },
