@@ -126,7 +126,7 @@ export async function start(o) {
     if (o.sfx && o.sfx.punch) o.sfx.punch("fist", 0);
   };
   // the police and the wanted level
-  police = new Police({ scene, world, player, peds, traffic, vehicles, life, hud, sfx: o.sfx || {}, fx: arsenal.fx, arsenal, cops, camera, rig,
+  police = new Police({ scene, world, player, peds, traffic, vehicles, life, hud, sfx: o.sfx || {}, fx: arsenal.fx, arsenal, cops, camera, rig, root: o.hud,
     say: (t, pd) => { hud.subtitle(t); if (pd) voice.speak(t, pd.voice, heard(pd), "angry"); } });
   vehicles.onCarDestroyed = (c) => police.carDestroyed(c);
   // what the street knows about you: every moving car (for people crossing) and whether you've a gun out (people and drivers react)
